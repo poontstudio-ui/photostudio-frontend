@@ -905,6 +905,9 @@ body{
   transform:translate(-50%, 100%);
   width:100%;
   max-width:430px;
+  max-height:92vh;
+  overflow-y:auto;
+  overscroll-behavior:contain;
   background:var(--surface);
   border-top:1px solid var(--line);
   border-radius:20px 20px 0 0;
@@ -1284,7 +1287,7 @@ body{
   <button class="btn-primary" id="confirmBtn" disabled>Подтвердить бронь</button>
   <div class="offer-note">Отправляя форму, вы соглашаетесь с офертой.</div>
   <div class="save-note" id="confirmError" style="color:var(--red)"></div>
-  <button class="btn-ghost" id="cancelBtn">Отмена</button>
+  <button class="btn-ghost" id="cancelBtn">Назад</button>
 </div>
 
 <div class="panel" id="cancelPanel">
@@ -1868,6 +1871,36 @@ body{
   const nameInput=document.getElementById('nameInput');
   const phoneInput=document.getElementById('phoneInput');
   const confirmBtn=document.getElementById('confirmBtn');
+
+  // Блокировка прокрутки фона, пока открыта любая модалка (overlay). iOS/Telegram
+  // WebView не держит скролл body просто через overflow:hidden — нужен
+  // position:fixed с сохранением/возвратом позиции.
+  let _scrollLocked = false, _savedScrollY = 0;
+  function lockScroll(){
+    if(_scrollLocked) return;
+    _scrollLocked = true;
+    _savedScrollY = window.scrollY || 0;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${_savedScrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+    document.body.style.overflow = 'hidden';
+  }
+  function unlockScroll(){
+    if(!_scrollLocked) return;
+    _scrollLocked = false;
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    document.body.style.overflow = '';
+    window.scrollTo(0, _savedScrollY);
+  }
+  new MutationObserver(()=>{
+    if(overlay.dataset.open === 'true') lockScroll(); else unlockScroll();
+  }).observe(overlay, { attributes:true, attributeFilter:['data-open'] });
 
   function openPanel(){
     const endMinutes=state.startMinutes + state.durationHours*60;
@@ -2581,7 +2614,8 @@ body{
     citySelectPop.hidden=false;
     citySearch.value='';
     renderCityOptions('');
-    citySearch.focus();
+    // Не фокусируем поле автоматически: в Telegram WebView всплывающая
+    // клавиатура дёргает вёрстку. Пользователь тапнет по полю, если нужен поиск.
   }
   function closeCityMenu(){
     citySelect.dataset.open='false';
