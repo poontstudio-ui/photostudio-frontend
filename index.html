@@ -555,6 +555,22 @@ body{
 .danger-btn:disabled{opacity:0.35;cursor:not-allowed;}
 
 /* ---------- Bookings view ---------- */
+/* ---- Каталог: город -> список студий ---- */
+.catalog-view{display:none;flex-direction:column;padding-bottom:24px;}
+.catalog-view[data-visible="true"]{display:flex;}
+.catalog-header{display:flex;align-items:center;gap:12px;padding:22px 20px 6px;}
+.catalog-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;}
+.catalog-list{padding:14px 20px 0;display:flex;flex-direction:column;gap:10px;}
+.catalog-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:14px;cursor:pointer;
+}
+.catalog-row-name{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;}
+.catalog-row-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.catalog-row-chevron{color:var(--muted);flex:0 0 auto;font-size:18px;}
+.catalog-empty{color:var(--muted);font-size:13px;padding:30px 4px;}
+
 .bookings-view{
   display:none;
   flex-direction:column;
@@ -1005,6 +1021,14 @@ body{
 
 <div class="app-shell">
 
+  <div class="catalog-view" id="catalogView">
+    <div class="catalog-header">
+      <button class="back-btn" id="catalogBackBtn" type="button" style="display:none">←</button>
+      <div class="catalog-title" id="catalogTitle">Выберите город</div>
+    </div>
+    <div class="catalog-list" id="catalogList"></div>
+  </div>
+
   <div class="main-view" id="mainView">
     <div class="header">
       <div class="vu"><span></span><span></span><span></span><span></span><span></span></div>
@@ -1242,17 +1266,31 @@ body{
   }
 
   // ---- Тенант и подключение к бэкенду ----
-  // На MVP-этапе онбординг ручной: конфиг каждого бизнеса заводится
-  // в data.json бэкенда. tenant передаётся через URL мини-аппа (её
-  // задаёт кнопка меню бота этого бизнеса), например:
-  //   .../studio-booking.html?tenant=cue-club
-  //
-  // Замените на адрес вашего задеплоенного бэкенда.
+  // Клиент выбирает студию на экране «город -> список студий». Прямой вход
+  // в конкретную студию — deep-link мини-аппа: startapp=studio_<id>
+  // (Telegram кладёт его в initDataUnsafe.start_param), либо ?tenant=<id> /
+  // ?startapp=studio_<id> в URL — для теста вне Telegram.
   const API_BASE = 'https://photostudio-backend-yehh.onrender.com';
-  const DEFAULT_TENANT_ID = 'photostudio-demo';
+  const LAST_CITY_KEY = 'ps_last_city';
 
   const params = new URLSearchParams(window.location.search);
-  const TENANT_ID = params.get('tenant') || DEFAULT_TENANT_ID;
+  function parseStudioParam(raw){
+    if(!raw) return null;
+    const m = String(raw).match(/^studio[_-](.+)$/i);
+    const id = m ? m[1] : String(raw);
+    return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null;
+  }
+  let TENANT_ID = params.get('tenant')
+    || parseStudioParam(params.get('startapp'))
+    || parseStudioParam(tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
+    || null;
+
+  function plural(n, one, few, many){
+    const m10 = n % 10, m100 = n % 100;
+    if(m10 === 1 && m100 !== 11) return one;
+    if(m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+  }
 
   function authHeaders(){
     return { 'X-Telegram-Init-Data': (tg && tg.initData) ? tg.initData : '' };
@@ -2444,7 +2482,82 @@ body{
     }
   }
 
-  async function init(){
+  // ---- Каталог: город -> список студий ----
+  const catalogView   = document.getElementById('catalogView');
+  const catalogList    = document.getElementById('catalogList');
+  const catalogTitle   = document.getElementById('catalogTitle');
+  const catalogBackBtn = document.getElementById('catalogBackBtn');
+
+  function showCatalog(){
+    const ls = document.getElementById('loadingScreen');
+    ls.style.display='none';
+    document.getElementById('mainView').dataset.hidden='true';
+    document.getElementById('summaryBar').style.display='none';
+    catalogView.dataset.visible='true';
+  }
+
+  async function renderCities(){
+    catalogTitle.textContent = 'Выберите город';
+    catalogBackBtn.style.display='none';
+    catalogList.innerHTML = '<div class="catalog-empty">Загрузка…</div>';
+    let cities;
+    try{ cities = await fetch(API_BASE + '/api/cities').then(r=>r.json()); }
+    catch(e){ catalogList.innerHTML = '<div class="catalog-empty">Не удалось загрузить список городов.</div>'; return; }
+    if(!Array.isArray(cities) || !cities.length){
+      catalogList.innerHTML = '<div class="catalog-empty">Пока нет доступных студий.</div>'; return;
+    }
+    catalogList.innerHTML = '';
+    cities.forEach(c=>{
+      const row = document.createElement('div');
+      row.className = 'catalog-row';
+      row.innerHTML =
+        '<div><div class="catalog-row-name">'+esc(c.city)+'</div>'+
+        '<div class="catalog-row-sub">'+esc(c.studioCount)+' '+
+          plural(c.studioCount,'студия','студии','студий')+'</div></div>'+
+        '<div class="catalog-row-chevron">›</div>';
+      row.addEventListener('click', ()=>{ haptic('light'); renderStudios(c.city); });
+      catalogList.appendChild(row);
+    });
+  }
+
+  async function renderStudios(city){
+    try{ localStorage.setItem(LAST_CITY_KEY, city); }catch(e){}
+    catalogTitle.textContent = city;
+    catalogBackBtn.style.display = 'flex';
+    catalogList.innerHTML = '<div class="catalog-empty">Загрузка…</div>';
+    let studios;
+    try{ studios = await fetch(API_BASE + '/api/studios?city=' + encodeURIComponent(city)).then(r=>r.json()); }
+    catch(e){ catalogList.innerHTML = '<div class="catalog-empty">Не удалось загрузить студии.</div>'; return; }
+    if(!Array.isArray(studios) || !studios.length){
+      catalogList.innerHTML = '<div class="catalog-empty">В этом городе пока нет студий.</div>'; return;
+    }
+    catalogList.innerHTML = '';
+    studios.forEach(s=>{
+      const row = document.createElement('div');
+      row.className = 'catalog-row';
+      const sub = [s.address, s.subtitle].filter(Boolean).join(' · ');
+      row.innerHTML =
+        '<div><div class="catalog-row-name">'+esc(s.name)+'</div>'+
+        (sub ? '<div class="catalog-row-sub">'+esc(sub)+'</div>' : '')+'</div>'+
+        '<div class="catalog-row-chevron">›</div>';
+      row.addEventListener('click', ()=>{ haptic('medium'); chooseStudio(s.id); });
+      catalogList.appendChild(row);
+    });
+  }
+
+  function chooseStudio(id){
+    TENANT_ID = id;
+    catalogView.dataset.visible='false';
+    const ls = document.getElementById('loadingScreen');
+    ls.textContent = 'Загрузка…';
+    ls.style.display = 'flex';
+    bootStudio();
+  }
+
+  catalogBackBtn.addEventListener('click', ()=>{ haptic('light'); renderCities(); });
+
+  // ---- Загрузка выбранной студии ----
+  async function bootStudio(){
     try{
       const config = await loadTenantConfig(TENANT_ID);
       applyTenantConfig(config);
@@ -2452,14 +2565,25 @@ body{
       renderAll();
       await refreshTimeline();
       document.getElementById('loadingScreen').style.display='none';
+      catalogView.dataset.visible='false';
+      document.getElementById('mainView').dataset.hidden='false';
+      document.getElementById('summaryBar').style.display='flex';
       revealOwnerButtonIfOwner();
       loadDraftFields();
     } catch(e){
       document.getElementById('loadingScreen').textContent =
-        'Не удалось загрузить бизнес «'+TENANT_ID+'». Проверьте, что бэкенд запущен (API_BASE) и такой tenant существует.';
+        'Не удалось загрузить студию. Проверьте соединение и попробуйте снова.';
     }
   }
-  init();
+
+  function boot(){
+    if(TENANT_ID){ bootStudio(); return; }
+    let last = null;
+    try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
+    showCatalog();
+    if(last){ renderStudios(last); } else { renderCities(); }
+  }
+  boot();
 })();
 </script>
 
