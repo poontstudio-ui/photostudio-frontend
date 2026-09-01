@@ -1031,6 +1031,7 @@ body{
 
   <div class="main-view" id="mainView">
     <div class="header">
+      <button class="back-btn" id="studioBackBtn" type="button" aria-label="К списку студий" style="display:none">←</button>
       <div class="vu"><span></span><span></span><span></span><span></span><span></span></div>
       <div class="header-brand">
         <div class="brand-name">ВСЁ ВКЛЮЧЕНО</div>
@@ -2545,8 +2546,13 @@ body{
     });
   }
 
+  // true, если в текущую студию пришли через каталог (а не по deep-link /
+  // ?tenant=). От этого зависит, показывать ли «назад к списку» в шапке студии.
+  let cameFromCatalog = false;
+
   function chooseStudio(id){
     TENANT_ID = id;
+    cameFromCatalog = true;
     catalogView.dataset.visible='false';
     const ls = document.getElementById('loadingScreen');
     ls.textContent = 'Загрузка…';
@@ -2554,7 +2560,18 @@ body{
     bootStudio();
   }
 
+  function backToCatalog(){
+    document.getElementById('bookingsView').dataset.visible='false';
+    document.getElementById('adminView').dataset.visible='false';
+    document.getElementById('successView').dataset.visible='false';
+    showCatalog();
+    let last = null;
+    try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
+    if(last){ renderStudios(last); } else { renderCities(); }
+  }
+
   catalogBackBtn.addEventListener('click', ()=>{ haptic('light'); renderCities(); });
+  document.getElementById('studioBackBtn').addEventListener('click', ()=>{ haptic('light'); backToCatalog(); });
 
   // ---- Загрузка выбранной студии ----
   async function bootStudio(){
@@ -2568,6 +2585,7 @@ body{
       catalogView.dataset.visible='false';
       document.getElementById('mainView').dataset.hidden='false';
       document.getElementById('summaryBar').style.display='flex';
+      document.getElementById('studioBackBtn').style.display = cameFromCatalog ? 'flex' : 'none';
       revealOwnerButtonIfOwner();
       loadDraftFields();
     } catch(e){
