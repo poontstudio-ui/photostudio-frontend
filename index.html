@@ -564,7 +564,12 @@ body{
 /* ---- Каталог: выбор города (выпадающий, с поиском) + список студий ---- */
 .catalog-view{display:none;flex-direction:column;padding-bottom:24px;}
 .catalog-view[data-visible="true"]{display:flex;}
-.catalog-topbar{padding:22px 20px 6px;}
+.catalog-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:22px 20px 0;
+}
+.catalog-head-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;}
+.catalog-topbar{padding:12px 20px 6px;}
 .city-select{position:relative;}
 .city-select-trigger{
   width:100%;display:flex;align-items:center;gap:8px;
@@ -688,6 +693,13 @@ body{
 }
 .booking-status[data-status="active"]{color:var(--amber);border:1px solid var(--amber-dim);}
 .booking-status[data-status="cancelled"]{color:var(--muted);border:1px solid var(--line);}
+.booking-studio{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:600;
+  font-size:15px;
+  color:var(--text);
+  margin-bottom:4px;
+}
 .booking-meta{
   font-family:'IBM Plex Mono',monospace;
   font-size:12px;
@@ -1072,6 +1084,10 @@ body{
 <div class="app-shell">
 
   <div class="catalog-view" id="catalogView">
+    <div class="catalog-head">
+      <div class="catalog-head-title">Студии</div>
+      <button class="header-link" id="catalogMyBookingsBtn" type="button">Мои брони</button>
+    </div>
     <div class="catalog-topbar">
       <div class="city-select" id="citySelect" data-open="false">
         <button class="city-select-trigger" id="citySelectTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
@@ -1351,8 +1367,10 @@ body{
     return { 'X-Telegram-Init-Data': (tg && tg.initData) ? tg.initData : '' };
   }
 
-  async function api(method, path, body){
-    const res = await fetch(API_BASE + '/api/t/' + TENANT_ID + path, {
+  // tenantId по умолчанию — текущая студия; передаётся явно для операций над
+  // бронью другой студии (отмена из общего списка «Мои брони»).
+  async function api(method, path, body, tenantId){
+    const res = await fetch(API_BASE + '/api/t/' + (tenantId || TENANT_ID) + path, {
       method,
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: body ? JSON.stringify(body) : undefined,
@@ -1363,6 +1381,20 @@ body{
       const message = res.status===401
         ? 'Откройте мини-апп через кнопку бота в Telegram — вне Telegram авторизация недоступна.'
         : (data && data.error) ? data.error : 'Не удалось выполнить запрос ('+res.status+').';
+      throw new Error(message);
+    }
+    return data;
+  }
+
+  // Платформенный роут (без студии) — все брони пользователя по всем студиям.
+  async function apiMine(){
+    const res = await fetch(API_BASE + '/api/bookings/mine', { headers: { ...authHeaders() } });
+    let data = null;
+    try{ data = await res.json(); }catch(e){}
+    if(!res.ok){
+      const message = res.status===401
+        ? 'Откройте мини-апп через кнопку бота в Telegram.'
+        : (data && data.error) ? data.error : 'Не удалось загрузить брони ('+res.status+').';
       throw new Error(message);
     }
     return data;
@@ -2108,23 +2140,27 @@ body{
     refreshTimeline();
   });
 
-  // ---- Мои брони ----
+  // ---- Мои брони (по всем студиям) ----
   const bookingsView=document.getElementById('bookingsView');
   const bookingsList=document.getElementById('bookingsList');
   const cancelPanel=document.getElementById('cancelPanel');
   let pendingCancelId=null;
+  let pendingCancelTenant=null;
+  let bookingsOrigin='studio';   // откуда открыли: 'studio' | 'catalog'
 
   function renderBookingCard(b, onCancelClick, showOwnerName){
     const card=document.createElement('div');
     card.className='booking-card';
     card.dataset.status=b.status;
+    const hall = b.hallName || hallName(b.hallId);
     card.innerHTML=`
       <div class="booking-card-top">
         <div class="booking-date">${esc(dateLabelFromISO(b.date))}</div>
         <div class="booking-status" data-status="${esc(b.status)}">${b.status==='active' ? 'Активна' : 'Отменена'}</div>
       </div>
+      ${b.studioName ? '<div class="booking-studio">'+esc(b.studioName)+(b.studioCity ? ' · '+esc(b.studioCity) : '')+'</div>' : ''}
       ${showOwnerName ? '<div class="admin-booking-owner">'+esc(b.name || 'Без имени')+'</div>' : ''}
-      <div class="booking-meta">${esc(hallName(b.hallId))} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
+      <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
     `;
     if(b.status==='active'){
       const btn=document.createElement('button');
@@ -2140,7 +2176,7 @@ body{
     bookingsList.innerHTML='<div class="bookings-empty">Загрузка…</div>';
     let list;
     try{
-      list = await api('GET', '/bookings/mine');
+      list = await apiMine();
     } catch(e){
       bookingsList.innerHTML='<div class="bookings-empty">'+esc(e.message)+'</div>';
       return;
@@ -2155,21 +2191,31 @@ body{
     });
   }
 
-  document.getElementById('myBookingsBtn').addEventListener('click', ()=>{
+  function openMyBookings(origin){
     haptic('light');
+    bookingsOrigin = origin;
+    document.getElementById('catalogView').dataset.visible='false';
     document.getElementById('mainView').dataset.hidden='true';
     document.getElementById('summaryBar').style.display='none';
     bookingsView.dataset.visible='true';
     renderBookings();
-  });
-  document.getElementById('bookingsBackBtn').addEventListener('click', ()=>{
+  }
+  function closeMyBookings(){
     bookingsView.dataset.visible='false';
-    document.getElementById('mainView').dataset.hidden='false';
-    document.getElementById('summaryBar').style.display='flex';
-  });
+    if(bookingsOrigin==='catalog'){
+      document.getElementById('catalogView').dataset.visible='true';
+    } else {
+      document.getElementById('mainView').dataset.hidden='false';
+      document.getElementById('summaryBar').style.display='flex';
+    }
+  }
+  document.getElementById('myBookingsBtn').addEventListener('click', ()=> openMyBookings('studio'));
+  document.getElementById('catalogMyBookingsBtn').addEventListener('click', ()=> openMyBookings('catalog'));
+  document.getElementById('bookingsBackBtn').addEventListener('click', closeMyBookings);
 
   function openCancelConfirm(booking){
     pendingCancelId=booking.id;
+    pendingCancelTenant=booking.studioId || null;
     document.getElementById('cancelPanelText').innerHTML =
       `<b>${esc(dateLabelFromISO(booking.date))}, ${minutesToLabel(booking.start)}–${minutesToLabel(booking.end)}</b><br>`+
       `Место освободится, и участники чата студии получат сообщение об отмене.`;
@@ -2180,15 +2226,17 @@ body{
     overlay.dataset.open='false';
     cancelPanel.dataset.open='false';
     pendingCancelId=null;
+    pendingCancelTenant=null;
   }
   overlay.addEventListener('click', closeCancelConfirm);
   document.getElementById('cancelDismissBtn').addEventListener('click', closeCancelConfirm);
   document.getElementById('cancelConfirmBtn').addEventListener('click', async ()=>{
     if(pendingCancelId===null) return;
     const id=pendingCancelId;
+    const tenant=pendingCancelTenant;
     closeCancelConfirm();
     try{
-      await api('POST', '/bookings/'+id+'/cancel');
+      await api('POST', '/bookings/'+id+'/cancel', null, tenant);
       haptic('medium');
     } catch(e){
       console.warn(e.message);
