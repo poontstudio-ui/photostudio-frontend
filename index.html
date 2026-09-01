@@ -1387,17 +1387,20 @@ body{
   }
 
   // Платформенный роут (без студии) — все брони пользователя по всем студиям.
+  // Пока PLATFORM_BOT_TOKEN не задан на сервере, роут отвечает 501; тогда, если
+  // мы внутри студии, откатываемся на её собственный список — как было до R-4.
   async function apiMine(){
     const res = await fetch(API_BASE + '/api/bookings/mine', { headers: { ...authHeaders() } });
     let data = null;
     try{ data = await res.json(); }catch(e){}
-    if(!res.ok){
-      const message = res.status===401
-        ? 'Откройте мини-апп через кнопку бота в Telegram.'
+    if(res.ok) return data;
+    if(res.status===501 && TENANT_ID) return api('GET', '/bookings/mine');
+    const message = res.status===401
+      ? 'Откройте мини-апп через кнопку бота в Telegram.'
+      : res.status===501
+        ? 'Общий список броней пока недоступен. Откройте студию — её брони видны внутри.'
         : (data && data.error) ? data.error : 'Не удалось загрузить брони ('+res.status+').';
-      throw new Error(message);
-    }
-    return data;
+    throw new Error(message);
   }
 
   function loadTenantConfig(tenantId){
