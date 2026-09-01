@@ -1961,16 +1961,34 @@ body{
     if(!cloudStorageAvailable()) return;
     tg.CloudStorage.setItem(key, value, ()=>{});
   }
+  function phoneIsBlank(){
+    const v = phoneInput.value.trim();
+    return !v || v === '+375';
+  }
+  // CloudStorage — запасной источник: заполняет только то, что ещё пусто
+  // (приоритет у серверного /me, см. prefillContact).
   function loadDraftFields(){
     if(!cloudStorageAvailable()) return;
     tg.CloudStorage.getItem(CLOUD_KEY_NAME, (err, value)=>{
-      if(!err && value) nameInput.value = value;
+      if(!err && value && !nameInput.value.trim()) nameInput.value = value;
       validateForm();
     });
     tg.CloudStorage.getItem(CLOUD_KEY_PHONE, (err, value)=>{
-      if(!err && value) phoneInput.value = value;
+      if(!err && value && phoneIsBlank()) phoneInput.value = value;
       validateForm();
     });
+  }
+
+  // Подставляем последний ручной ввод имени/телефона с сервера (общий для всех
+  // студий). Что не пришло — добираем из CloudStorage.
+  async function prefillContact(){
+    try{
+      const me = await api('GET', '/me');
+      if(me && me.lastName && !nameInput.value.trim()) nameInput.value = me.lastName;
+      if(me && me.lastPhone && phoneIsBlank()) phoneInput.value = me.lastPhone;
+      validateForm();
+    }catch(e){ /* вне Telegram / нет initData — просто пропускаем */ }
+    loadDraftFields();
   }
 
   phoneInput.addEventListener('focus', ()=>{
@@ -2680,7 +2698,7 @@ body{
       document.getElementById('summaryBar').style.display='flex';
       document.getElementById('studioBackBtn').style.display = cameFromCatalog ? 'flex' : 'none';
       revealOwnerButtonIfOwner();
-      loadDraftFields();
+      prefillContact();
     } catch(e){
       document.getElementById('loadingScreen').textContent =
         'Не удалось загрузить студию. Проверьте соединение и попробуйте снова.';
