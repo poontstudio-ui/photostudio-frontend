@@ -555,11 +555,46 @@ body{
 .danger-btn:disabled{opacity:0.35;cursor:not-allowed;}
 
 /* ---------- Bookings view ---------- */
-/* ---- Каталог: город -> список студий ---- */
+/* ---- Каталог: выбор города (выпадающий, с поиском) + список студий ---- */
 .catalog-view{display:none;flex-direction:column;padding-bottom:24px;}
 .catalog-view[data-visible="true"]{display:flex;}
-.catalog-header{display:flex;align-items:center;gap:12px;padding:22px 20px 6px;}
-.catalog-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;}
+.catalog-topbar{padding:22px 20px 6px;}
+.city-select{position:relative;}
+.city-select-trigger{
+  width:100%;display:flex;align-items:center;gap:8px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:12px 14px;cursor:pointer;color:var(--text);text-align:left;
+}
+.city-select-cap{
+  font-size:11px;color:var(--muted);flex:0 0 auto;
+  text-transform:uppercase;letter-spacing:0.06em;
+}
+.city-select-value{
+  font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;
+  flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.city-select-caret{color:var(--muted);flex:0 0 auto;font-size:12px;transition:transform .15s;}
+.city-select[data-open="true"] .city-select-caret{transform:rotate(180deg);}
+.city-select-pop{
+  position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;
+  background:var(--surface-raised);border:1px solid var(--line);border-radius:10px;
+  padding:8px;display:flex;flex-direction:column;gap:6px;
+  box-shadow:0 12px 32px rgba(0,0,0,0.45);
+}
+.city-select-pop[hidden]{display:none;}
+.city-select-search{
+  width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+  padding:9px 11px;color:var(--text);font-size:14px;font-family:inherit;
+}
+.city-select-search:focus{outline:none;border-color:var(--amber);}
+.city-select-list{max-height:230px;overflow-y:auto;display:flex;flex-direction:column;}
+.city-opt{
+  display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  padding:10px 11px;border-radius:8px;cursor:pointer;font-size:14px;
+}
+.city-opt:hover,.city-opt[data-active="true"]{background:var(--amber-dim);}
+.city-opt-count{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);flex:0 0 auto;}
+.city-opt-empty{padding:12px 11px;color:var(--muted);font-size:13px;}
 .catalog-list{padding:14px 20px 0;display:flex;flex-direction:column;gap:10px;}
 .catalog-row{
   display:flex;align-items:center;justify-content:space-between;gap:12px;
@@ -1022,9 +1057,18 @@ body{
 <div class="app-shell">
 
   <div class="catalog-view" id="catalogView">
-    <div class="catalog-header">
-      <button class="back-btn" id="catalogBackBtn" type="button" style="display:none">←</button>
-      <div class="catalog-title" id="catalogTitle">Выберите город</div>
+    <div class="catalog-topbar">
+      <div class="city-select" id="citySelect" data-open="false">
+        <button class="city-select-trigger" id="citySelectTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+          <span class="city-select-cap">Город</span>
+          <span class="city-select-value" id="citySelectValue">Выберите город</span>
+          <span class="city-select-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="city-select-pop" id="citySelectPop" hidden>
+          <input type="text" id="citySearch" class="city-select-search" placeholder="Поиск города" autocomplete="off" spellcheck="false">
+          <div class="city-select-list" id="cityOptions" role="listbox"></div>
+        </div>
+      </div>
     </div>
     <div class="catalog-list" id="catalogList"></div>
   </div>
@@ -1285,13 +1329,6 @@ body{
     || parseStudioParam(params.get('startapp'))
     || parseStudioParam(tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
     || null;
-
-  function plural(n, one, few, many){
-    const m10 = n % 10, m100 = n % 100;
-    if(m10 === 1 && m100 !== 11) return one;
-    if(m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
-    return many;
-  }
 
   function authHeaders(){
     return { 'X-Telegram-Init-Data': (tg && tg.initData) ? tg.initData : '' };
@@ -2483,48 +2520,91 @@ body{
     }
   }
 
-  // ---- Каталог: город -> список студий ----
-  const catalogView   = document.getElementById('catalogView');
-  const catalogList    = document.getElementById('catalogList');
-  const catalogTitle   = document.getElementById('catalogTitle');
-  const catalogBackBtn = document.getElementById('catalogBackBtn');
+  // ---- Каталог: выпадающий выбор города (с поиском) + список студий ----
+  const catalogView         = document.getElementById('catalogView');
+  const catalogList          = document.getElementById('catalogList');
+  const citySelect           = document.getElementById('citySelect');
+  const citySelectTrigger    = document.getElementById('citySelectTrigger');
+  const citySelectValue      = document.getElementById('citySelectValue');
+  const citySelectPop        = document.getElementById('citySelectPop');
+  const citySearch           = document.getElementById('citySearch');
+  const cityOptions          = document.getElementById('cityOptions');
+
+  let ALL_CITIES = [];       // [{city, country, studioCount}]
+  let selectedCity = null;
 
   function showCatalog(){
-    const ls = document.getElementById('loadingScreen');
-    ls.style.display='none';
+    document.getElementById('loadingScreen').style.display='none';
     document.getElementById('mainView').dataset.hidden='true';
     document.getElementById('summaryBar').style.display='none';
     catalogView.dataset.visible='true';
   }
 
-  async function renderCities(){
-    catalogTitle.textContent = 'Выберите город';
-    catalogBackBtn.style.display='none';
-    catalogList.innerHTML = '<div class="catalog-empty">Загрузка…</div>';
-    let cities;
-    try{ cities = await fetch(API_BASE + '/api/cities').then(r=>r.json()); }
-    catch(e){ catalogList.innerHTML = '<div class="catalog-empty">Не удалось загрузить список городов.</div>'; return; }
-    if(!Array.isArray(cities) || !cities.length){
-      catalogList.innerHTML = '<div class="catalog-empty">Пока нет доступных студий.</div>'; return;
+  function openCityMenu(){
+    citySelect.dataset.open='true';
+    citySelectTrigger.setAttribute('aria-expanded','true');
+    citySelectPop.hidden=false;
+    citySearch.value='';
+    renderCityOptions('');
+    citySearch.focus();
+  }
+  function closeCityMenu(){
+    citySelect.dataset.open='false';
+    citySelectTrigger.setAttribute('aria-expanded','false');
+    citySelectPop.hidden=true;
+  }
+  citySelectTrigger.addEventListener('click', ()=>{
+    if(citySelectPop.hidden){ haptic('light'); openCityMenu(); } else { closeCityMenu(); }
+  });
+  document.addEventListener('click', (e)=>{
+    if(!citySelectPop.hidden && !citySelect.contains(e.target)) closeCityMenu();
+  });
+  citySearch.addEventListener('input', ()=> renderCityOptions(citySearch.value));
+  citySearch.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeCityMenu(); });
+
+  // Поиск по подстроке — «нес» находит «Минск», совпадение в любом месте.
+  function renderCityOptions(query){
+    const q = String(query || '').trim().toLowerCase();
+    const list = q ? ALL_CITIES.filter(c => c.city.toLowerCase().includes(q)) : ALL_CITIES;
+    if(!list.length){
+      cityOptions.innerHTML = '<div class="city-opt-empty">Ничего не найдено</div>';
+      return;
     }
-    catalogList.innerHTML = '';
-    cities.forEach(c=>{
-      const row = document.createElement('div');
-      row.className = 'catalog-row';
-      row.innerHTML =
-        '<div><div class="catalog-row-name">'+esc(c.city)+'</div>'+
-        '<div class="catalog-row-sub">'+esc(c.studioCount)+' '+
-          plural(c.studioCount,'студия','студии','студий')+'</div></div>'+
-        '<div class="catalog-row-chevron">›</div>';
-      row.addEventListener('click', ()=>{ haptic('light'); renderStudios(c.city); });
-      catalogList.appendChild(row);
+    cityOptions.innerHTML = '';
+    list.forEach(c=>{
+      const opt = document.createElement('div');
+      opt.className = 'city-opt';
+      opt.setAttribute('role','option');
+      if(c.city === selectedCity) opt.dataset.active = 'true';
+      opt.innerHTML = '<span>'+esc(c.city)+'</span>'+
+        '<span class="city-opt-count">'+esc(c.studioCount)+'</span>';
+      opt.addEventListener('click', ()=>{ haptic('light'); closeCityMenu(); selectCity(c.city); });
+      cityOptions.appendChild(opt);
     });
   }
 
-  async function renderStudios(city){
+  function selectCity(city){
+    selectedCity = city;
+    citySelectValue.textContent = city;
     try{ localStorage.setItem(LAST_CITY_KEY, city); }catch(e){}
-    catalogTitle.textContent = city;
-    catalogBackBtn.style.display = 'flex';
+    renderStudios(city);
+  }
+
+  async function loadCities(){
+    catalogList.innerHTML = '<div class="catalog-empty">Загрузка…</div>';
+    try{ ALL_CITIES = await fetch(API_BASE + '/api/cities').then(r=>r.json()); }
+    catch(e){ ALL_CITIES = []; }
+    if(!Array.isArray(ALL_CITIES)) ALL_CITIES = [];
+  }
+
+  async function renderStudios(city){
+    if(!city){
+      citySelectValue.textContent = 'Выберите город';
+      catalogList.innerHTML = ALL_CITIES.length
+        ? '<div class="catalog-empty">Выберите город выше.</div>'
+        : '<div class="catalog-empty">Пока нет доступных студий.</div>';
+      return;
+    }
     catalogList.innerHTML = '<div class="catalog-empty">Загрузка…</div>';
     let studios;
     try{ studios = await fetch(API_BASE + '/api/studios?city=' + encodeURIComponent(city)).then(r=>r.json()); }
@@ -2564,13 +2644,9 @@ body{
     document.getElementById('bookingsView').dataset.visible='false';
     document.getElementById('adminView').dataset.visible='false';
     document.getElementById('successView').dataset.visible='false';
-    showCatalog();
-    let last = null;
-    try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
-    if(last){ renderStudios(last); } else { renderCities(); }
+    showCatalog();   // каталог сохраняет выбранный город и список — возвращаемся как было
   }
 
-  catalogBackBtn.addEventListener('click', ()=>{ haptic('light'); renderCities(); });
   document.getElementById('studioBackBtn').addEventListener('click', ()=>{ haptic('light'); backToCatalog(); });
 
   // ---- Загрузка выбранной студии ----
@@ -2594,12 +2670,15 @@ body{
     }
   }
 
-  function boot(){
+  async function boot(){
     if(TENANT_ID){ bootStudio(); return; }
+    showCatalog();
+    await loadCities();
     let last = null;
     try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
-    showCatalog();
-    if(last){ renderStudios(last); } else { renderCities(); }
+    const initial = (last && ALL_CITIES.some(c=>c.city===last)) ? last
+                  : (ALL_CITIES.length ? ALL_CITIES[0].city : null);
+    if(initial){ selectCity(initial); } else { renderStudios(null); }
   }
   boot();
 })();
