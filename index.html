@@ -464,6 +464,35 @@ body{
   font-size:13px;
   color:var(--text);
 }
+.hall-list{display:flex;flex-direction:column;gap:8px;}
+.hall-row{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:12px 14px;cursor:pointer;
+}
+.hall-row[data-active="true"]{border-color:var(--amber);background:var(--amber-dim);}
+.hall-row-name{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;}
+.hall-row-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+.hall-row-price{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--amber);flex:0 0 auto;}
+.equip-list{display:flex;flex-direction:column;gap:8px;}
+.equip-row{
+  display:flex;align-items:center;gap:12px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:11px 14px;cursor:pointer;
+}
+.equip-row[data-on="true"]{border-color:var(--amber);}
+.equip-row-name{font-size:14px;}
+.equip-row-price{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);flex:0 0 auto;}
+.equip-check{
+  width:22px;height:22px;border-radius:6px;border:1px solid var(--line);flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;color:var(--amber);font-size:14px;
+}
+.equip-row[data-on="true"] .equip-check{border-color:var(--amber);background:var(--amber);color:#1a1208;}
+.hall-name-input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;}
+.hall-name-input:focus{outline:none;border-color:var(--amber);}
+.equip-unit-sel{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--text);font-size:12px;flex:0 0 auto;}
+.equip-unit-sel:focus{outline:none;border-color:var(--amber);}
+#hallsEditor .price-row, #equipEditor .price-row{flex-wrap:wrap;}
 .owner-row .owner-you{
   color:var(--amber);
   font-family:'Work Sans',sans-serif;
@@ -997,6 +1026,15 @@ body{
       <div class="date-row" id="dateRow"></div>
     </div>
 
+    <div class="section" id="hallSection">
+      <div class="section-label">Зал</div>
+      <div class="hall-list" id="hallList"></div>
+    </div>
+
+    <div class="section" id="equipSection">
+      <div class="section-label">Оборудование</div>
+      <div class="equip-list" id="equipList"></div>
+    </div>
 
     <div class="section">
       <div class="section-label">Время брони</div>
@@ -1062,11 +1100,19 @@ body{
     </div>
 
     <div class="section">
-      <div class="section-label">Тарифы</div>
-      <div class="price-editor" id="ratesEditor"></div>
-      <button class="tier-add-btn" id="addTierBtn" type="button">+ Добавить тариф</button>
-      <button class="btn-primary" id="saveRatesBtn" style="margin-top:12px">Сохранить тарифы</button>
-      <div class="save-note" id="ratesSaveNote"></div>
+      <div class="section-label">Залы</div>
+      <div class="price-editor" id="hallsEditor"></div>
+      <button class="tier-add-btn" id="addHallBtn" type="button">+ Добавить зал</button>
+      <button class="btn-primary" id="saveHallsBtn" style="margin-top:12px">Сохранить залы</button>
+      <div class="save-note" id="hallsSaveNote"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Оборудование</div>
+      <div class="price-editor" id="equipEditor"></div>
+      <button class="tier-add-btn" id="addEquipBtn" type="button">+ Добавить позицию</button>
+      <button class="btn-primary" id="saveEquipBtn" style="margin-top:12px">Сохранить оборудование</button>
+      <div class="save-note" id="equipSaveNote"></div>
     </div>
 
     <div class="section">
@@ -1141,9 +1187,11 @@ body{
 <div class="panel" id="panel">
   <div class="panel-title">Подтверждение брони</div>
   <div class="panel-summary">
+    <div class="panel-summary-row"><span class="ps-label">Зал</span><span class="ps-value" id="psHall"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Дата</span><span class="ps-value" id="psDate"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Время</span><span class="ps-value" id="psTime"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Человек</span><span class="ps-value" id="psPeople"></span></div>
+    <div class="panel-summary-row" id="psEquipRow"><span class="ps-label">Оборудование</span><span class="ps-value" id="psEquip"></span></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
   </div>
   <div class="field">
@@ -1200,8 +1248,8 @@ body{
   //   .../studio-booking.html?tenant=cue-club
   //
   // Замените на адрес вашего задеплоенного бэкенда.
-  const API_BASE = 'https://booking-backend-th1u.onrender.com';
-  const DEFAULT_TENANT_ID = 'vse-vklyucheno';
+  const API_BASE = 'https://photostudio-backend-yehh.onrender.com';
+  const DEFAULT_TENANT_ID = 'photostudio-demo';
 
   const params = new URLSearchParams(window.location.search);
   const TENANT_ID = params.get('tenant') || DEFAULT_TENANT_ID;
@@ -1234,12 +1282,16 @@ body{
     });
   }
 
-  let ROOM, RATES, HOURS, WEEK_HOURS;
+  let HALLS = [], EQUIPMENT = [], HOURS, WEEK_HOURS;
   let DAY_START_MIN, DAY_END_MIN;
+  const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
-    ROOM = {name: cfg.resourceName, capacity: cfg.capacity};
-    RATES = cfg.rates;
+    HALLS = (cfg.halls || []).slice();
+    EQUIPMENT = (cfg.equipment || []).slice();
+    HALLS.forEach(h => { allHallsById[h.id] = h; });
+    if(!HALLS.some(h => h.id === state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
+    state.equipment = state.equipment.filter(id => EQUIPMENT.some(e => e.id === id));
     WEEK_HOURS = normalizeWeekHours(cfg);
     applyDayWindow();
     document.title = cfg.name + ' — Бронирование';
@@ -1293,14 +1345,23 @@ body{
     return Math.min(DAY_END_MIN, Math.max(DAY_START_MIN, Math.ceil(businessNowMinutes()/15)*15));
   }
 
-  function ratePerPerson(people){
-    const sorted=[...RATES].sort((a,b)=>a.minPeople-b.minPeople);
-    let best=sorted[0];
-    for(const tier of sorted){
-      if(tier.minPeople<=people) best=tier; else break;
-    }
-    return best.rate;
+  function currentHall(){
+    return HALLS.find(h => h.id === state.hallId) || HALLS[0] || { name:'', capacity:1, rate:0 };
   }
+  function hallName(id){ return (allHallsById[id] || {}).name || id || ''; }
+
+  // Итог = ставка зала * часы + оборудование (flat — один раз, hour — за час).
+  function computePrice(){
+    const hall = currentHall();
+    const hours = state.durationHours;
+    let total = hall.rate * hours;
+    for(const id of state.equipment){
+      const eq = EQUIPMENT.find(e => e.id === id);
+      if(eq) total += eq.unit === 'hour' ? eq.price * hours : eq.price;
+    }
+    return total;
+  }
+  function priceLabel(){ return (+computePrice().toFixed(2)).toString().replace(/\.00$/,''); }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
   // Высота шкале задаётся в пикселях на час и зависит от длины рабочего дня:
   // короткий день — крупнее (растянут), длинный — сжимается, но не длиннее MAX.
@@ -1329,10 +1390,11 @@ body{
     startMinutes: 12*60, // по умолчанию 12:00
     durationHours: 1,
     people: 1,
+    hallId: null,        // выбранный зал (id из cfg.halls)
+    equipment: [],       // id выбранного оборудования
     busyIntervals: [],
   };
 
-  function currentRoom(){ return ROOM; }
   function currentDate(){ return state.dates[state.dateIndex]; }
   // Читаем локальные поля, а не toISOString(): последний переводит в UTC, и у
   // пользователя восточнее Гринвича ночью на бэкенд уходил предыдущий день —
@@ -1382,19 +1444,70 @@ body{
   }
 
   function renderPeople(){
-    const room=currentRoom();
+    const cap = currentHall().capacity;
+    if(state.people > cap) state.people = cap;
     document.getElementById('peopleCount').textContent=state.people;
     document.getElementById('peopleMinus').disabled = state.people<=1;
-    document.getElementById('peoplePlus').disabled = state.people>=room.capacity;
+    document.getElementById('peoplePlus').disabled = state.people>=cap;
   }
 
   document.getElementById('peopleMinus').addEventListener('click', ()=>{
     if(state.people>1){ state.people--; haptic('light'); renderPeople(); renderSummary(); }
   });
   document.getElementById('peoplePlus').addEventListener('click', ()=>{
-    const room=currentRoom();
-    if(state.people<room.capacity){ state.people++; haptic('light'); renderPeople(); renderSummary(); }
+    if(state.people<currentHall().capacity){ state.people++; haptic('light'); renderPeople(); renderSummary(); }
   });
+
+  // ---- Выбор зала и оборудования ----
+  function renderHalls(){
+    const box=document.getElementById('hallList');
+    const section=document.getElementById('hallSection');
+    box.innerHTML='';
+    section.style.display = HALLS.length>1 ? '' : 'none';   // один зал — выбор не нужен
+    HALLS.forEach(h=>{
+      const row=document.createElement('div');
+      row.className='hall-row';
+      row.dataset.active=(h.id===state.hallId).toString();
+      row.innerHTML =
+        `<div><div class="hall-row-name">${esc(h.name)}</div>`+
+        `<div class="hall-row-sub">до ${esc(h.capacity)} чел.</div></div>`+
+        `<div class="hall-row-price">${esc(h.rate)} BYN/ч</div>`;
+      row.addEventListener('click', ()=>{
+        if(state.hallId===h.id) return;
+        state.hallId=h.id;
+        haptic('light');
+        renderHalls();
+        renderAll();
+        refreshTimeline();
+      });
+      box.appendChild(row);
+    });
+  }
+
+  function renderEquip(){
+    const box=document.getElementById('equipList');
+    document.getElementById('equipSection').style.display = EQUIPMENT.length ? '' : 'none';
+    box.innerHTML='';
+    EQUIPMENT.forEach(e=>{
+      const on=state.equipment.includes(e.id);
+      const row=document.createElement('div');
+      row.className='equip-row';
+      row.dataset.on=on.toString();
+      const unit = e.unit==='hour' ? 'BYN/ч' : 'BYN';
+      row.innerHTML =
+        `<div class="equip-check">${on?'✓':''}</div>`+
+        `<div style="flex:1"><div class="equip-row-name">${esc(e.name)}</div></div>`+
+        `<div class="equip-row-price">${esc(e.price)} ${unit}</div>`;
+      row.addEventListener('click', ()=>{
+        const i=state.equipment.indexOf(e.id);
+        if(i<0) state.equipment.push(e.id); else state.equipment.splice(i,1);
+        haptic('light');
+        renderEquip();
+        renderSummary();
+      });
+      box.appendChild(row);
+    });
+  }
 
   // ---- Вертикальная шкала дня ----
   // Высота трека и часовые метки зависят от окна выбранного дня — перестраиваются
@@ -1541,7 +1654,7 @@ body{
 
   async function fetchBusyIntervals(){
     try{
-      const res=await fetch(API_BASE+'/api/t/'+TENANT_ID+'/availability?date='+dateKey(currentDate()));
+      const res=await fetch(API_BASE+'/api/t/'+TENANT_ID+'/availability?date='+dateKey(currentDate())+'&hallId='+encodeURIComponent(state.hallId||''));
       state.busyIntervals = res.ok ? await res.json() : [];
     } catch(e){
       state.busyIntervals=[];
@@ -1637,9 +1750,8 @@ body{
       return;
     }
 
-    const price=(state.durationHours*state.people*ratePerPerson(state.people)).toFixed(2).replace(/\.00$/,'');
-    bar.textContent = `${currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · ${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${state.people} чел.`;
-    total.textContent = `${price} BYN · ${state.durationHours} ч`;
+    bar.textContent = `${currentHall().name} · ${currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · ${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)}`;
+    total.textContent = `${priceLabel()} BYN · ${state.durationHours} ч`;
     rec.dataset.enabled='true';
   }
 
@@ -1647,6 +1759,8 @@ body{
     applyDayWindow();
     layoutTimeline();
     renderDates();
+    renderHalls();
+    renderEquip();
     renderPeople();
     renderDuration();
     renderTimelineSelection();
@@ -1662,13 +1776,21 @@ body{
 
   function openPanel(){
     const endMinutes=state.startMinutes + state.durationHours*60;
-    const price=(state.durationHours*state.people*ratePerPerson(state.people)).toFixed(2).replace(/\.00$/,'');
+    const chosen = EQUIPMENT.filter(e => state.equipment.includes(e.id));
+    document.getElementById('psHall').textContent = currentHall().name;
     document.getElementById('psDate').textContent =
       currentDate().toLocaleDateString('ru-RU',{weekday:'short', day:'numeric', month:'long'});
     document.getElementById('psTime').textContent =
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${state.durationHours} ч`;
     document.getElementById('psPeople').textContent = `${state.people} чел.`;
-    document.getElementById('psPrice').textContent = `${price} BYN`;
+    const equipRow = document.getElementById('psEquipRow');
+    if(chosen.length){
+      document.getElementById('psEquip').textContent = chosen.map(e => e.name).join(', ');
+      equipRow.style.display = '';
+    } else {
+      equipRow.style.display = 'none';
+    }
+    document.getElementById('psPrice').textContent = `${priceLabel()} BYN`;
     overlay.dataset.open='true';
     panel.dataset.open='true';
   }
@@ -1788,16 +1910,20 @@ body{
 
     try{
       const booking = await api('POST', '/bookings', {
+        hallId: state.hallId,
         date: dateKey(currentDate()),
         start, end,
         people: state.people,
+        equipment: state.equipment.slice(),
         name: nameInput.value.trim(),
         phone: phoneInput.value.trim(),
       });
 
+      const equipLine = (booking.equipment || []).map(e => e.name).join(', ');
       document.getElementById('successDetail').innerHTML =
-        `<b>${esc(ROOM.name)}</b><br>`+
+        `<b>${esc(currentHall().name)}</b><br>`+
         `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`+
+        (equipLine ? `${esc(equipLine)}<br>` : '')+
         `${esc(nameInput.value.trim())} · ${esc(phoneInput.value.trim())}<br>`+
         `Итого: ${esc(booking.price)} BYN`;
 
@@ -1819,6 +1945,7 @@ body{
     state.startMinutes=12*60;
     state.durationHours=1;
     state.people=1;
+    state.equipment=[];
     document.getElementById('noteInput').value='';
     validateForm();
     document.getElementById('successView').dataset.visible='false';
@@ -1844,7 +1971,7 @@ body{
         <div class="booking-status" data-status="${esc(b.status)}">${b.status==='active' ? 'Активна' : 'Отменена'}</div>
       </div>
       ${showOwnerName ? '<div class="admin-booking-owner">'+esc(b.name || 'Без имени')+'</div>' : ''}
-      <div class="booking-meta">${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
+      <div class="booking-meta">${esc(hallName(b.hallId))} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
     `;
     if(b.status==='active'){
       const btn=document.createElement('button');
@@ -1979,8 +2106,13 @@ body{
       chart.appendChild(wrap);
     });
 
-    ratesDraft = RATES.map(t=>({minPeople:t.minPeople, rate:t.rate}));
-    renderRatesEditor();
+    (overview.halls || []).forEach(h => { allHallsById[h.id] = h; });
+    hallsDraft = (overview.halls || []).filter(h => h.active !== false)
+      .map(h => ({id:h.id, name:h.name, capacity:h.capacity, rate:h.rate}));
+    renderHallsEditor();
+    equipDraft = (overview.equipment || []).filter(e => e.active !== false)
+      .map(e => ({id:e.id, name:e.name, price:e.price, unit:e.unit}));
+    renderEquipEditor();
 
     hoursDraft = WEEK_HOURS.map(d=>({start:d.start, end:d.end}));
     document.getElementById('weekAllStart').value = hoursDraft[1].start;
@@ -2017,83 +2149,133 @@ body{
     document.getElementById('summaryBar').style.display='flex';
   });
 
-  let ratesDraft = [];
+  // ---- Залы (кабинет) ----
+  let hallsDraft = [];
 
-  function renderRatesEditor(){
-    const container=document.getElementById('ratesEditor');
-    container.innerHTML='';
-    ratesDraft.forEach((tier, i)=>{
-      const row=document.createElement('div');
-      row.className='price-row';
+  function renderHallsEditor(){
+    const c=document.getElementById('hallsEditor'); c.innerHTML='';
+    hallsDraft.forEach((h,i)=>{
+      const row=document.createElement('div'); row.className='price-row';
       row.innerHTML=`
-        <div>
-          <div class="price-row-label">От <input class="tier-min-input" type="number" min="1" step="1" value="${tier.minPeople}" data-idx="${i}" data-field="minPeople"> чел.</div>
-          <div class="price-row-sub">за каждого, час</div>
+        <div style="flex:1 1 100%;min-width:0">
+          <input class="hall-name-input" type="text" placeholder="Название зала" value="${esc(h.name)}" data-idx="${i}" data-field="name">
         </div>
         <div class="price-input-wrap">
-          <input type="number" step="0.5" min="0" value="${tier.rate}" data-idx="${i}" data-field="rate">
-          <span class="price-unit">BYN</span>
+          <input type="number" min="1" step="1" value="${esc(h.capacity)}" data-idx="${i}" data-field="capacity" aria-label="Вместимость">
+          <span class="price-unit">чел</span>
         </div>
-        ${ratesDraft.length>1 ? `<button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Удалить тариф">✕</button>` : ''}
+        <div class="price-input-wrap">
+          <input type="number" min="0" step="1" value="${esc(h.rate)}" data-idx="${i}" data-field="rate" aria-label="Ставка">
+          <span class="price-unit">BYN/ч</span>
+        </div>
+        ${hallsDraft.length>1 ? `<button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Удалить зал">✕</button>` : ''}
       `;
-      container.appendChild(row);
+      c.appendChild(row);
     });
-    container.querySelectorAll('input[data-field]').forEach(inp=>{
+    c.querySelectorAll('input[data-field]').forEach(inp=>{
       inp.addEventListener('input', ()=>{
-        const idx=Number(inp.dataset.idx);
-        const field=inp.dataset.field;
-        ratesDraft[idx][field] = field==='minPeople' ? parseInt(inp.value,10) : parseFloat(inp.value);
+        const h=hallsDraft[Number(inp.dataset.idx)], f=inp.dataset.field;
+        h[f] = f==='name' ? inp.value : (f==='capacity' ? parseInt(inp.value,10) : parseFloat(inp.value));
       });
     });
-    container.querySelectorAll('.tier-delete-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        ratesDraft.splice(Number(btn.dataset.idx), 1);
-        renderRatesEditor();
-      });
+    c.querySelectorAll('.tier-delete-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ hallsDraft.splice(Number(btn.dataset.idx),1); renderHallsEditor(); });
     });
   }
 
-  document.getElementById('addTierBtn').addEventListener('click', ()=>{
-    const maxMin=Math.max(...ratesDraft.map(t=>t.minPeople));
-    const lastRate=ratesDraft[ratesDraft.length-1].rate;
-    ratesDraft.push({minPeople:maxMin+1, rate:lastRate});
-    renderRatesEditor();
-    haptic('light');
+  document.getElementById('addHallBtn').addEventListener('click', ()=>{
+    hallsDraft.push({name:'', capacity:10, rate:30});
+    renderHallsEditor(); haptic('light');
   });
 
-  function validateRatesDraft(){
-    if(ratesDraft.length===0) return 'Нужен хотя бы один тариф';
-    const seen=new Set();
-    for(const t of ratesDraft){
-      if(!Number.isInteger(t.minPeople) || t.minPeople<1) return 'Порог «от» должен быть целым числом от 1';
-      if(typeof t.rate!=='number' || isNaN(t.rate) || t.rate<0) return 'Ставка должна быть числом не меньше нуля';
-      if(seen.has(t.minPeople)) return 'Пороги «от» не должны повторяться';
-      seen.add(t.minPeople);
+  function validateHallsDraft(){
+    if(hallsDraft.length<1) return 'Нужен хотя бы один зал';
+    for(const h of hallsDraft){
+      if(!h.name || !h.name.trim()) return 'У каждого зала должно быть название';
+      if(!Number.isInteger(h.capacity) || h.capacity<1) return 'Вместимость — целое число от 1';
+      if(typeof h.rate!=='number' || isNaN(h.rate) || h.rate<0) return 'Ставка — число не меньше нуля';
     }
     return null;
   }
 
-  document.getElementById('saveRatesBtn').addEventListener('click', async ()=>{
-    const note=document.getElementById('ratesSaveNote');
-    const validationError=validateRatesDraft();
-    if(validationError){
-      note.style.color='var(--red)';
-      note.textContent=validationError;
-      return;
-    }
+  document.getElementById('saveHallsBtn').addEventListener('click', async ()=>{
+    const note=document.getElementById('hallsSaveNote');
+    const err=validateHallsDraft();
+    if(err){ note.style.color='var(--red)'; note.textContent=err; return; }
     try{
-      const updated = await api('PUT', '/admin/rates', ratesDraft);
-      RATES = updated;
-      ratesDraft = RATES.map(t=>({minPeople:t.minPeople, rate:t.rate}));
-      renderRatesEditor();
-      haptic('medium');
-      note.style.color='var(--amber)';
-      note.textContent='Тарифы обновлены';
-      renderSummary();
-    } catch(e){
-      note.style.color='var(--red)';
-      note.textContent=e.message;
+      const updated = await api('PUT','/admin/halls',
+        hallsDraft.map(h=>({id:h.id, name:h.name.trim(), capacity:h.capacity, rate:h.rate})));
+      updated.forEach(h=>{ allHallsById[h.id]=h; });
+      HALLS = updated.filter(h=>h.active!==false);
+      if(!HALLS.some(h=>h.id===state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
+      hallsDraft = HALLS.map(h=>({id:h.id,name:h.name,capacity:h.capacity,rate:h.rate}));
+      renderHallsEditor();
+      haptic('medium'); note.style.color='var(--amber)'; note.textContent='Залы обновлены';
+    } catch(e){ note.style.color='var(--red)'; note.textContent=e.message; }
+    setTimeout(()=>{ note.textContent=''; }, 2500);
+  });
+
+  // ---- Оборудование (кабинет) ----
+  let equipDraft = [];
+
+  function renderEquipEditor(){
+    const c=document.getElementById('equipEditor'); c.innerHTML='';
+    equipDraft.forEach((e,i)=>{
+      const row=document.createElement('div'); row.className='price-row';
+      row.innerHTML=`
+        <div style="flex:1 1 100%;min-width:0">
+          <input class="hall-name-input" type="text" placeholder="Название" value="${esc(e.name)}" data-idx="${i}" data-field="name">
+        </div>
+        <div class="price-input-wrap">
+          <input type="number" min="0" step="1" value="${esc(e.price)}" data-idx="${i}" data-field="price" aria-label="Цена">
+          <span class="price-unit">BYN</span>
+        </div>
+        <select class="equip-unit-sel" data-idx="${i}" data-field="unit">
+          <option value="flat"${e.unit==='flat'?' selected':''}>за бронь</option>
+          <option value="hour"${e.unit==='hour'?' selected':''}>за час</option>
+        </select>
+        <button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Удалить">✕</button>
+      `;
+      c.appendChild(row);
+    });
+    c.querySelectorAll('input[data-field], select[data-field]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        const e=equipDraft[Number(inp.dataset.idx)], f=inp.dataset.field;
+        e[f] = f==='price' ? parseFloat(inp.value) : inp.value;
+      });
+    });
+    c.querySelectorAll('.tier-delete-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ equipDraft.splice(Number(btn.dataset.idx),1); renderEquipEditor(); });
+    });
+  }
+
+  document.getElementById('addEquipBtn').addEventListener('click', ()=>{
+    equipDraft.push({name:'', price:10, unit:'flat'});
+    renderEquipEditor(); haptic('light');
+  });
+
+  function validateEquipDraft(){
+    for(const e of equipDraft){
+      if(!e.name || !e.name.trim()) return 'У каждой позиции должно быть название';
+      if(typeof e.price!=='number' || isNaN(e.price) || e.price<0) return 'Цена — число не меньше нуля';
+      if(e.unit!=='flat' && e.unit!=='hour') return 'Единица — «за бронь» или «за час»';
     }
+    return null;
+  }
+
+  document.getElementById('saveEquipBtn').addEventListener('click', async ()=>{
+    const note=document.getElementById('equipSaveNote');
+    const err=validateEquipDraft();
+    if(err){ note.style.color='var(--red)'; note.textContent=err; return; }
+    try{
+      const updated = await api('PUT','/admin/equipment',
+        equipDraft.map(e=>({id:e.id, name:e.name.trim(), price:e.price, unit:e.unit})));
+      EQUIPMENT = updated.filter(e=>e.active!==false);
+      state.equipment = state.equipment.filter(id=>EQUIPMENT.some(e=>e.id===id));
+      equipDraft = EQUIPMENT.map(e=>({id:e.id,name:e.name,price:e.price,unit:e.unit}));
+      renderEquipEditor();
+      haptic('medium'); note.style.color='var(--amber)'; note.textContent='Оборудование обновлено';
+    } catch(e){ note.style.color='var(--red)'; note.textContent=e.message; }
     setTimeout(()=>{ note.textContent=''; }, 2500);
   });
 
