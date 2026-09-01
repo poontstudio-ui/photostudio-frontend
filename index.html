@@ -1360,6 +1360,7 @@ body{
 
   let HALLS = [], EQUIPMENT = [], HOURS, WEEK_HOURS;
   let DAY_START_MIN, DAY_END_MIN;
+  let STUDIO_TZ = 'Europe/Minsk';   // IANA-таймзона студии, приходит в /config
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
@@ -1369,6 +1370,10 @@ body{
     if(!HALLS.some(h => h.id === state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
     state.equipment = state.equipment.filter(id => EQUIPMENT.some(e => e.id === id));
     WEEK_HOURS = normalizeWeekHours(cfg);
+    STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
+    // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
+    state.dates = buildDates(14);
+    state.dateIndex = 0;
     applyDayWindow();
     document.title = cfg.name + ' — Бронирование';
     document.querySelector('.brand-name').textContent = cfg.name;
@@ -1400,18 +1405,23 @@ body{
     state.startMinutes = Math.max(DAY_START_MIN, Math.min(maxStart, state.startMinutes));
   }
 
-  // Точка в Беларуси, UTC+3 круглый год — «сейчас» считаем от неё, а не от tz устройства.
-  // Сдвинутую дату читаем через getUTC*, тогда её поля = стенные часы Минска.
-  function businessNow(){ return new Date(Date.now() + 180*60000); }
-  function businessNowMinutes(){
-    const n = businessNow();
-    return n.getUTCHours()*60 + n.getUTCMinutes();
+  // «Сейчас» считаем в ТАЙМЗОНЕ СТУДИИ (STUDIO_TZ), а не по tz устройства и без
+  // захардкоженного UTC+3. Стенные часы студии: { date:'YYYY-MM-DD', minutes }.
+  function studioWallClock(){
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: STUDIO_TZ, hourCycle:'h23',
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit',
+    }).formatToParts(new Date());
+    const g = t => parts.find(p => p.type === t).value;
+    return { date:`${g('year')}-${g('month')}-${g('day')}`, minutes:Number(g('hour'))*60 + Number(g('minute')) };
   }
-  // Сегодня по времени точки, как локальная полночь: у такой даты getDate/
-  // getDay/toLocaleDateString дают нужный календарный день без ухода в UTC.
+  function businessNowMinutes(){ return studioWallClock().minutes; }
+  // «Сегодня в студии» как локальная полночь: у такой даты getDate/getDay/
+  // toLocaleDateString дают нужный календарный день без ухода в UTC.
   function businessToday(){
-    const n = businessNow();
-    return new Date(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
+    const [y,m,d] = studioWallClock().date.split('-').map(Number);
+    return new Date(y, m-1, d);
   }
 
   // Минута суток, до которой на выбранный день бронировать уже нельзя.
