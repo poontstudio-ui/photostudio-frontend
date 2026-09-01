@@ -593,6 +593,12 @@ body{
   padding:9px 11px;color:var(--text);font-size:14px;font-family:inherit;
 }
 .city-select-search:focus{outline:none;border-color:var(--amber);}
+.catalog-search{
+  width:100%;margin-top:10px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:11px 14px;color:var(--text);font-size:14px;font-family:inherit;
+}
+.catalog-search:focus{outline:none;border-color:var(--amber);}
 .city-select-list{max-height:230px;overflow-y:auto;display:flex;flex-direction:column;}
 .city-opt{
   display:flex;align-items:baseline;justify-content:space-between;gap:10px;
@@ -1078,6 +1084,7 @@ body{
           <div class="city-select-list" id="cityOptions" role="listbox"></div>
         </div>
       </div>
+      <input type="text" id="studioSearch" class="catalog-search" placeholder="Поиск студии по названию" autocomplete="off" spellcheck="false">
     </div>
     <div class="catalog-list" id="catalogList"></div>
   </div>
@@ -2597,6 +2604,7 @@ body{
   const citySelectPop        = document.getElementById('citySelectPop');
   const citySearch           = document.getElementById('citySearch');
   const cityOptions          = document.getElementById('cityOptions');
+  const studioSearch         = document.getElementById('studioSearch');
 
   let ALL_CITIES = [];       // [{city, country, studioCount}]
   let selectedCity = null;
@@ -2656,7 +2664,48 @@ body{
     selectedCity = city;
     citySelectValue.textContent = city;
     try{ localStorage.setItem(LAST_CITY_KEY, city); }catch(e){}
+    studioSearch.value = '';
     renderStudios(city);
+  }
+
+  // Одна карточка студии в списке каталога. showCity — писать город в подписи
+  // (нужно в результатах поиска, где студии из разных городов).
+  function studioRow(s, showCity){
+    const row = document.createElement('div');
+    row.className = 'catalog-row';
+    const sub = [showCity ? s.city : null, s.address, showCity ? null : s.subtitle]
+      .filter(Boolean).join(' · ');
+    row.innerHTML =
+      '<div><div class="catalog-row-name">'+esc(s.name)+'</div>'+
+      (sub ? '<div class="catalog-row-sub">'+esc(sub)+'</div>' : '')+'</div>'+
+      '<div class="catalog-row-chevron">›</div>';
+    row.addEventListener('click', ()=>{ haptic('medium'); chooseStudio(s.id); });
+    return row;
+  }
+
+  // Поиск студий по названию (все города). Сначала студии выбранного города.
+  let _studioSearchTimer = null;
+  studioSearch.addEventListener('input', ()=>{
+    clearTimeout(_studioSearchTimer);
+    const q = studioSearch.value.trim();
+    _studioSearchTimer = setTimeout(()=> q ? renderStudioSearch(q) : renderStudios(selectedCity), 250);
+  });
+
+  async function renderStudioSearch(q){
+    catalogList.innerHTML = '<div class="catalog-empty">Поиск…</div>';
+    let rows;
+    try{ rows = await fetch(API_BASE + '/api/studios?q=' + encodeURIComponent(q)).then(r=>r.json()); }
+    catch(e){ catalogList.innerHTML = '<div class="catalog-empty">Не удалось выполнить поиск.</div>'; return; }
+    if(q !== studioSearch.value.trim()) return;   // пришёл ответ на устаревший запрос
+    if(!Array.isArray(rows) || !rows.length){
+      catalogList.innerHTML = '<div class="catalog-empty">Ничего не найдено.</div>'; return;
+    }
+    rows.sort((a,b)=>{
+      const ax = a.city === selectedCity ? 0 : 1, bx = b.city === selectedCity ? 0 : 1;
+      return ax - bx || String(a.name).localeCompare(String(b.name), 'ru');
+    });
+    catalogList.innerHTML = '';
+    rows.forEach(s => catalogList.appendChild(studioRow(s, true)));
   }
 
   async function loadCities(){
@@ -2682,17 +2731,7 @@ body{
       catalogList.innerHTML = '<div class="catalog-empty">В этом городе пока нет студий.</div>'; return;
     }
     catalogList.innerHTML = '';
-    studios.forEach(s=>{
-      const row = document.createElement('div');
-      row.className = 'catalog-row';
-      const sub = [s.address, s.subtitle].filter(Boolean).join(' · ');
-      row.innerHTML =
-        '<div><div class="catalog-row-name">'+esc(s.name)+'</div>'+
-        (sub ? '<div class="catalog-row-sub">'+esc(sub)+'</div>' : '')+'</div>'+
-        '<div class="catalog-row-chevron">›</div>';
-      row.addEventListener('click', ()=>{ haptic('medium'); chooseStudio(s.id); });
-      catalogList.appendChild(row);
-    });
+    studios.forEach(s => catalogList.appendChild(studioRow(s, false)));
   }
 
   // true, если в текущую студию пришли через каталог (а не по deep-link /
