@@ -679,6 +679,65 @@ body{
 .cancel-panel-text b{color:var(--text);font-weight:500;}
 
 /* ---------- Vertical day timeline ---------- */
+/* ---------- Карточки залов и страница зала ---------- */
+.hall-cards{
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  padding-bottom:4px;
+  scrollbar-width:none;
+}
+.hall-cards::-webkit-scrollbar{display:none;}
+.hall-card{
+  flex:0 0 auto;
+  min-width:150px;
+  max-width:210px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px 14px;
+  cursor:pointer;
+}
+.hall-card:active{border-color:var(--amber);}
+.hall-card-name{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:600;
+  font-size:17px;
+  line-height:1.15;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.hall-card-name span{color:var(--muted);font-weight:400;font-size:16px;}
+.hall-card-sub{font-size:11px;color:var(--muted);margin-top:5px;}
+.hall-card-rate{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:13px;
+  color:var(--amber);
+  margin-top:8px;
+}
+.hall-info-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.hall-info-title{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:700;
+  font-size:22px;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hall-facts{display:flex;flex-wrap:wrap;gap:8px;}
+.hall-fact{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:9px 12px;
+}
+.hall-fact span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
+.hall-fact b{font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:14px;}
+.hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
+
 /* ---------- Сетка занятости: столбцы = залы (или дни), строки = часы ---------- */
 .grid-scroll{
   overflow:auto;
@@ -1089,6 +1148,20 @@ body{
       </button>
     </div>
 
+    <div class="section" id="hallCardsSection">
+      <div class="section-label">Залы</div>
+      <div class="hall-cards" id="hallCards"></div>
+    </div>
+
+    <div class="section" id="hallInfoSection" style="display:none">
+      <div class="hall-info-head">
+        <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем залам">←</button>
+        <div class="hall-info-title" id="hallInfoTitle"></div>
+      </div>
+      <div class="hall-facts" id="hallFacts"></div>
+      <div class="hall-soon">Фотографии, описание и оборудование зала появятся здесь.</div>
+    </div>
+
     <div class="section" id="dateSection">
       <div class="section-label">Дата</div>
       <div class="date-row" id="dateRow"></div>
@@ -1371,6 +1444,7 @@ body{
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
+    openHallId = null;
     clearSelection();
     document.title = cfg.name + ' — Бронирование';
     document.querySelector('.brand-name').textContent = cfg.name;
@@ -1519,7 +1593,16 @@ body{
   // 7 дней. Строки — целые часы. Клетка = 1 час.
   const gridEl = document.getElementById('grid');
 
-  function gridMode(){ return HALLS.length > 1 ? 'halls' : 'days'; }
+  // Открытая страница зала: null — обзор студии, иначе сетка только этого зала.
+  let openHallId = null;
+  function gridHall(){
+    return (openHallId && HALLS.find(h => h.id === openHallId)) || HALLS[0] || null;
+  }
+  // 'halls' — столбцы залы на одну дату; 'days' — 7 дней одного зала.
+  function gridMode(){
+    if(openHallId) return 'days';
+    return HALLS.length > 1 ? 'halls' : 'days';
+  }
 
   // [{key, hall, date, label, sub, today}] — key уникален в пределах сетки.
   function gridColumns(){
@@ -1531,7 +1614,8 @@ body{
         label:h.name, sub:h.rate+' BYN/ч', today:false,
       }));
     }
-    const hall = HALLS[0];
+    const hall = gridHall();
+    if(!hall) return [];
     return state.dates.slice(0, GRID_DAYS).map((d,i) => ({
       key:dateKey(d), hall, date:d,
       label:DAY_NAMES[d.getDay()], sub:String(d.getDate()), today:i===0,
@@ -1556,7 +1640,7 @@ body{
     const base = API_BASE + '/api/t/' + TENANT_ID + '/availability';
     const url = gridMode()==='halls'
       ? base + '?date=' + dateKey(currentDate())
-      : base + '?hallId=' + encodeURIComponent(HALLS[0].id) +
+      : base + '?hallId=' + encodeURIComponent(gridHall().id) +
         '&from=' + dateKey(state.dates[0]) + '&days=' + GRID_DAYS;
     try{
       const res = await fetch(url);
@@ -1641,24 +1725,6 @@ body{
     return setSel(colKey, hour, hour+1);
   }
 
-  // Протяжка: от «якоря» до текущей клетки, но не дальше первой несвободной.
-  function dragTo(colKey, hour, anchor){
-    if(colKey !== anchor.key) return false;
-    const col = gridColumns().find(c => c.key === colKey);
-    if(!col) return false;
-    let a = Math.min(anchor.hour, hour), b = Math.max(anchor.hour, hour) + 1;
-    if(hour >= anchor.hour){
-      let e = anchor.hour;
-      while(e < b && cellState(col, e) === 'free' && e - anchor.hour < DURATION_MAX_H) e++;
-      a = anchor.hour; b = Math.max(e, anchor.hour+1);
-    } else {
-      let st = anchor.hour;
-      while(st > a && cellState(col, st-1) === 'free' && anchor.hour+1 - (st-1) <= DURATION_MAX_H) st--;
-      a = st; b = anchor.hour + 1;
-    }
-    return setSel(colKey, a, b);
-  }
-
   function renderGrid(){
     const cols = gridColumns();
     const { start, end } = gridHourRange();
@@ -1693,51 +1759,15 @@ body{
     gridEl.innerHTML = html;
   }
 
-  // ---- Ввод: тап и протяжка по клеткам ----
-  // Во время протяжки события уходят элементу, где начался жест, поэтому
-  // клетку под пальцем ищем через elementFromPoint.
-  let dragState = null;
-
-  function cellUnder(x, y){
-    const el = document.elementFromPoint(x, y);
-    if(!el || !el.classList.contains('grid-cell')) return null;
-    return { key: el.dataset.col, hour: Number(el.dataset.hour), state: el.dataset.state };
-  }
-
-  gridEl.addEventListener('pointerdown', (e)=>{
-    // На нажатии клетка — это сама цель события: elementFromPoint промахнётся,
-    // если клетка частично под липкой нижней панелью.
+  // ---- Ввод: только тап (по клетке или по соседней) ----
+  gridEl.addEventListener('click', (e)=>{
     const el = e.target && e.target.closest ? e.target.closest('.grid-cell') : null;
-    const cell = el
-      ? { key: el.dataset.col, hour: Number(el.dataset.hour), state: el.dataset.state }
-      : cellUnder(e.clientX, e.clientY);
-    if(!cell || cell.state !== 'free') return;
-    dragState = { key:cell.key, hour:cell.hour, moved:false };
-    try{ gridEl.setPointerCapture(e.pointerId); }catch(err){}
-  });
-
-  gridEl.addEventListener('pointermove', (e)=>{
-    if(!dragState) return;
-    const cell = cellUnder(e.clientX, e.clientY);
-    if(!cell || cell.key !== dragState.key) return;
-    if(!dragState.moved && cell.hour === dragState.hour) return;
-    dragState.moved = true;
-    e.preventDefault();
-    if(dragTo(cell.key, cell.hour, dragState)){ renderGrid(); renderPeople(); renderSummary(); }
-  });
-
-  function endDrag(e){
-    if(!dragState) return;
-    const d = dragState; dragState = null;
-    try{ gridEl.releasePointerCapture(e.pointerId); }catch(err){}
-    if(d.moved){ haptic('light'); return; }
-    if(tapCell(d.key, d.hour)){
+    if(!el || el.dataset.state !== 'free') return;
+    if(tapCell(el.dataset.col, Number(el.dataset.hour))){
       haptic('light');
       renderGrid(); renderPeople(); renderSummary();
     }
-  }
-  gridEl.addEventListener('pointerup', endDrag);
-  gridEl.addEventListener('pointercancel', ()=>{ dragState = null; });
+  });
 
   async function refreshGrid(){
     await fetchBusy();
@@ -1746,6 +1776,59 @@ body{
     renderPeople();
     renderSummary();
   }
+
+  // ---- Карточки залов и страница зала ----
+  function renderHallCards(){
+    const box = document.getElementById('hallCards');
+    box.innerHTML = '';
+    HALLS.forEach(h => {
+      const card = document.createElement('div');
+      card.className = 'hall-card';
+      card.innerHTML =
+        '<div class="hall-card-name">'+esc(h.name)+'<span>›</span></div>'+
+        '<div class="hall-card-sub">до '+esc(h.capacity)+' чел.</div>'+
+        '<div class="hall-card-rate">'+esc(h.rate)+' BYN/ч</div>';
+      card.addEventListener('click', ()=>{ haptic('light'); openHall(h.id); });
+      box.appendChild(card);
+    });
+  }
+
+  function renderHallInfo(){
+    const hall = gridHall();
+    if(!openHallId || !hall) return;
+    document.getElementById('hallInfoTitle').textContent = hall.name;
+    document.getElementById('hallFacts').innerHTML =
+      '<div class="hall-fact"><span>Вместимость</span><b>до '+esc(hall.capacity)+' чел.</b></div>'+
+      '<div class="hall-fact"><span>Ставка</span><b>'+esc(hall.rate)+' BYN/ч</b></div>';
+  }
+
+  // Страница зала и обзор студии — один и тот же экран, меняются только
+  // секции над сеткой; саму сетку переиспользуем.
+  function applyHallMode(){
+    const on = !!openHallId;
+    document.getElementById('hallCardsSection').style.display = on ? 'none' : '';
+    document.getElementById('hallInfoSection').style.display = on ? '' : 'none';
+    document.getElementById('gridLabel').textContent = on ? 'Время брони' : 'Занятость залов';
+    if(HALLS.length <= 1) document.getElementById('gridLabel').textContent = 'Время брони';
+  }
+
+  function openHall(id){
+    openHallId = id;
+    clearSelection();
+    applyHallMode();
+    renderAll();
+    refreshGrid();
+    window.scrollTo(0, 0);
+  }
+  function closeHall(){
+    openHallId = null;
+    clearSelection();
+    applyHallMode();
+    renderAll();
+    refreshGrid();
+    window.scrollTo(0, 0);
+  }
+  document.getElementById('hallBackBtn').addEventListener('click', ()=>{ haptic('light'); closeHall(); });
 
   function renderSummary(){
     const bar=document.getElementById('summaryRow');
@@ -1766,6 +1849,9 @@ body{
   }
 
   function renderAll(){
+    applyHallMode();
+    renderHallCards();
+    renderHallInfo();
     renderDates();
     renderGrid();
     renderPeople();
@@ -2659,7 +2745,10 @@ body{
     showCatalog();   // каталог сохраняет выбранный город и список — возвращаемся как было
   }
 
-  document.getElementById('studioBackBtn').addEventListener('click', ()=>{ haptic('light'); backToCatalog(); });
+  document.getElementById('studioBackBtn').addEventListener('click', ()=>{
+    haptic('light');
+    if(openHallId) closeHall(); else backToCatalog();
+  });
 
   // ---- Загрузка выбранной студии ----
   async function bootStudio(){
