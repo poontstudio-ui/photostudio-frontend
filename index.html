@@ -681,7 +681,10 @@ body{
 /* ---------- Vertical day timeline ---------- */
 /* ---------- Сетка занятости: столбцы = залы (или дни), строки = часы ---------- */
 .grid-scroll{
-  overflow-x:auto;
+  overflow:auto;
+  max-height:calc(100vh - 268px);
+  max-height:calc(100dvh - 268px);
+  min-height:240px;
   overscroll-behavior-x:contain;
   -webkit-overflow-scrolling:touch;
   scrollbar-width:none;
@@ -698,6 +701,12 @@ body{
   -webkit-user-select:none;
 }
 .grid-col-head{
+  min-width:0;
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:var(--bg);
+  box-shadow:0 4px 0 var(--bg);   /* закрывает gap под шапкой */
   font-family:'Barlow Condensed',sans-serif;
   font-weight:600;
   font-size:13px;
@@ -718,7 +727,21 @@ body{
   margin-top:2px;
 }
 .grid-col-head[data-today="true"]{color:var(--amber);}
+/* Дни помещаются в экран целиком — прокрутка только вертикальная. */
+.grid[data-fit="true"]{width:100%;min-width:0;}
+.grid-corner{
+  position:sticky;
+  top:0; left:0;
+  z-index:3;
+  background:var(--bg);
+  box-shadow:4px 0 0 var(--bg), 0 4px 0 var(--bg), 4px 4px 0 var(--bg);
+}
 .grid-hour{
+  position:sticky;
+  left:0;
+  z-index:2;
+  background:var(--bg);
+  box-shadow:4px 0 0 var(--bg);   /* закрывает gap справа от колонки */
   font-family:'IBM Plex Mono',monospace;
   font-size:10px;
   color:var(--muted-dim);
@@ -1645,8 +1668,13 @@ body{
       gridEl.innerHTML = '<div class="grid-empty">В этот день студия не работает.</div>';
       return;
     }
-    gridEl.style.gridTemplateColumns = `40px repeat(${cols.length}, minmax(76px, 1fr))`;
-    let html = '<div></div>';
+    // Дни (их всегда 7 и подписи короткие) вписываем в ширину; залы — с
+    // минимальной шириной под название и горизонтальной прокруткой.
+    const fit = gridMode()==='days';
+    gridEl.dataset.fit = fit ? 'true' : 'false';
+    gridEl.style.gridTemplateColumns =
+      `40px repeat(${cols.length}, minmax(${fit ? '0' : '76px'}, 1fr))`;
+    let html = '<div class="grid-corner"></div>';
     for(const c of cols){
       html += `<div class="grid-col-head" data-today="${c.today}">${esc(c.label)}<span>${esc(c.sub)}</span></div>`;
     }
