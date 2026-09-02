@@ -641,8 +641,13 @@ body{
   padding:3px 8px;
   border-radius:20px;
 }
-.booking-status[data-status="active"]{color:var(--amber);border:1px solid var(--amber-dim);}
-.booking-status[data-status="cancelled"]{color:var(--muted);border:1px solid var(--line);}
+.booking-status[data-status="active"],
+.booking-status[data-status="confirmed"],
+.booking-status[data-status="completed"]{color:var(--amber);border:1px solid var(--amber-dim);}
+.booking-status[data-status="pending"]{color:var(--muted);border:1px solid var(--amber-dim);}
+.booking-status[data-status="cancelled"],
+.booking-status[data-status="declined"],
+.booking-status[data-status="no_show"]{color:var(--muted);border:1px solid var(--line);}
 .booking-studio{
   font-family:'Barlow Condensed',sans-serif;
   font-weight:600;
@@ -1191,7 +1196,7 @@ body{
     <div class="success-ring">
       <svg viewBox="0 0 24 24" fill="none"><path d="M4 12.5L9.5 18L20 6" stroke="#E8A33D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
-    <div class="success-title">Бронь подтверждена</div>
+    <div class="success-title" id="successTitle">Бронь подтверждена</div>
     <div class="success-detail" id="successDetail"></div>
     <button class="btn-primary" style="max-width:220px" id="bookAnotherBtn">Назад</button>
   </div>
@@ -2082,7 +2087,11 @@ body{
       });
 
       const equipLine = (booking.equipment || []).map(e => e.name).join(', ');
+      const isPending = booking.status === 'pending';
+      document.getElementById('successTitle').textContent =
+        isPending ? 'Заявка отправлена' : 'Бронь подтверждена';
       document.getElementById('successDetail').innerHTML =
+        (isPending ? '<span style="color:var(--muted)">Студия подтвердит бронь в течение суток.</span><br>' : '') +
         `<b>${esc(currentHall().name)}</b><br>`+
         `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`+
         (equipLine ? `${esc(equipLine)}<br>` : '')+
@@ -2123,6 +2132,10 @@ body{
   let pendingCancelTenant=null;
   let bookingsOrigin='studio';   // откуда открыли: 'studio' | 'catalog'
 
+  const BK_ST = { pending:'Ожидает', confirmed:'Активна', completed:'Завершена',
+                  declined:'Отклонена', cancelled:'Отменена', no_show:'Не пришёл' };
+  const BK_CANCELABLE = new Set(['pending', 'confirmed']);
+
   function renderBookingCard(b, onCancelClick, showOwnerName){
     const card=document.createElement('div');
     card.className='booking-card';
@@ -2131,13 +2144,13 @@ body{
     card.innerHTML=`
       <div class="booking-card-top">
         <div class="booking-date">${esc(dateLabelFromISO(b.date))}</div>
-        <div class="booking-status" data-status="${esc(b.status)}">${b.status==='active' ? 'Активна' : 'Отменена'}</div>
+        <div class="booking-status" data-status="${esc(b.status)}">${esc(BK_ST[b.status] || b.status)}</div>
       </div>
       ${b.studioName ? '<div class="booking-studio">'+esc(b.studioName)+(b.studioCity ? ' · '+esc(b.studioCity) : '')+'</div>' : ''}
       ${showOwnerName ? '<div class="admin-booking-owner">'+esc(b.name || 'Без имени')+'</div>' : ''}
       <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
     `;
-    if(b.status==='active'){
+    if(BK_CANCELABLE.has(b.status)){
       const btn=document.createElement('button');
       btn.className='booking-cancel-btn';
       btn.textContent='Отменить бронь';
@@ -2248,7 +2261,7 @@ body{
 
     const all=overview.bookings;
     lastAdminBookings=all;
-    const active=all.filter(b=>b.status==='active');
+    const active=all.filter(b=>['pending','confirmed','completed'].includes(b.status));
 
     document.getElementById('statCount').textContent=overview.stats.count;
     document.getElementById('statRevenue').textContent=overview.stats.revenue;
