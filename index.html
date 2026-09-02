@@ -9,10 +9,17 @@
 <meta http-equiv="Expires" content="0">
 <title>Всё включено — Бронирование</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:wght@500;600;700&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root{
+  /* Шрифты. ВСЕ ТРИ обязаны нести кириллицу — прежние Barlow Condensed и
+     Work Sans её не содержат и молча падали в системный фолбэк. */
+  --f-display:'Fira Sans Condensed','Roboto Condensed',system-ui,sans-serif;
+  --f-body:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
   --bg:#14110F;
   --surface:#1E1A17;
   --surface-raised:#262019;
@@ -34,7 +41,7 @@ html,body{margin:0;padding:0;overscroll-behavior:none;}
 body{
   background:var(--bg);
   color:var(--text);
-  font-family:'Work Sans',sans-serif;
+  font-family:var(--f-body);
   min-height:100vh;
   display:flex;
   justify-content:center;
@@ -90,14 +97,18 @@ body{
   min-width:0;
 }
 .brand-name{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:700;
-  font-size:26px;
-  letter-spacing:0.06em;
-  line-height:1;
-  white-space:nowrap;
+  font-size:22px;
+  /* Трекинг был 0.06em под очень узкий Barlow Condensed и под короткое
+     «ВСЁ ВКЛЮЧЕНО». Fira Sans Condensed шире, а имена студий длинные —
+     разрядку убираем, вместо обрезания разрешаем две строки. */
+  letter-spacing:0.015em;
+  line-height:1.1;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
   overflow:hidden;
-  text-overflow:ellipsis;
 }
 .brand-sub{
   font-size:12px;
@@ -114,7 +125,7 @@ body{
   padding:14px 20px 4px;
 }
 .section-label{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:11px;
   letter-spacing:0.08em;
   color:var(--muted);
@@ -161,20 +172,20 @@ body{
 }
 .room-chip[data-active="false"] .led{opacity:0.45;box-shadow:none;}
 .room-letter{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:13px;
   color:var(--muted);
   letter-spacing:0.04em;
 }
 .room-name{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:600;
   font-size:17px;
   line-height:1.15;
   margin-bottom:6px;
 }
 .room-price{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:12px;
   color:var(--muted);
 }
@@ -211,7 +222,7 @@ body{
   margin-bottom:4px;
 }
 .date-num{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:15px;
   font-weight:600;
 }
@@ -239,7 +250,7 @@ body{
 }
 .stepper button:disabled{opacity:0.3;cursor:not-allowed;}
 .stepper-count{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:17px;
   font-weight:600;
   min-width:18px;
@@ -254,7 +265,7 @@ body{
   border-radius:50px;
   padding:8px 14px;
   color:var(--amber);
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:12px;
   cursor:pointer;
 }
@@ -294,7 +305,7 @@ body{
   padding:14px;
 }
 .stat-value{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:700;
   font-size:24px;
   color:var(--amber);
@@ -330,7 +341,7 @@ body{
   min-height:3px;
 }
 .eq-label{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:9px;
   color:var(--muted);
   text-transform:uppercase;
@@ -366,12 +377,12 @@ body{
   border-radius:8px;
   padding:8px 8px;
   color:var(--text);
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:14px;
   text-align:center;
 }
 .price-input-wrap input:focus{outline:none;border-color:var(--amber);}
-.price-unit{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
+.price-unit{font-family:var(--f-mono);font-size:11px;color:var(--muted);}
 
 .tier-min-input{
   width:40px;
@@ -380,7 +391,7 @@ body{
   border-radius:6px;
   padding:3px 4px;
   color:var(--amber);
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:13px;
   text-align:center;
 }
@@ -404,7 +415,7 @@ body{
   border:1px dashed var(--line);
   background:transparent;
   color:var(--amber);
-  font-family:'Work Sans',sans-serif;
+  font-family:var(--f-body);
   font-size:13px;
   cursor:pointer;
   margin-top:2px;
@@ -439,7 +450,7 @@ body{
   border-radius:8px;
   padding:6px 4px;
   color:var(--text);
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:13px;
   text-align:center;
 }
@@ -449,7 +460,7 @@ body{
   border:1px dashed var(--line);
   background:transparent;
   color:var(--amber);
-  font-family:'Work Sans',sans-serif;
+  font-family:var(--f-body);
   font-size:12px;
   cursor:pointer;
 }
@@ -466,12 +477,12 @@ body{
   border:1px solid var(--line);
   border-radius:10px;
   padding:10px 12px;
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:13px;
   color:var(--text);
 }
 .admin-booking-owner{
-  font-family:'Work Sans',sans-serif;
+  font-family:var(--f-body);
   font-size:12px;
   color:var(--text);
   margin-bottom:2px;
@@ -485,7 +496,7 @@ body{
   background:rgba(193,68,60,0.06);
 }
 .danger-title{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:600;
   font-size:15px;
   color:var(--red);
@@ -504,7 +515,7 @@ body{
   border:1px solid var(--red);
   background:var(--red-dim);
   color:var(--text);
-  font-family:'Work Sans',sans-serif;
+  font-family:var(--f-body);
   font-size:13px;
   cursor:pointer;
 }
@@ -518,7 +529,7 @@ body{
   display:flex;align-items:center;justify-content:space-between;
   padding:22px 20px 0;
 }
-.catalog-head-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;}
+.catalog-head-title{font-family:var(--f-display);font-weight:700;font-size:22px;}
 .catalog-topbar{padding:12px 20px 6px;}
 .city-select{position:relative;}
 .city-select-trigger{
@@ -531,7 +542,7 @@ body{
   text-transform:uppercase;letter-spacing:0.06em;
 }
 .city-select-value{
-  font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;
+  font-family:var(--f-display);font-weight:600;font-size:16px;
   flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .city-select-caret{color:var(--muted);flex:0 0 auto;font-size:12px;transition:transform .15s;}
@@ -560,7 +571,7 @@ body{
   padding:10px 11px;border-radius:8px;cursor:pointer;font-size:14px;
 }
 .city-opt:hover,.city-opt[data-active="true"]{background:var(--amber-dim);}
-.city-opt-count{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);flex:0 0 auto;}
+.city-opt-count{font-family:var(--f-mono);font-size:11px;color:var(--muted);flex:0 0 auto;}
 .city-opt-empty{padding:12px 11px;color:var(--muted);font-size:13px;}
 .catalog-list{padding:14px 20px 0;display:flex;flex-direction:column;gap:10px;}
 .catalog-row{
@@ -568,7 +579,7 @@ body{
   background:var(--surface);border:1px solid var(--line);border-radius:10px;
   padding:14px;cursor:pointer;
 }
-.catalog-row-name{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;}
+.catalog-row-name{font-family:var(--f-display);font-weight:600;font-size:16px;}
 .catalog-row-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
 .catalog-row-chevron{color:var(--muted);flex:0 0 auto;font-size:18px;}
 .catalog-empty{color:var(--muted);font-size:13px;padding:30px 4px;}
@@ -599,7 +610,7 @@ body{
   cursor:pointer;
 }
 .bookings-title{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:700;
   font-size:20px;
 }
@@ -629,12 +640,12 @@ body{
   margin-bottom:6px;
 }
 .booking-date{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:600;
   font-size:16px;
 }
 .booking-status{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:10px;
   text-transform:uppercase;
   letter-spacing:0.05em;
@@ -649,14 +660,14 @@ body{
 .booking-status[data-status="declined"],
 .booking-status[data-status="no_show"]{color:var(--muted);border:1px solid var(--line);}
 .booking-studio{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:600;
   font-size:15px;
   color:var(--text);
   margin-bottom:4px;
 }
 .booking-meta{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:12px;
   color:var(--muted);
   margin-bottom:12px;
@@ -669,7 +680,7 @@ body{
   border:1px solid var(--red-dim);
   background:transparent;
   color:var(--red);
-  font-family:'Work Sans',sans-serif;
+  font-family:var(--f-body);
   font-size:13px;
   cursor:pointer;
 }
@@ -705,7 +716,7 @@ body{
 }
 .hall-card:active{border-color:var(--amber);}
 .hall-card-name{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:600;
   font-size:17px;
   line-height:1.15;
@@ -717,14 +728,14 @@ body{
 .hall-card-name span{color:var(--muted);font-weight:400;font-size:16px;}
 .hall-card-sub{font-size:11px;color:var(--muted);margin-top:5px;}
 .hall-card-rate{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:13px;
   color:var(--amber);
   margin-top:8px;
 }
 .hall-info-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
 .hall-info-title{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:700;
   font-size:22px;
   min-width:0;
@@ -740,7 +751,7 @@ body{
   padding:9px 12px;
 }
 .hall-fact span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
-.hall-fact b{font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:14px;}
+.hall-fact b{font-family:var(--f-mono);font-weight:500;font-size:14px;}
 .hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
 
 /* ---------- Сетка занятости: столбцы = залы (или дни), строки = часы ---------- */
@@ -776,7 +787,7 @@ body{
 .grid-col-head{
   min-width:0;
   background:var(--bg);
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:600;
   font-size:13px;
   line-height:1.15;
@@ -789,7 +800,7 @@ body{
 }
 .grid-col-head span{
   display:block;
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:10px;
   font-weight:400;
   color:var(--muted);
@@ -811,7 +822,7 @@ body{
   z-index:2;
   background:var(--bg);
   box-shadow:4px 0 0 var(--bg);   /* закрывает gap справа от колонки */
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:10px;
   color:var(--muted-dim);
   display:flex;
@@ -841,7 +852,7 @@ body{
   position:absolute;
   top:50%; left:50%;
   transform:translate(-50%,-50%);
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:11px;
   font-weight:600;
   color:#1a1208;
@@ -898,7 +909,7 @@ body{
   text-overflow:ellipsis;
 }
 .summary-total{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:700;
   font-size:19px;
   color:var(--text);
@@ -972,7 +983,7 @@ body{
 .panel[data-open="true"]{transform:translate(-50%, 0);}
 
 .panel-title{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:700;
   font-size:20px;
   margin-bottom:4px;
@@ -997,7 +1008,7 @@ body{
 .panel-summary-row .ps-value{
   color:var(--text);
   font-weight:600;
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   text-align:right;
 }
 .panel-summary-row.panel-summary-total{
@@ -1023,7 +1034,7 @@ body{
   border-radius:10px;
   padding:11px 12px;
   color:var(--text);
-  font-family:'Work Sans',sans-serif;
+  font-family:var(--f-body);
   font-size:14px;
 }
 .field input:focus,.field textarea:focus{
@@ -1039,7 +1050,7 @@ body{
   border:none;
   background:var(--amber);
   color:#1a1208;
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:700;
   font-size:16px;
   letter-spacing:0.02em;
@@ -1054,7 +1065,7 @@ body{
   border:1px solid var(--line);
   background:transparent;
   color:var(--muted);
-  font-family:'Work Sans',sans-serif;
+  font-family:var(--f-body);
   font-size:13px;
   cursor:pointer;
 }
@@ -1082,13 +1093,13 @@ body{
 }
 .success-ring svg{width:26px;height:26px;}
 .success-title{
-  font-family:'Barlow Condensed',sans-serif;
+  font-family:var(--f-display);
   font-weight:700;
   font-size:24px;
   margin-bottom:8px;
 }
 .success-detail{
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:13px;
   color:var(--muted);
   line-height:1.7;
@@ -1107,7 +1118,7 @@ body{
   justify-content:center;
   z-index:100;
   color:var(--muted);
-  font-family:'IBM Plex Mono',monospace;
+  font-family:var(--f-mono);
   font-size:13px;
   letter-spacing:0.05em;
 }
