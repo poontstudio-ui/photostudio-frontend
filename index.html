@@ -2095,6 +2095,10 @@ body{
         equipment: state.equipment.slice(),
         name: nameInput.value.trim(),
         phone: phoneInput.value.trim(),
+        // Откуда пришёл клиент: 'catalog' — выбрал студию в каталоге платформы,
+        // 'direct' — попал по прямой ссылке студии (deep link / ?tenant=).
+        // Нужно для будущей комиссии; сервер значение перепроверяет.
+        source: cameFromCatalog ? 'catalog' : 'direct',
       });
 
       const equipLine = (booking.equipment || []).map(e => e.name).join(', ');
