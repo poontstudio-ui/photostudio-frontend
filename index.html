@@ -740,16 +740,25 @@ body{
 
 /* ---------- Сетка занятости: столбцы = залы (или дни), строки = часы ---------- */
 .grid-scroll{
-  overflow:auto;
-  max-height:calc(100vh - 268px);
-  max-height:calc(100dvh - 268px);
-  min-height:240px;
+  overflow-x:auto;
   overscroll-behavior-x:contain;
   -webkit-overflow-scrolling:touch;
   scrollbar-width:none;
   padding-bottom:2px;
 }
 .grid-scroll::-webkit-scrollbar{display:none;}
+/* Строка заголовков вынесена из горизонтального скроллера: так она липнет
+   к ВЕРХУ ЭКРАНА (страница — её скроллпорт), а не к краю сетки. Горизонталь
+   синхронизируется с сеткой скриптом. */
+.grid-head-wrap{
+  position:sticky;
+  top:0;
+  z-index:5;
+  overflow:hidden;
+  background:var(--bg);
+  margin-bottom:4px;
+  padding-bottom:4px;
+}
 .grid{
   display:grid;
   gap:4px;
@@ -761,11 +770,7 @@ body{
 }
 .grid-col-head{
   min-width:0;
-  position:sticky;
-  top:0;
-  z-index:2;
   background:var(--bg);
-  box-shadow:0 4px 0 var(--bg);   /* закрывает gap под шапкой */
   font-family:'Barlow Condensed',sans-serif;
   font-weight:600;
   font-size:13px;
@@ -790,10 +795,10 @@ body{
 .grid[data-fit="true"]{width:100%;min-width:0;}
 .grid-corner{
   position:sticky;
-  top:0; left:0;
+  left:0;
   z-index:3;
   background:var(--bg);
-  box-shadow:4px 0 0 var(--bg), 0 4px 0 var(--bg), 4px 4px 0 var(--bg);
+  box-shadow:4px 0 0 var(--bg);
 }
 .grid-hour{
   position:sticky;
@@ -1169,6 +1174,9 @@ body{
 
     <div class="section">
       <div class="section-label" id="gridLabel">Время брони</div>
+      <div class="grid-head-wrap" id="gridHeadWrap">
+        <div class="grid" id="gridHead"></div>
+      </div>
       <div class="grid-scroll" id="gridScroll">
         <div class="grid" id="grid"></div>
       </div>
@@ -1725,25 +1733,43 @@ body{
     return setSel(colKey, hour, hour+1);
   }
 
+  const gridHeadEl = document.getElementById('gridHead');
+  const gridHeadWrap = document.getElementById('gridHeadWrap');
+  const gridScrollEl = document.getElementById('gridScroll');
+  // Шапка живёт вне горизонтального скроллера (чтобы липнуть к верху экрана),
+  // поэтому её горизонтальное положение ведём за сеткой вручную.
+  gridScrollEl.addEventListener('scroll', ()=>{
+    gridHeadWrap.scrollLeft = gridScrollEl.scrollLeft;
+  }, { passive:true });
+
   function renderGrid(){
     const cols = gridColumns();
     const { start, end } = gridHourRange();
     document.getElementById('dateSection').style.display = gridMode()==='halls' ? '' : 'none';
     if(!cols.length || end <= start){
+      gridHeadEl.innerHTML = '';
+      gridHeadWrap.style.display = 'none';
       gridEl.style.gridTemplateColumns = '';
       gridEl.innerHTML = '<div class="grid-empty">В этот день студия не работает.</div>';
       return;
     }
+    gridHeadWrap.style.display = '';
     // Дни (их всегда 7 и подписи короткие) вписываем в ширину; залы — с
     // минимальной шириной под название и горизонтальной прокруткой.
     const fit = gridMode()==='days';
-    gridEl.dataset.fit = fit ? 'true' : 'false';
-    gridEl.style.gridTemplateColumns =
-      `40px repeat(${cols.length}, minmax(${fit ? '0' : '76px'}, 1fr))`;
-    let html = '<div class="grid-corner"></div>';
-    for(const c of cols){
-      html += `<div class="grid-col-head" data-today="${c.today}">${esc(c.label)}<span>${esc(c.sub)}</span></div>`;
+    const tpl = `40px repeat(${cols.length}, minmax(${fit ? '0' : '76px'}, 1fr))`;
+    for(const el of [gridEl, gridHeadEl]){
+      el.dataset.fit = fit ? 'true' : 'false';
+      el.style.gridTemplateColumns = tpl;
     }
+
+    let head = '<div class="grid-corner"></div>';
+    for(const c of cols){
+      head += `<div class="grid-col-head" data-today="${c.today}">${esc(c.label)}<span>${esc(c.sub)}</span></div>`;
+    }
+    gridHeadEl.innerHTML = head;
+
+    let html = '';
     for(let h=start; h<end; h++){
       const label = String(h).padStart(2,'0')+':00';
       html += `<div class="grid-hour">${label}</div>`;
@@ -1757,6 +1783,11 @@ body{
       }
     }
     gridEl.innerHTML = html;
+    // Шапка и тело — разные гриды, и max-content считает их по-разному
+    // (в шапке есть текст, в клетках — нет). Приводим шапку к ширине тела,
+    // тогда колонки совпадают пиксель в пиксель.
+    gridHeadEl.style.width = fit ? '' : gridEl.getBoundingClientRect().width + 'px';
+    gridHeadWrap.scrollLeft = gridScrollEl.scrollLeft;
   }
 
   // ---- Ввод: только тап (по клетке или по соседней) ----
