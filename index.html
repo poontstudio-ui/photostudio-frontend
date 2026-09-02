@@ -470,56 +470,6 @@ body{
   font-size:13px;
   color:var(--text);
 }
-.hall-list{display:flex;flex-direction:column;gap:8px;}
-.hall-row{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  background:var(--surface);border:1px solid var(--line);border-radius:10px;
-  padding:12px 14px;cursor:pointer;
-}
-.hall-row[data-active="true"]{border-color:var(--amber);background:var(--amber-dim);}
-.hall-row-name{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:16px;}
-.hall-row-sub{font-size:11px;color:var(--muted);margin-top:2px;}
-.hall-row-price{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--amber);flex:0 0 auto;}
-.equip-list{display:flex;flex-direction:column;gap:8px;}
-.equip-row{
-  display:flex;align-items:center;gap:12px;
-  background:var(--surface);border:1px solid var(--line);border-radius:10px;
-  padding:11px 14px;cursor:pointer;
-}
-.equip-row[data-on="true"]{border-color:var(--amber);}
-.equip-row-name{font-size:14px;}
-.equip-row-price{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);flex:0 0 auto;}
-.equip-check{
-  width:22px;height:22px;border-radius:6px;border:1px solid var(--line);flex:0 0 auto;
-  display:flex;align-items:center;justify-content:center;color:var(--amber);font-size:14px;
-}
-.equip-row[data-on="true"] .equip-check{border-color:var(--amber);background:var(--amber);color:#1a1208;}
-.hall-name-input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;}
-.hall-name-input:focus{outline:none;border-color:var(--amber);}
-.equip-unit-sel{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;color:var(--text);font-size:12px;flex:0 0 auto;}
-.equip-unit-sel:focus{outline:none;border-color:var(--amber);}
-#hallsEditor .price-row, #equipEditor .price-row{flex-wrap:wrap;}
-.owner-row .owner-you{
-  color:var(--amber);
-  font-family:'Work Sans',sans-serif;
-  font-size:11px;
-  margin-left:6px;
-}
-.owners-add{display:flex;gap:8px;margin-top:10px;}
-.owners-add input{
-  flex:1;
-  min-width:0;
-  background:var(--bg);
-  border:1px solid var(--line);
-  border-radius:8px;
-  padding:8px 10px;
-  color:var(--text);
-  font-family:'IBM Plex Mono',monospace;
-  font-size:14px;
-}
-.owners-add input:focus{outline:none;border-color:var(--amber);}
-.owners-hint{font-size:11px;color:var(--muted);margin-top:6px;}
-
 .admin-booking-owner{
   font-family:'Work Sans',sans-serif;
   font-size:12px;
@@ -729,70 +679,83 @@ body{
 .cancel-panel-text b{color:var(--text);font-weight:500;}
 
 /* ---------- Vertical day timeline ---------- */
-.timeline-wrap{
-  display:flex;
-  gap:8px;
-  padding:8px 8px 8px 0;
+/* ---------- Сетка занятости: столбцы = залы (или дни), строки = часы ---------- */
+.grid-scroll{
+  overflow-x:auto;
+  overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  padding-bottom:2px;
 }
-.timeline-labels{
-  width:38px;
-  flex-shrink:0;
-  position:relative;
+.grid-scroll::-webkit-scrollbar{display:none;}
+.grid{
+  display:grid;
+  gap:4px;
+  width:max-content;
+  min-width:100%;
+  touch-action:pan-x;
+  user-select:none;
+  -webkit-user-select:none;
 }
-.timeline-label{
-  position:absolute;
+.grid-col-head{
+  font-family:'Barlow Condensed',sans-serif;
+  font-weight:600;
+  font-size:13px;
+  line-height:1.15;
+  color:var(--text);
+  text-align:center;
+  padding:2px 4px 6px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.grid-col-head span{
+  display:block;
+  font-family:'IBM Plex Mono',monospace;
+  font-size:10px;
+  font-weight:400;
+  color:var(--muted);
+  margin-top:2px;
+}
+.grid-col-head[data-today="true"]{color:var(--amber);}
+.grid-hour{
   font-family:'IBM Plex Mono',monospace;
   font-size:10px;
   color:var(--muted-dim);
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  padding-right:6px;
 }
-.timeline-track{
-  flex:1;
+.grid-cell{
   position:relative;
-  background:var(--surface);
+  height:38px;
   border-radius:6px;
+  background:var(--surface);
+  border:1px solid transparent;
   cursor:pointer;
 }
-.timeline-busy{
-  position:absolute;
-  left:2px;
-  right:2px;
-  background:var(--red-dim);
-  border-radius:4px;
-  z-index:1;
-}
-.timeline-past{
+.grid-cell[data-state="busy"]{background:var(--red-dim);cursor:not-allowed;}
+.grid-cell[data-state="past"],
+.grid-cell[data-state="closed"]{
+  cursor:not-allowed;
   background:repeating-linear-gradient(-45deg,
-    rgba(255,255,255,0.055), rgba(255,255,255,0.055) 6px,
-    rgba(255,255,255,0.02) 6px, rgba(255,255,255,0.02) 12px);
+    rgba(255,255,255,0.05), rgba(255,255,255,0.05) 5px,
+    rgba(255,255,255,0.015) 5px, rgba(255,255,255,0.015) 10px);
 }
-.timeline-selection{
+.grid-cell[data-sel="true"]{background:var(--amber);border-color:var(--amber);}
+.grid-cell[data-sel-first="true"]::after{
+  content:attr(data-time);
   position:absolute;
-  left:2px;
-  right:2px;
-  background:var(--amber-dim);
-  border:1px solid var(--amber);
-  border-radius:4px;
-  cursor:grab;
-  touch-action:none;
-  z-index:2;
-}
-.timeline-selection:active{cursor:grabbing;}
-.timeline-sel-time{
-  position:absolute;
-  top:-1px;
-  left:-1px;
-  padding:2px 6px;
-  background:var(--amber);
-  color:#1a1208;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
   font-family:'IBM Plex Mono',monospace;
   font-size:11px;
   font-weight:600;
-  line-height:1.3;
-  border-radius:4px 0 6px 0;
+  color:#1a1208;
   pointer-events:none;
-  white-space:nowrap;
-  z-index:3;
 }
+.grid-empty{color:var(--muted);font-size:13px;padding:22px 4px;}
 .timeline-legend{
   display:flex;
   gap:16px;
@@ -1122,30 +1085,19 @@ body{
       </button>
     </div>
 
-    <div class="section">
+    <div class="section" id="dateSection">
       <div class="section-label">Дата</div>
       <div class="date-row" id="dateRow"></div>
     </div>
 
-    <div class="section" id="hallSection">
-      <div class="section-label">Зал</div>
-      <div class="hall-list" id="hallList"></div>
-    </div>
-
-    <div class="section" id="equipSection">
-      <div class="section-label">Оборудование</div>
-      <div class="equip-list" id="equipList"></div>
-    </div>
-
     <div class="section">
-      <div class="section-label">Время брони</div>
-      <div class="timeline-wrap">
-        <div class="timeline-labels" id="timelineLabels"></div>
-        <div class="timeline-track" id="timelineTrack"></div>
+      <div class="section-label" id="gridLabel">Время брони</div>
+      <div class="grid-scroll" id="gridScroll">
+        <div class="grid" id="grid"></div>
       </div>
       <div class="timeline-legend">
         <span><span class="timeline-legend-dot" style="background:var(--red-dim)"></span>занято</span>
-        <span><span class="timeline-legend-dot" style="background:var(--amber-dim)"></span>ваш выбор</span>
+        <span><span class="timeline-legend-dot" style="background:var(--amber)"></span>ваш выбор</span>
       </div>
     </div>
   </div>
@@ -1264,14 +1216,6 @@ body{
           <button id="peoplePlus" type="button">+</button>
         </div>
       </div>
-      <div class="sb-stepper">
-        <span class="sb-label">Часы</span>
-        <div class="stepper">
-          <button id="durationMinus" type="button">−</button>
-          <span class="stepper-count" id="durationCount">1 ч</span>
-          <button id="durationPlus" type="button">+</button>
-        </div>
-      </div>
     </div>
     <div class="sb-bottom">
       <div class="summary-info">
@@ -1292,7 +1236,6 @@ body{
     <div class="panel-summary-row"><span class="ps-label">Дата</span><span class="ps-value" id="psDate"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Время</span><span class="ps-value" id="psTime"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Человек</span><span class="ps-value" id="psPeople"></span></div>
-    <div class="panel-summary-row" id="psEquipRow"><span class="ps-label">Оборудование</span><span class="ps-value" id="psEquip"></span></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
   </div>
   <div class="field">
@@ -1410,8 +1353,7 @@ body{
     });
   }
 
-  let HALLS = [], EQUIPMENT = [], HOURS, WEEK_HOURS;
-  let DAY_START_MIN, DAY_END_MIN;
+  let HALLS = [], EQUIPMENT = [], WEEK_HOURS;   // EQUIPMENT — только для кабинета владельца
   let STUDIO_TZ = 'Europe/Minsk';   // IANA-таймзона студии, приходит в /config
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
@@ -1420,13 +1362,12 @@ body{
     EQUIPMENT = (cfg.equipment || []).slice();
     HALLS.forEach(h => { allHallsById[h.id] = h; });
     if(!HALLS.some(h => h.id === state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
-    state.equipment = state.equipment.filter(id => EQUIPMENT.some(e => e.id === id));
     WEEK_HOURS = normalizeWeekHours(cfg);
     STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
-    applyDayWindow();
+    clearSelection();
     document.title = cfg.name + ' — Бронирование';
     document.querySelector('.brand-name').textContent = cfg.name;
     document.querySelector('.brand-sub').textContent = cfg.subtitle;
@@ -1443,19 +1384,6 @@ body{
   }
 
   function dayWindow(date){ return WEEK_HOURS[date.getDay()]; }
-
-  // Пересчитывает окно шкалы под выбранный день и втягивает текущий выбор внутрь него.
-  function applyDayWindow(){
-    const w = dayWindow(currentDate());
-    HOURS = [];
-    for(let h=w.start; h<w.end; h++) HOURS.push(h);
-    DAY_START_MIN = w.start*60;
-    DAY_END_MIN = w.end*60;
-    const hours = Math.max(1, (DAY_END_MIN - DAY_START_MIN)/60);
-    TIMELINE_PPH = Math.round(Math.min(TIMELINE_PPH_BASE, TIMELINE_MAX_TRACK / hours));
-    const maxStart = DAY_END_MIN - state.durationHours*60;
-    state.startMinutes = Math.max(DAY_START_MIN, Math.min(maxStart, state.startMinutes));
-  }
 
   // «Сейчас» считаем в ТАЙМЗОНЕ СТУДИИ (STUDIO_TZ), а не по tz устройства и без
   // захардкоженного UTC+3. Стенные часы студии: { date:'YYYY-MM-DD', minutes }.
@@ -1476,36 +1404,18 @@ body{
     return new Date(y, m-1, d);
   }
 
-  // Минута суток, до которой на выбранный день бронировать уже нельзя.
-  // Только для сегодняшнего дня (первый чип); дальше — без ограничения.
-  function pastCutoff(){
-    if(state.dateIndex !== 0) return DAY_START_MIN;
-    return Math.min(DAY_END_MIN, Math.max(DAY_START_MIN, Math.ceil(businessNowMinutes()/15)*15));
-  }
-
   function currentHall(){
     return HALLS.find(h => h.id === state.hallId) || HALLS[0] || { name:'', capacity:1, rate:0 };
   }
   function hallName(id){ return (allHallsById[id] || {}).name || id || ''; }
 
-  // Итог = ставка зала * часы + оборудование (flat — один раз, hour — за час).
+  // Итог = ставка зала * часы. Оборудование из брони убрано (вернётся отдельно).
   function computePrice(){
-    const hall = currentHall();
-    const hours = state.durationHours;
-    let total = hall.rate * hours;
-    for(const id of state.equipment){
-      const eq = EQUIPMENT.find(e => e.id === id);
-      if(eq) total += eq.unit === 'hour' ? eq.price * hours : eq.price;
-    }
-    return total;
+    return currentHall().rate * state.durationHours;
   }
   function priceLabel(){ return (+computePrice().toFixed(2)).toString().replace(/\.00$/,''); }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
-  // Высота шкале задаётся в пикселях на час и зависит от длины рабочего дня:
-  // короткий день — крупнее (растянут), длинный — сжимается, но не длиннее MAX.
-  const TIMELINE_PPH_BASE = 44;      // базовый масштаб для дня средней длины
-  const TIMELINE_MAX_TRACK = 720;    // предел общей высоты шкалы, px
-  let TIMELINE_PPH = TIMELINE_PPH_BASE;   // пересчитывается в applyDayWindow()
+  const GRID_DAYS = 7;               // столбцов в режиме одного зала
   const DURATION_MIN_H = 1;
   const DURATION_MAX_H = 8;
 
@@ -1529,8 +1439,7 @@ body{
     durationHours: 1,
     people: 1,
     hallId: null,        // выбранный зал (id из cfg.halls)
-    equipment: [],       // id выбранного оборудования
-    busyIntervals: [],
+    equipment: [],       // ВСЕГДА пусто: выбор оборудования убран из брони
   };
 
   function currentDate(){ return state.dates[state.dateIndex]; }
@@ -1576,8 +1485,9 @@ body{
         if(state.dateIndex===i) return;
         state.dateIndex=i;
         haptic('light');
+        clearSelection();
         renderAll();
-        refreshTimeline();
+        refreshGrid();
       });
       row.appendChild(chip);
     });
@@ -1599,311 +1509,256 @@ body{
   });
 
   // ---- Выбор зала и оборудования ----
-  function renderHalls(){
-    const box=document.getElementById('hallList');
-    const section=document.getElementById('hallSection');
-    box.innerHTML='';
-    section.style.display = HALLS.length>1 ? '' : 'none';   // один зал — выбор не нужен
-    HALLS.forEach(h=>{
-      const row=document.createElement('div');
-      row.className='hall-row';
-      row.dataset.active=(h.id===state.hallId).toString();
-      row.innerHTML =
-        `<div><div class="hall-row-name">${esc(h.name)}</div>`+
-        `<div class="hall-row-sub">до ${esc(h.capacity)} чел.</div></div>`+
-        `<div class="hall-row-price">${esc(h.rate)} BYN/ч</div>`;
-      row.addEventListener('click', ()=>{
-        if(state.hallId===h.id) return;
-        state.hallId=h.id;
-        haptic('light');
-        renderHalls();
-        renderAll();
-        refreshTimeline();
-      });
-      box.appendChild(row);
-    });
-  }
+  // ================= Сетка занятости =================
+  // Столбцы: если залов несколько — залы на выбранную дату; если зал один —
+  // 7 дней. Строки — целые часы. Клетка = 1 час.
+  const gridEl = document.getElementById('grid');
 
-  function renderEquip(){
-    const box=document.getElementById('equipList');
-    document.getElementById('equipSection').style.display = EQUIPMENT.length ? '' : 'none';
-    box.innerHTML='';
-    EQUIPMENT.forEach(e=>{
-      const on=state.equipment.includes(e.id);
-      const row=document.createElement('div');
-      row.className='equip-row';
-      row.dataset.on=on.toString();
-      const unit = e.unit==='hour' ? 'BYN/ч' : 'BYN';
-      row.innerHTML =
-        `<div class="equip-check">${on?'✓':''}</div>`+
-        `<div style="flex:1"><div class="equip-row-name">${esc(e.name)}</div></div>`+
-        `<div class="equip-row-price">${esc(e.price)} ${unit}</div>`;
-      row.addEventListener('click', ()=>{
-        const i=state.equipment.indexOf(e.id);
-        if(i<0) state.equipment.push(e.id); else state.equipment.splice(i,1);
-        haptic('light');
-        renderEquip();
-        renderSummary();
-      });
-      box.appendChild(row);
-    });
-  }
+  function gridMode(){ return HALLS.length > 1 ? 'halls' : 'days'; }
 
-  // ---- Вертикальная шкала дня ----
-  // Высота трека и часовые метки зависят от окна выбранного дня — перестраиваются
-  // при каждой смене даты (см. refreshTimeline). Слушатели и блок выбора — нет.
-  function layoutTimeline(){
-    const track=document.getElementById('timelineTrack');
-    const labels=document.getElementById('timelineLabels');
-    const totalH=(DAY_END_MIN-DAY_START_MIN)/60*TIMELINE_PPH;
-    track.style.height=totalH+'px';
-    labels.style.height=totalH+'px';
-    labels.innerHTML='';
-    for(let m=DAY_START_MIN; m<=DAY_END_MIN; m+=60){
-      const lbl=document.createElement('div');
-      lbl.className='timeline-label';
-      lbl.textContent=minutesToLabel(m);
-      lbl.style.top=((m-DAY_START_MIN)/60*TIMELINE_PPH-6)+'px';
-      labels.appendChild(lbl);
+  // [{key, hall, date, label, sub, today}] — key уникален в пределах сетки.
+  function gridColumns(){
+    if(!HALLS.length) return [];
+    if(gridMode()==='halls'){
+      const d = currentDate();
+      return HALLS.map(h => ({
+        key:h.id, hall:h, date:d,
+        label:h.name, sub:h.rate+' BYN/ч', today:false,
+      }));
     }
+    const hall = HALLS[0];
+    return state.dates.slice(0, GRID_DAYS).map((d,i) => ({
+      key:dateKey(d), hall, date:d,
+      label:DAY_NAMES[d.getDay()], sub:String(d.getDate()), today:i===0,
+    }));
   }
 
-  function buildTimeline(){
-    const track=document.getElementById('timelineTrack');
-    layoutTimeline();
-
-    // Гасит «фантомный» click, который браузер шлёт по треку сразу после
-    // перетаскивания блока: к концу drag палец почти всегда уходит с блока на
-    // голый трек, и без этого блок прыгал бы к позиции пальца (обычно вниз).
-    let suppressClick=false, dragMoved=false;
-
-    track.addEventListener('click', (e)=>{
-      if(suppressClick){ suppressClick=false; return; }
-      const rect=track.getBoundingClientRect();
-      const y=e.clientY-rect.top;
-      let m=DAY_START_MIN + Math.round(y/TIMELINE_PPH*60/15)*15;
-      m=Math.max(DAY_START_MIN, Math.min(DAY_END_MIN-state.durationHours*60, m));
-      let inBusy=state.busyIntervals.find(b=>m>=b.start && m<b.end);
-      while(inBusy){
-        m=inBusy.end;
-        inBusy=state.busyIntervals.find(b=>m>=b.start && m<b.end);
-      }
-      state.startMinutes=m;
-      haptic('light');
-      renderDuration();
-      renderTimelineSelection();
-      renderSummary();
-    });
-
-    // Блок выбора создаётся один раз и дальше только двигается (drag),
-    // а не пересоздаётся при каждом рендере.
-    const sel=document.createElement('div');
-    sel.className='timeline-selection';
-    // Метка времени старта брони — на верхней грани блока, показывается всегда.
-    const selTime=document.createElement('div');
-    selTime.className='timeline-sel-time';
-    sel.appendChild(selTime);
-    track.appendChild(sel);
-
-    let dragStartY=null, dragStartMinutes=null;
-    sel.addEventListener('click', (e)=>{ e.stopPropagation(); suppressClick=false; });
-    sel.addEventListener('pointerdown', (e)=>{
-      e.stopPropagation();
-      e.preventDefault();
-      sel.setPointerCapture(e.pointerId);
-      dragStartY=e.clientY;
-      dragStartMinutes=state.startMinutes;
-      dragMoved=false;
-    });
-    sel.addEventListener('pointermove', (e)=>{
-      if(dragStartY===null) return;
-      const deltaY=e.clientY-dragStartY;
-      if(Math.abs(deltaY)>2) dragMoved=true;
-      // Позиция считается от точки, с которой начали тянуть, а не накапливается
-      // по кадрам. Длительность при перетаскивании не меняется.
-      const deltaMin=Math.round(deltaY/TIMELINE_PPH*60/15)*15;
-      const durMin=state.durationHours*60;
-      const overlaps=(m)=>state.busyIntervals.some(b=>m<b.end && m+durMin>b.start);
-      let candidate=Math.max(DAY_START_MIN, Math.min(DAY_END_MIN-durMin, dragStartMinutes+deltaMin));
-      // Как только блок наезжает на занятое время, он сразу перескакивает в
-      // ближайший по направлению движения свободный промежуток, куда влезает
-      // целиком по своей длительности. Если такого нет — остаётся на месте.
-      if(overlaps(candidate)){
-        const down=deltaMin>=0;
-        const gaps=freeGaps();
-        let target=null;
-        if(down){
-          for(const g of gaps){
-            const p=Math.max(candidate, g.start);
-            if(p<=g.end-durMin){ target=p; break; }
-          }
-        } else {
-          for(let i=gaps.length-1;i>=0;i--){
-            const g=gaps[i];
-            const p=Math.min(candidate, g.end-durMin);
-            if(p>=g.start){ target=p; break; }
-          }
-        }
-        if(target===null) return;
-        candidate=target;
-      }
-      if(candidate!==state.startMinutes){
-        state.startMinutes=candidate;
-        // Максимум длительности зависит от позиции старта — пересчитываем, иначе
-        // кнопки +/- остаются в состоянии, посчитанном для прежнего места.
-        renderDuration();
-        renderTimelineSelection();
-        renderSummary();
-      }
-    });
-    function endDrag(e){
-      if(dragStartY===null) return;
-      dragStartY=null;
-      if(dragMoved){
-        // фантомный click по треку придёт следующим тиком — гасим именно его;
-        // setTimeout — страховка, если release произошёл вне трека и click не придёт
-        suppressClick=true;
-        setTimeout(()=>{ suppressClick=false; }, 250);
-      }
-      haptic('light');
-    }
-    sel.addEventListener('pointerup', endDrag);
-    sel.addEventListener('pointercancel', endDrag);
+  // Ось Y — объединение рабочих окон всех показанных дат: у разных дней недели
+  // часы работы разные, «лишние» клетки станут closed.
+  function gridHourRange(){
+    const cols = gridColumns();
+    let a = 24, b = 0;
+    for(const c of cols){ const w = dayWindow(c.date); a = Math.min(a, w.start); b = Math.max(b, w.end); }
+    return b > a ? {start:a, end:b} : {start:0, end:0};
   }
 
-  function renderTimelineBusy(){
-    const track=document.getElementById('timelineTrack');
-    track.querySelectorAll('.timeline-busy').forEach(el=>el.remove());
-    state.busyIntervals.forEach(b=>{
-      const el=document.createElement('div');
-      el.className = b.past ? 'timeline-busy timeline-past' : 'timeline-busy';
-      el.style.top=((b.start-DAY_START_MIN)/60*TIMELINE_PPH)+'px';
-      el.style.height=((b.end-b.start)/60*TIMELINE_PPH)+'px';
-      track.appendChild(el);
-    });
-  }
+  // Занятость: ключ столбца -> [{start,end}] в минутах от полуночи.
+  let BUSY = {};
 
-  function renderTimelineSelection(){
-    const sel=document.querySelector('.timeline-selection');
-    if(!sel) return;
-    sel.style.top=((state.startMinutes-DAY_START_MIN)/60*TIMELINE_PPH)+'px';
-    sel.style.height=(state.durationHours*TIMELINE_PPH)+'px';
-    const selTime=sel.querySelector('.timeline-sel-time');
-    if(selTime) selTime.textContent=minutesToLabel(state.startMinutes);
-  }
-
-  async function fetchBusyIntervals(){
+  async function fetchBusy(){
+    BUSY = {};
+    if(!HALLS.length || !TENANT_ID) return;
+    const base = API_BASE + '/api/t/' + TENANT_ID + '/availability';
+    const url = gridMode()==='halls'
+      ? base + '?date=' + dateKey(currentDate())
+      : base + '?hallId=' + encodeURIComponent(HALLS[0].id) +
+        '&from=' + dateKey(state.dates[0]) + '&days=' + GRID_DAYS;
     try{
-      const res=await fetch(API_BASE+'/api/t/'+TENANT_ID+'/availability?date='+dateKey(currentDate())+'&hallId='+encodeURIComponent(state.hallId||''));
-      state.busyIntervals = res.ok ? await res.json() : [];
-    } catch(e){
-      state.busyIntervals=[];
+      const res = await fetch(url);
+      const data = res.ok ? await res.json() : null;
+      if(data && typeof data === 'object' && !Array.isArray(data)) BUSY = data;
+    }catch(e){ /* сеть — сетка просто покажется свободной, сервер всё равно проверит */ }
+  }
+
+  // free | busy | past | closed
+  function cellState(col, hour){
+    const w = dayWindow(col.date);
+    if(hour < w.start || hour >= w.end) return 'closed';
+    const now = studioWallClock();
+    const key = dateKey(col.date);
+    if(key < now.date || (key === now.date && hour*60 < now.minutes)) return 'past';
+    const busy = BUSY[col.key] || [];
+    const s0 = hour*60, e0 = s0 + 60;
+    return busy.some(b => s0 < b.end && e0 > b.start) ? 'busy' : 'free';
+  }
+
+  // ---- Выделение: непрерывный отрезок часов в ОДНОМ столбце ----
+  const sel = { key:null, start:null, end:null };   // end не включается
+
+  function clearSelection(){ sel.key=null; sel.start=null; sel.end=null; }
+  function hasSelection(){ return sel.key !== null && sel.start !== null; }
+
+  function spanFree(col, a, b){
+    if(b - a < DURATION_MIN_H || b - a > DURATION_MAX_H) return false;
+    for(let h=a; h<b; h++) if(cellState(col, h) !== 'free') return false;
+    return true;
+  }
+
+  // Ставит выделение, если весь отрезок свободен. Возвращает успех.
+  function setSel(colKey, a, b){
+    const col = gridColumns().find(c => c.key === colKey);
+    if(!col || !spanFree(col, a, b)) return false;
+    sel.key = colKey; sel.start = a; sel.end = b;
+    syncStateFromSel();
+    return true;
+  }
+
+  // Выделение — источник истины; state держим синхронным для цены и брони.
+  function syncStateFromSel(){
+    const col = gridColumns().find(c => c.key === sel.key);
+    if(!col) return;
+    state.hallId = col.hall.id;
+    if(gridMode()==='days'){
+      const i = state.dates.findIndex(d => dateKey(d) === col.key);
+      if(i >= 0) state.dateIndex = i;
+    }
+    state.startMinutes = sel.start*60;
+    state.durationHours = sel.end - sel.start;
+    if(state.people > currentHall().capacity) state.people = currentHall().capacity;
+  }
+
+  function selectionValid(){
+    if(!hasSelection()) return false;
+    const col = gridColumns().find(c => c.key === sel.key);
+    return !!col && spanFree(col, sel.start, sel.end);
+  }
+
+  // Первая свободная клетка: по столбцам слева направо, внутри — снизу вверх по времени.
+  function autoSelect(){
+    clearSelection();
+    const cols = gridColumns();
+    const { start, end } = gridHourRange();
+    for(const c of cols){
+      for(let h=start; h<end; h++){
+        if(cellState(c, h) === 'free'){ setSel(c.key, h, h+1); return; }
+      }
     }
   }
 
-  async function refreshTimeline(){
-    // Единая точка, через которую проходит любая смена даты / сброс выбора —
-    // здесь окно шкалы подгоняется под часы работы выбранного дня.
-    applyDayWindow();
-    layoutTimeline();
-    await fetchBusyIntervals();
-    // Прошедшее время сегодня — такой же недоступный интервал, как чужая бронь.
-    const cutoff = pastCutoff();
-    if(cutoff > DAY_START_MIN){
-      state.busyIntervals = [{start:DAY_START_MIN, end:cutoff, past:true}, ...state.busyIntervals];
+  // Тап: по соседней клетке — расширить, внутри выделения — схлопнуть, иначе — новое.
+  function tapCell(colKey, hour){
+    if(sel.key === colKey && hasSelection()){
+      const len = sel.end - sel.start;
+      if(hour === sel.end   && len < DURATION_MAX_H && setSel(colKey, sel.start, hour+1)) return true;
+      if(hour === sel.start-1 && len < DURATION_MAX_H && setSel(colKey, hour, sel.end)) return true;
+      if(hour >= sel.start && hour < sel.end) return setSel(colKey, hour, hour+1);
     }
-    if(state.busyIntervals.some(b=>state.startMinutes<b.end && state.startMinutes+DURATION_MIN_H*60>b.start)){
-      const firstFree=findFirstFreeStart();
-      if(firstFree!==null) state.startMinutes=firstFree;
+    return setSel(colKey, hour, hour+1);
+  }
+
+  // Протяжка: от «якоря» до текущей клетки, но не дальше первой несвободной.
+  function dragTo(colKey, hour, anchor){
+    if(colKey !== anchor.key) return false;
+    const col = gridColumns().find(c => c.key === colKey);
+    if(!col) return false;
+    let a = Math.min(anchor.hour, hour), b = Math.max(anchor.hour, hour) + 1;
+    if(hour >= anchor.hour){
+      let e = anchor.hour;
+      while(e < b && cellState(col, e) === 'free' && e - anchor.hour < DURATION_MAX_H) e++;
+      a = anchor.hour; b = Math.max(e, anchor.hour+1);
+    } else {
+      let st = anchor.hour;
+      while(st > a && cellState(col, st-1) === 'free' && anchor.hour+1 - (st-1) <= DURATION_MAX_H) st--;
+      a = st; b = anchor.hour + 1;
     }
-    renderTimelineBusy();
-    renderDuration();
-    renderTimelineSelection();
+    return setSel(colKey, a, b);
+  }
+
+  function renderGrid(){
+    const cols = gridColumns();
+    const { start, end } = gridHourRange();
+    document.getElementById('dateSection').style.display = gridMode()==='halls' ? '' : 'none';
+    if(!cols.length || end <= start){
+      gridEl.style.gridTemplateColumns = '';
+      gridEl.innerHTML = '<div class="grid-empty">В этот день студия не работает.</div>';
+      return;
+    }
+    gridEl.style.gridTemplateColumns = `40px repeat(${cols.length}, minmax(76px, 1fr))`;
+    let html = '<div></div>';
+    for(const c of cols){
+      html += `<div class="grid-col-head" data-today="${c.today}">${esc(c.label)}<span>${esc(c.sub)}</span></div>`;
+    }
+    for(let h=start; h<end; h++){
+      const label = String(h).padStart(2,'0')+':00';
+      html += `<div class="grid-hour">${label}</div>`;
+      for(const c of cols){
+        const st = cellState(c, h);
+        const on = hasSelection() && sel.key===c.key && h>=sel.start && h<sel.end;
+        html += `<div class="grid-cell" data-col="${esc(c.key)}" data-hour="${h}" data-state="${st}"`
+              + (on ? ' data-sel="true"' : '')
+              + (on && h===sel.start ? ` data-sel-first="true" data-time="${label}"` : '')
+              + '></div>';
+      }
+    }
+    gridEl.innerHTML = html;
+  }
+
+  // ---- Ввод: тап и протяжка по клеткам ----
+  // Во время протяжки события уходят элементу, где начался жест, поэтому
+  // клетку под пальцем ищем через elementFromPoint.
+  let dragState = null;
+
+  function cellUnder(x, y){
+    const el = document.elementFromPoint(x, y);
+    if(!el || !el.classList.contains('grid-cell')) return null;
+    return { key: el.dataset.col, hour: Number(el.dataset.hour), state: el.dataset.state };
+  }
+
+  gridEl.addEventListener('pointerdown', (e)=>{
+    // На нажатии клетка — это сама цель события: elementFromPoint промахнётся,
+    // если клетка частично под липкой нижней панелью.
+    const el = e.target && e.target.closest ? e.target.closest('.grid-cell') : null;
+    const cell = el
+      ? { key: el.dataset.col, hour: Number(el.dataset.hour), state: el.dataset.state }
+      : cellUnder(e.clientX, e.clientY);
+    if(!cell || cell.state !== 'free') return;
+    dragState = { key:cell.key, hour:cell.hour, moved:false };
+    try{ gridEl.setPointerCapture(e.pointerId); }catch(err){}
+  });
+
+  gridEl.addEventListener('pointermove', (e)=>{
+    if(!dragState) return;
+    const cell = cellUnder(e.clientX, e.clientY);
+    if(!cell || cell.key !== dragState.key) return;
+    if(!dragState.moved && cell.hour === dragState.hour) return;
+    dragState.moved = true;
+    e.preventDefault();
+    if(dragTo(cell.key, cell.hour, dragState)){ renderGrid(); renderPeople(); renderSummary(); }
+  });
+
+  function endDrag(e){
+    if(!dragState) return;
+    const d = dragState; dragState = null;
+    try{ gridEl.releasePointerCapture(e.pointerId); }catch(err){}
+    if(d.moved){ haptic('light'); return; }
+    if(tapCell(d.key, d.hour)){
+      haptic('light');
+      renderGrid(); renderPeople(); renderSummary();
+    }
+  }
+  gridEl.addEventListener('pointerup', endDrag);
+  gridEl.addEventListener('pointercancel', ()=>{ dragState = null; });
+
+  async function refreshGrid(){
+    await fetchBusy();
+    if(!selectionValid()) autoSelect();
+    renderGrid();
+    renderPeople();
     renderSummary();
   }
-
-  function findFirstFreeStart(){
-    for(let m=DAY_START_MIN; m<=DAY_END_MIN-DURATION_MIN_H*60; m+=15){
-      const busy=state.busyIntervals.find(b=>m<b.end && m+DURATION_MIN_H*60>b.start);
-      if(!busy) return m;
-    }
-    return null;
-  }
-
-  // Свободные промежутки дня в минутах: [{start,end}, …], слева направо,
-  // с объединением пересекающихся/дублирующихся броней.
-  function freeGaps(){
-    const busy=state.busyIntervals
-      .map(b=>({start:Math.max(b.start,DAY_START_MIN), end:Math.min(b.end,DAY_END_MIN)}))
-      .filter(b=>b.end>b.start)
-      .sort((a,b)=>a.start-b.start);
-    const merged=[];
-    for(const b of busy){
-      const last=merged[merged.length-1];
-      if(last && b.start<=last.end) last.end=Math.max(last.end,b.end);
-      else merged.push({...b});
-    }
-    const gaps=[];
-    let cur=DAY_START_MIN;
-    for(const b of merged){
-      if(b.start>cur) gaps.push({start:cur, end:b.start});
-      cur=Math.max(cur,b.end);
-    }
-    if(cur<DAY_END_MIN) gaps.push({start:cur, end:DAY_END_MIN});
-    return gaps;
-  }
-
-  function maxDurationForStart(){
-    const nextBusy=state.busyIntervals.filter(b=>b.start>=state.startMinutes).sort((a,b)=>a.start-b.start)[0];
-    const ceiling=nextBusy ? nextBusy.start : DAY_END_MIN;
-    return Math.max(DURATION_MIN_H, Math.min(DURATION_MAX_H, Math.floor((ceiling-state.startMinutes)/60)));
-  }
-
-  function renderDuration(){
-    const maxNow=maxDurationForStart();
-    if(state.durationHours>maxNow) state.durationHours=maxNow;
-    document.getElementById('durationCount').textContent = state.durationHours + ' ч';
-    document.getElementById('durationMinus').disabled = state.durationHours<=DURATION_MIN_H;
-    document.getElementById('durationPlus').disabled = state.durationHours>=maxNow;
-  }
-
-  document.getElementById('durationMinus').addEventListener('click', ()=>{
-    if(state.durationHours>DURATION_MIN_H){ state.durationHours--; haptic('light'); renderDuration(); renderTimelineSelection(); renderSummary(); }
-  });
-  document.getElementById('durationPlus').addEventListener('click', ()=>{
-    if(state.durationHours<maxDurationForStart()){ state.durationHours++; haptic('light'); renderDuration(); renderTimelineSelection(); renderSummary(); }
-  });
 
   function renderSummary(){
     const bar=document.getElementById('summaryRow');
     const total=document.getElementById('summaryTotal');
     const rec=document.getElementById('recBtn');
 
-    const endMinutes=state.startMinutes + state.durationHours*60;
-    // Текущий выбор упирается в чужую бронь / прошедшее время / конец дня — бронировать нельзя.
-    const blocked = endMinutes>DAY_END_MIN ||
-      state.busyIntervals.some(b=>state.startMinutes<b.end && endMinutes>b.start);
-    if(blocked){
-      bar.textContent = 'На этот день свободного времени нет';
+    if(!selectionValid()){
+      bar.textContent = HALLS.length ? 'Выберите время на сетке' : 'Нет доступных залов';
       total.textContent = '—';
       rec.dataset.enabled='false';
       return;
     }
-
-    bar.textContent = `${currentHall().name} · ${currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · ${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)}`;
+    const col = gridColumns().find(c => c.key === sel.key);
+    bar.textContent = `${col.hall.name} · ${col.date.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · `
+      + `${minutesToLabel(sel.start*60)}–${minutesToLabel(sel.end*60)}`;
     total.textContent = `${priceLabel()} BYN · ${state.durationHours} ч`;
     rec.dataset.enabled='true';
   }
 
   function renderAll(){
-    applyDayWindow();
-    layoutTimeline();
     renderDates();
-    renderHalls();
-    renderEquip();
+    renderGrid();
     renderPeople();
-    renderDuration();
-    renderTimelineSelection();
     renderSummary();
   }
 
@@ -1946,20 +1801,12 @@ body{
 
   function openPanel(){
     const endMinutes=state.startMinutes + state.durationHours*60;
-    const chosen = EQUIPMENT.filter(e => state.equipment.includes(e.id));
     document.getElementById('psHall').textContent = currentHall().name;
     document.getElementById('psDate').textContent =
       currentDate().toLocaleDateString('ru-RU',{weekday:'short', day:'numeric', month:'long'});
     document.getElementById('psTime').textContent =
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${state.durationHours} ч`;
     document.getElementById('psPeople').textContent = `${state.people} чел.`;
-    const equipRow = document.getElementById('psEquipRow');
-    if(chosen.length){
-      document.getElementById('psEquip').textContent = chosen.map(e => e.name).join(', ');
-      equipRow.style.display = '';
-    } else {
-      equipRow.style.display = 'none';
-    }
     document.getElementById('psPrice').textContent = `${priceLabel()} BYN`;
     overlay.dataset.open='true';
     panel.dataset.open='true';
@@ -2122,7 +1969,7 @@ body{
       if(tg && tg.MainButton){ tg.MainButton.hide(); }
     } catch(e){
       errorNote.textContent=e.message;
-      refreshTimeline();
+      refreshGrid();
     } finally{
       confirmBtn.disabled=false;
       confirmBtn.textContent='Подтвердить бронь';
@@ -2130,17 +1977,15 @@ body{
   });
 
   document.getElementById('bookAnotherBtn').addEventListener('click', ()=>{
-    state.startMinutes=12*60;
-    state.durationHours=1;
     state.people=1;
-    state.equipment=[];
+    clearSelection();
     document.getElementById('noteInput').value='';
     validateForm();
     document.getElementById('successView').dataset.visible='false';
     document.getElementById('mainView').dataset.hidden='false';
     document.getElementById('summaryBar').style.display='flex';
     renderAll();
-    refreshTimeline();
+    refreshGrid();
   });
 
   // ---- Мои брони (по всем студиям) ----
@@ -2246,9 +2091,9 @@ body{
     }
     if(bookingsView.dataset.visible==='true') renderBookings();
     if(adminView.dataset.visible==='true') renderAdmin();
-    // Освободившийся слот должен пропасть с основной шкалы сразу, а не после
+    // Освободившийся слот должен пропасть с сетки сразу, а не после
     // переключения дня туда-обратно.
-    refreshTimeline();
+    refreshGrid();
   });
 
   // ---- Кабинет владельца ----
@@ -2282,7 +2127,8 @@ body{
     document.getElementById('statRevenue').textContent=overview.stats.revenue;
     document.getElementById('statAvg').textContent=overview.stats.avgCheck;
 
-    const totalSlotsWeek=HOURS.length*7;
+    const totalSlotsWeek=state.dates.slice(0,7)
+      .reduce((sum,d)=>{ const w=dayWindow(d); return sum + Math.max(0, w.end-w.start); }, 0);
     const bookedHoursWeek=active.filter(b=>{
       const diffDays=Math.floor((Date.now()-new Date(b.date+'T00:00:00').getTime())/86400000);
       return diffDays>=0 && diffDays<7;
@@ -2542,12 +2388,9 @@ body{
       WEEK_HOURS = updated.map(d=>({start:d.start, end:d.end}));
       hoursDraft = WEEK_HOURS.map(d=>({start:d.start, end:d.end}));
       renderHoursEditor();
-      applyDayWindow();
-      layoutTimeline();
-      renderTimelineBusy();
-      renderDuration();
-      renderTimelineSelection();
-      renderSummary();
+      clearSelection();
+      renderAll();
+      refreshGrid();
       haptic('medium');
       note.style.color='var(--amber)';
       note.textContent='Часы работы обновлены';
@@ -2813,9 +2656,8 @@ body{
     try{
       const config = await loadTenantConfig(TENANT_ID);
       applyTenantConfig(config);
-      buildTimeline();
       renderAll();
-      await refreshTimeline();
+      await refreshGrid();
       document.getElementById('loadingScreen').style.display='none';
       catalogView.dataset.visible='false';
       document.getElementById('mainView').dataset.hidden='false';
