@@ -693,7 +693,7 @@ body{
   gap:4px;
   width:max-content;
   min-width:100%;
-  touch-action:pan-x;
+  touch-action:auto;           /* страница листается пальцем и поверх сетки */
   user-select:none;
   -webkit-user-select:none;
 }
@@ -788,32 +788,13 @@ body{
   gap:14px;
   z-index:20;
 }
-.sb-controls{
-  display:flex;
-  justify-content:space-around;
-  gap:16px;
-}
-.sb-stepper{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:7px;
-}
-.sb-label{
-  font-family:'IBM Plex Mono',monospace;
-  font-size:12px;
-  letter-spacing:0.04em;
-  color:var(--muted);
-  text-transform:uppercase;
-}
+.people-field{display:flex;align-items:center;gap:14px;}
+.people-cap{font-size:12px;color:var(--muted);}
 .sb-bottom{
   display:flex;
   align-items:center;
   gap:12px;
 }
-.summary-bar .stepper{gap:14px;}
-.summary-bar .stepper button{width:46px;height:46px;font-size:24px;}
-.summary-bar .stepper-count{font-size:22px;min-width:26px;}
 .summary-info{flex:1;min-width:0;}
 .summary-row{
   font-size:12px;
@@ -1207,16 +1188,6 @@ body{
   </div>
 
   <div class="summary-bar" id="summaryBar">
-    <div class="sb-controls">
-      <div class="sb-stepper">
-        <span class="sb-label">Человек</span>
-        <div class="stepper">
-          <button id="peopleMinus" type="button">−</button>
-          <span class="stepper-count" id="peopleCount">1</span>
-          <button id="peoplePlus" type="button">+</button>
-        </div>
-      </div>
-    </div>
     <div class="sb-bottom">
       <div class="summary-info">
         <div class="summary-row" id="summaryRow">Выберите время</div>
@@ -1235,8 +1206,18 @@ body{
     <div class="panel-summary-row"><span class="ps-label">Зал</span><span class="ps-value" id="psHall"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Дата</span><span class="ps-value" id="psDate"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Время</span><span class="ps-value" id="psTime"></span></div>
-    <div class="panel-summary-row"><span class="ps-label">Человек</span><span class="ps-value" id="psPeople"></span></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
+  </div>
+  <div class="field">
+    <label>Человек</label>
+    <div class="people-field">
+      <div class="stepper">
+        <button id="peopleMinus" type="button">−</button>
+        <span class="stepper-count" id="peopleCount">1</span>
+        <button id="peoplePlus" type="button">+</button>
+      </div>
+      <span class="people-cap" id="peopleCap"></span>
+    </div>
   </div>
   <div class="field">
     <label for="nameInput">Имя</label>
@@ -1499,6 +1480,7 @@ body{
     document.getElementById('peopleCount').textContent=state.people;
     document.getElementById('peopleMinus').disabled = state.people<=1;
     document.getElementById('peoplePlus').disabled = state.people>=cap;
+    document.getElementById('peopleCap').textContent = 'до ' + cap + ' в этом зале';
   }
 
   document.getElementById('peopleMinus').addEventListener('click', ()=>{
@@ -1806,7 +1788,7 @@ body{
       currentDate().toLocaleDateString('ru-RU',{weekday:'short', day:'numeric', month:'long'});
     document.getElementById('psTime').textContent =
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${state.durationHours} ч`;
-    document.getElementById('psPeople').textContent = `${state.people} чел.`;
+    renderPeople();   // вместимость зависит от зала — обновляем при открытии
     document.getElementById('psPrice').textContent = `${priceLabel()} BYN`;
     overlay.dataset.open='true';
     panel.dataset.open='true';
