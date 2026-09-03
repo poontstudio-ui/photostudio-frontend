@@ -1001,6 +1001,10 @@ body{
   padding:10px 14px;
   margin-bottom:18px;
 }
+.repeat-hint{background:var(--surface-raised);border:1px solid var(--amber-dim);border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:12.5px;line-height:1.4;color:var(--text);gap:8px;align-items:center;justify-content:space-between;}
+.repeat-hint:not([hidden]){display:flex;}
+.repeat-hint b{color:var(--amber);}
+.repeat-hint button{background:transparent;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:inherit;flex:none;padding:2px 4px;}
 .panel-summary-hint{font-size:12px;color:var(--muted);margin:-2px 0 6px;line-height:1.35;}
 .panel-summary-row{
   display:flex;
@@ -1196,6 +1200,7 @@ body{
     </div>
 
     <div class="section">
+      <div class="repeat-hint" id="repeatHint" hidden></div>
       <div class="section-label" id="gridLabel">Время брони</div>
       <div class="grid-head-wrap" id="gridHeadWrap">
         <div class="grid" id="gridHead"></div>
@@ -1905,6 +1910,7 @@ body{
     window.scrollTo(0, 0);
   }
   function closeHall(){
+    const rh=document.getElementById('repeatHint'); if(rh) rh.hidden=true;
     openHallId = null;
     clearSelection();
     applyHallMode();
@@ -2216,9 +2222,14 @@ body{
       ${showOwnerName ? '<div class="admin-booking-owner">'+esc(b.name || 'Без имени')+'</div>' : ''}
       <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
     `;
+    const row=document.createElement('div');
+    row.className='booking-card-actions';
+    const rep=document.createElement('button');
+    rep.className='booking-move-btn';
+    rep.textContent='Повторить';
+    rep.addEventListener('click', ()=>repeatBooking(b));
+    row.appendChild(rep);
     if(BK_CANCELABLE.has(b.status)){
-      const row=document.createElement('div');
-      row.className='booking-card-actions';
       const rs=document.createElement('button');
       rs.className='booking-move-btn';
       rs.textContent='Перенести';
@@ -2228,8 +2239,8 @@ body{
       btn.textContent='Отменить';
       btn.addEventListener('click', onCancelClick);
       row.appendChild(rs); row.appendChild(btn);
-      card.appendChild(row);
     }
+    card.appendChild(row);
     return card;
   }
 
@@ -2273,6 +2284,63 @@ body{
   document.getElementById('myBookingsBtn').addEventListener('click', ()=> openMyBookings('studio'));
   document.getElementById('catalogMyBookingsBtn').addEventListener('click', ()=> openMyBookings('catalog'));
   document.getElementById('bookingsBackBtn').addEventListener('click', closeMyBookings);
+
+  // ---- «Повторить бронь» ----
+  function repeatBooking(b){
+    // другая студия — перезагрузка с параметром, применим после boot
+    if(b.studioId && TENANT_ID && b.studioId !== TENANT_ID){
+      const u = new URL(location.href);
+      u.searchParams.set('tenant', b.studioId);
+      u.searchParams.set('repeat', b.id);
+      location.href = u.toString();
+      return;
+    }
+    applyRepeat(b);
+  }
+
+  function applyRepeat(b){
+    const hall = HALLS.find(h => h.id === b.hallId);
+    const durMin = Math.max(SLOT_MIN, Math.round((b.end - b.start) / SLOT_MIN) * SLOT_MIN);
+
+    // выйти из «Мои брони» / каталога в основной вид
+    bookingsView.dataset.visible='false';
+    document.getElementById('catalogView').dataset.visible='false';
+    document.getElementById('mainView').dataset.hidden='false';
+    document.getElementById('summaryBar').style.display='flex';
+
+    if(hall){
+      state.people = Math.min(b.people || 1, hall.capacity);
+      openHall(hall.id);                       // сетка 7 дней по этому залу
+      const ok = trySelectSameTime(b.start, durMin);
+      showRepeatHint(hall.name, b.start, durMin, ok);
+    } else {
+      showRepeatHint(hallName(b.hallId) || 'зал', b.start, durMin, false, true);
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // Пытается выделить [b.start, +dur] в одном из столбцов сетки (по дням).
+  function trySelectSameTime(startMin, durMin){
+    const startSlot = Math.round(startMin / SLOT_MIN);
+    const slots = Math.max(1, Math.round(durMin / SLOT_MIN));
+    for(const c of gridColumns()){
+      if(setSel(c.key, startSlot, startSlot + slots)) { renderGrid(); renderPeople(); renderSummary(); return true; }
+    }
+    autoSelect(); renderGrid(); renderPeople(); renderSummary();
+    return false;
+  }
+
+  function showRepeatHint(hallLabel, startMin, durMin, exactOk, hallGone){
+    const el = document.getElementById('repeatHint');
+    const dur = (function(){ const m=durMin, h=Math.floor(m/60), r=m%60; return r?(h?h+' ч '+r+' мин':r+' мин'):h+' ч'; })();
+    let msg;
+    if(hallGone) msg = `Зал из прошлой брони недоступен. Выберите зал и время заново.`;
+    else if(exactOk) msg = `Повтор: <b>${esc(hallLabel)}</b> · ${dur} · ${esc(state.people)} чел. Время как в прошлый раз — проверьте и подтвердите.`;
+    else msg = `Повтор: <b>${esc(hallLabel)}</b> · ${dur} · ${esc(state.people)} чел. Прежнее время занято — выбрали ближайшее свободное.`;
+    el.innerHTML = `<span>${msg}</span><button type="button" id="repeatHintClose" aria-label="Скрыть">✕</button>`;
+    el.hidden = false;
+    document.getElementById('repeatHintClose').addEventListener('click', ()=>{ el.hidden = true; });
+  }
 
   let pendingRescheduleId=null, pendingRescheduleTenant=null, pendingRescheduleHall=null;
   const reschedulePanel=document.getElementById('reschedulePanel');
@@ -2940,8 +3008,21 @@ body{
     }
   }
 
+  async function maybeApplyRepeatParam(){
+    const rid = params.get('repeat');
+    if(!rid) return;
+    try{
+      const list = await apiMine();
+      const b = (list || []).find(x => x.id === rid);
+      if(b) applyRepeat(b);
+    }catch(e){ /* не вышло — просто откроется обычный экран */ }
+    // убрать параметр из URL
+    const u = new URL(location.href); u.searchParams.delete('repeat');
+    history.replaceState(null, '', u.toString());
+  }
+
   async function boot(){
-    if(TENANT_ID){ bootStudio(); return; }
+    if(TENANT_ID){ await bootStudio(); await maybeApplyRepeatParam(); return; }
     showCatalog();
     await loadCities();
     let last = null;
