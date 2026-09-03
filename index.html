@@ -1459,6 +1459,7 @@ body{
   let HALLS = [], EQUIPMENT = [], WEEK_HOURS;   // EQUIPMENT — только для кабинета владельца
   let STUDIO_TZ = 'Europe/Minsk';   // IANA-таймзона студии, приходит в /config
   let STUDIO_BUFFER_MIN = 0;        // буфер после брони, режется из времени клиента (/config)
+  let SLOT_MIN = 60;               // шаг сетки времени: 30 или 60 (= минимум брони), из /config
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
@@ -1469,6 +1470,7 @@ body{
     WEEK_HOURS = normalizeWeekHours(cfg);
     STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
     STUDIO_BUFFER_MIN = Number.isInteger(cfg.bufferMin) ? cfg.bufferMin : 0;
+    SLOT_MIN = cfg.slotStep === 30 ? 30 : 60;
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
@@ -1522,8 +1524,14 @@ body{
   function priceLabel(){ return (+computePrice().toFixed(2)).toString().replace(/\.00$/,''); }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
   const GRID_DAYS = 7;               // столбцов в режиме одного зала
-  const DURATION_MIN_H = 1;
-  const DURATION_MAX_H = 8;
+  const DURATION_MAX_MIN = 8 * 60;   // максимум брони
+  function maxSlots(){ return DURATION_MAX_MIN / SLOT_MIN; }
+  // Длительность выделения человекочитаемо: «1 ч», «1 ч 30 мин», «30 мин».
+  function durationLabel(){
+    const m = Math.round(state.durationHours * 60);
+    const h = Math.floor(m / 60), r = m % 60;
+    return r ? (h ? `${h} ч ${r} мин` : `${r} мин`) : `${h} ч`;
+  }
 
   // Дни отсчитываем от «сегодня в Минске», а не от даты устройства: иначе
   // ночью (00:00–03:00) первый чип — уже вчерашний день.
@@ -1658,6 +1666,11 @@ body{
     for(const c of cols){ const w = dayWindow(c.date); a = Math.min(a, w.start); b = Math.max(b, w.end); }
     return b > a ? {start:a, end:b} : {start:0, end:0};
   }
+  // То же окно, но в индексах слотов по SLOT_MIN.
+  function gridSlotRange(){
+    const { start, end } = gridHourRange();
+    return { start: start * 60 / SLOT_MIN, end: end * 60 / SLOT_MIN };
+  }
 
   // Занятость: ключ столбца -> [{start,end}] в минутах от полуночи.
   let BUSY = {};
@@ -1677,15 +1690,15 @@ body{
     }catch(e){ /* сеть — сетка просто покажется свободной, сервер всё равно проверит */ }
   }
 
-  // free | busy | past | closed
-  function cellState(col, hour){
+  // free | busy | past | closed. slot — индекс по SLOT_MIN от полуночи.
+  function cellState(col, slot){
     const w = dayWindow(col.date);
-    if(hour < w.start || hour >= w.end) return 'closed';
+    const s0 = slot * SLOT_MIN, e0 = s0 + SLOT_MIN;
+    if(s0 < w.start * 60 || e0 > w.end * 60) return 'closed';
     const now = studioWallClock();
     const key = dateKey(col.date);
-    if(key < now.date || (key === now.date && hour*60 < now.minutes)) return 'past';
+    if(key < now.date || (key === now.date && s0 < now.minutes)) return 'past';
     const busy = BUSY[col.key] || [];
-    const s0 = hour*60, e0 = s0 + 60;
     return busy.some(b => s0 < b.end && e0 > b.start) ? 'busy' : 'free';
   }
 
@@ -1696,8 +1709,8 @@ body{
   function hasSelection(){ return sel.key !== null && sel.start !== null; }
 
   function spanFree(col, a, b){
-    if(b - a < DURATION_MIN_H || b - a > DURATION_MAX_H) return false;
-    for(let h=a; h<b; h++) if(cellState(col, h) !== 'free') return false;
+    if(b - a < 1 || b - a > maxSlots()) return false;
+    for(let i=a; i<b; i++) if(cellState(col, i) !== 'free') return false;
     return true;
   }
 
@@ -1719,8 +1732,8 @@ body{
       const i = state.dates.findIndex(d => dateKey(d) === col.key);
       if(i >= 0) state.dateIndex = i;
     }
-    state.startMinutes = sel.start*60;
-    state.durationHours = sel.end - sel.start;
+    state.startMinutes = sel.start * SLOT_MIN;
+    state.durationHours = (sel.end - sel.start) * SLOT_MIN / 60;
     if(state.people > currentHall().capacity) state.people = currentHall().capacity;
   }
 
@@ -1734,23 +1747,23 @@ body{
   function autoSelect(){
     clearSelection();
     const cols = gridColumns();
-    const { start, end } = gridHourRange();
+    const { start, end } = gridSlotRange();
     for(const c of cols){
-      for(let h=start; h<end; h++){
-        if(cellState(c, h) === 'free'){ setSel(c.key, h, h+1); return; }
+      for(let i=start; i<end; i++){
+        if(cellState(c, i) === 'free'){ setSel(c.key, i, i+1); return; }
       }
     }
   }
 
   // Тап: по соседней клетке — расширить, внутри выделения — схлопнуть, иначе — новое.
-  function tapCell(colKey, hour){
+  function tapCell(colKey, slot){
     if(sel.key === colKey && hasSelection()){
       const len = sel.end - sel.start;
-      if(hour === sel.end   && len < DURATION_MAX_H && setSel(colKey, sel.start, hour+1)) return true;
-      if(hour === sel.start-1 && len < DURATION_MAX_H && setSel(colKey, hour, sel.end)) return true;
-      if(hour >= sel.start && hour < sel.end) return setSel(colKey, hour, hour+1);
+      if(slot === sel.end     && len < maxSlots() && setSel(colKey, sel.start, slot+1)) return true;
+      if(slot === sel.start-1 && len < maxSlots() && setSel(colKey, slot, sel.end)) return true;
+      if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot+1);
     }
-    return setSel(colKey, hour, hour+1);
+    return setSel(colKey, slot, slot+1);
   }
 
   const gridHeadEl = document.getElementById('gridHead');
@@ -1764,7 +1777,7 @@ body{
 
   function renderGrid(){
     const cols = gridColumns();
-    const { start, end } = gridHourRange();
+    const { start, end } = gridSlotRange();
     document.getElementById('dateSection').style.display = gridMode()==='halls' ? '' : 'none';
     if(!cols.length || end <= start){
       gridHeadEl.innerHTML = '';
@@ -1790,18 +1803,19 @@ body{
     gridHeadEl.innerHTML = head;
 
     let html = '';
-    for(let h=start; h<end; h++){
-      const label = String(h).padStart(2,'0')+':00';
+    for(let i=start; i<end; i++){
+      const label = minutesToLabel(i * SLOT_MIN);
       html += `<div class="grid-hour">${label}</div>`;
       for(const c of cols){
-        const st = cellState(c, h);
-        const on = hasSelection() && sel.key===c.key && h>=sel.start && h<sel.end;
-        html += `<div class="grid-cell" data-col="${esc(c.key)}" data-hour="${h}" data-state="${st}"`
+        const st = cellState(c, i);
+        const on = hasSelection() && sel.key===c.key && i>=sel.start && i<sel.end;
+        html += `<div class="grid-cell" data-col="${esc(c.key)}" data-slot="${i}" data-state="${st}"`
               + (on ? ' data-sel="true"' : '')
-              + (on && h===sel.start ? ` data-sel-first="true" data-time="${label}"` : '')
+              + (on && i===sel.start ? ` data-sel-first="true" data-time="${label}"` : '')
               + '></div>';
       }
     }
+    gridEl.dataset.slotmin = String(SLOT_MIN);
     gridEl.innerHTML = html;
     // Шапка и тело — разные гриды, и max-content считает их по-разному
     // (в шапке есть текст, в клетках — нет). Приводим шапку к ширине тела,
@@ -1814,7 +1828,7 @@ body{
   gridEl.addEventListener('click', (e)=>{
     const el = e.target && e.target.closest ? e.target.closest('.grid-cell') : null;
     if(!el || el.dataset.state !== 'free') return;
-    if(tapCell(el.dataset.col, Number(el.dataset.hour))){
+    if(tapCell(el.dataset.col, Number(el.dataset.slot))){
       haptic('light');
       renderGrid(); renderPeople(); renderSummary();
     }
@@ -1894,8 +1908,8 @@ body{
     }
     const col = gridColumns().find(c => c.key === sel.key);
     bar.textContent = `${col.hall.name} · ${col.date.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · `
-      + `${minutesToLabel(sel.start*60)}–${minutesToLabel(sel.end*60)}`;
-    total.textContent = `${priceLabel()} BYN · ${state.durationHours} ч`;
+      + `${minutesToLabel(sel.start*SLOT_MIN)}–${minutesToLabel(sel.end*SLOT_MIN)}`;
+    total.textContent = `${priceLabel()} BYN · ${durationLabel()}`;
     rec.dataset.enabled='true';
   }
 
@@ -1960,12 +1974,12 @@ body{
   }
 
   function openPanel(){
-    const endMinutes=state.startMinutes + state.durationHours*60;
+    const endMinutes=state.startMinutes + Math.round(state.durationHours*60);
     document.getElementById('psHall').textContent = currentHall().name;
     document.getElementById('psDate').textContent =
       currentDate().toLocaleDateString('ru-RU',{weekday:'short', day:'numeric', month:'long'});
     document.getElementById('psTime').textContent =
-      `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${state.durationHours} ч`;
+      `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${durationLabel()}`;
     setShootingHint(endMinutes);
     renderPeople();   // вместимость зависит от зала — обновляем при открытии
     document.getElementById('psPrice').textContent = `${priceLabel()} BYN`;
@@ -2098,7 +2112,7 @@ body{
   confirmBtn.addEventListener('click', async ()=>{
     if(confirmBtn.disabled) return;
     haptic('heavy');
-    const start=state.startMinutes, end=state.startMinutes+state.durationHours*60;
+    const start=state.startMinutes, end=state.startMinutes+Math.round(state.durationHours*60);
     const errorNote=document.getElementById('confirmError');
     errorNote.textContent='';
     confirmBtn.disabled=true;
