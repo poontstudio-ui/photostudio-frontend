@@ -11,29 +11,33 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans+Condensed:wght@500;600;700&family=Golos+Text:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 
 :root{
-  /* Шрифты. ВСЕ ТРИ обязаны нести кириллицу — прежние Barlow Condensed и
-     Work Sans её не содержат и молча падали в системный фолбэк. */
-  --f-display:'Fira Sans Condensed','Roboto Condensed',system-ui,sans-serif;
-  --f-body:'Golos Text',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  /* Светлая тема в духе Cloudflare. Имена переменных сохранены —
+     --amber теперь синий акцент, --red-dim — светло-красная заливка. */
+  --f-display:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --f-body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   --f-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
-  --bg:#14110F;
-  --surface:#1E1A17;
-  --surface-raised:#262019;
-  --line:#332920;
-  --amber:#E8A33D;
-  --amber-dim:#6b4d21;
-  --red:#C1443C;
-  --red-dim:#5c261f;
-  --brass:#B08D3E;
-  --brass-dim:#4f3f1c;
-  --text:#F2ECE4;
-  --muted:#8A8078;
-  --muted-dim:#4f4842;
-  --radius:14px;
+  --bg:#f1f2f4;
+  --surface:#ffffff;
+  --surface-raised:#f7f8f9;
+  --line:#e3e5e9;
+  --line-strong:#cfd2d8;
+  --amber:#0a72ef;
+  --amber-dim:#bcd8fb;
+  --amber-strong:#0559c4;
+  --amber-warn:#9a6400;
+  --red:#cf3a3a;
+  --red-dim:#fbe4e4;
+  --brass:#5a5f68;
+  --brass-dim:#e3e5e9;
+  --green:#12864d;
+  --text:#1c1e21;
+  --muted:#5a5f68;
+  --muted-dim:#8a9099;
+  --radius:12px;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -53,9 +57,7 @@ body{
   min-height:100vh;
   display:flex;
   flex-direction:column;
-  background:
-    radial-gradient(circle at 15% 0%, rgba(232,163,61,0.06), transparent 40%),
-    var(--bg);
+  background:var(--bg);
   position:relative;
   padding-bottom:210px;
 }
@@ -337,7 +339,7 @@ body{
   width:100%;
   max-width:22px;
   border-radius:4px 4px 2px 2px;
-  background:linear-gradient(180deg, var(--amber), var(--amber-dim));
+  background:var(--amber);
   min-height:3px;
 }
 .eq-label{
@@ -551,7 +553,7 @@ body{
   position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;
   background:var(--surface-raised);border:1px solid var(--line);border-radius:10px;
   padding:8px;display:flex;flex-direction:column;gap:6px;
-  box-shadow:0 12px 32px rgba(0,0,0,0.45);
+  box-shadow:0 -4px 24px rgba(20,22,28,0.12);
 }
 .city-select-pop[hidden]{display:none;}
 .city-select-search{
@@ -871,16 +873,16 @@ body{
   height:38px;
   border-radius:6px;
   background:var(--surface);
-  border:1px solid transparent;
+  border:1px solid var(--line);
   cursor:pointer;
 }
-.grid-cell[data-state="busy"]{background:var(--red-dim);cursor:not-allowed;}
+.grid-cell[data-state="busy"]{background:var(--red-dim);border-color:#f0c9c9;cursor:not-allowed;}
 .grid-cell[data-state="past"],
 .grid-cell[data-state="closed"]{
   cursor:not-allowed;
   background:repeating-linear-gradient(-45deg,
-    rgba(255,255,255,0.05), rgba(255,255,255,0.05) 5px,
-    rgba(255,255,255,0.015) 5px, rgba(255,255,255,0.015) 10px);
+    rgba(20,22,28,0.05), rgba(20,22,28,0.05) 5px,
+    rgba(20,22,28,0.015) 5px, rgba(20,22,28,0.015) 10px);
 }
 .grid-cell[data-sel="true"]{background:var(--amber);border-color:var(--amber);}
 .grid-cell[data-sel-first="true"]::after{
@@ -891,7 +893,7 @@ body{
   font-family:var(--f-mono);
   font-size:11px;
   font-weight:600;
-  color:#1a1208;
+  color:#fff;
   pointer-events:none;
 }
 .grid-empty{color:var(--muted);font-size:13px;padding:22px 4px;}
@@ -1044,7 +1046,7 @@ body{
   padding:6px 0;
   font-size:14px;
 }
-.panel-summary-row + .panel-summary-row{border-top:1px solid rgba(255,255,255,0.05);}
+.panel-summary-row + .panel-summary-row{border-top:1px solid var(--line);}
 .panel-summary-row .ps-label{color:var(--muted);}
 .panel-summary-row .ps-value{
   color:var(--text);
@@ -1090,7 +1092,7 @@ body{
   border-radius:12px;
   border:none;
   background:var(--amber);
-  color:#1a1208;
+  color:#fff;
   font-family:var(--f-display);
   font-weight:700;
   font-size:16px;
@@ -1449,8 +1451,8 @@ body{
     // Иначе вертикальный свайп по шкале времени Telegram перехватывает как жест
     // сворачивания мини-аппа — «тянется всё окно». Есть с Bot API 7.7.
     try{ tg.disableVerticalSwipes(); }catch(e){}
-    try{ tg.setBackgroundColor('#14110F'); }catch(e){}
-    try{ tg.setHeaderColor('#14110F'); }catch(e){}
+    try{ tg.setBackgroundColor('#f1f2f4'); }catch(e){}
+    try{ tg.setHeaderColor('#ffffff'); }catch(e){}
   }
   function haptic(style){
     if(tg && tg.HapticFeedback){ tg.HapticFeedback.impactOccurred(style || 'light'); }
