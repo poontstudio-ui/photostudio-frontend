@@ -673,6 +673,9 @@ body{
   margin-bottom:12px;
 }
 .booking-card[data-status="cancelled"] .booking-meta{text-decoration:line-through;}
+.booking-card-actions{display:flex;gap:8px;margin-top:10px;}
+.booking-card-actions>button{flex:1;}
+.booking-move-btn{background:transparent;border:1px solid var(--amber-dim);color:var(--amber);border-radius:9px;padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;}
 .booking-cancel-btn{
   width:100%;
   padding:10px;
@@ -686,6 +689,9 @@ body{
 }
 
 /* ---------- Cancel confirm panel ---------- */
+.rs-fields{display:flex;flex-direction:column;gap:10px;margin:4px 0 12px;}
+.rs-field{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px;color:var(--muted);}
+.rs-field input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:14px;}
 .cancel-panel-text{
   font-size:13px;
   color:var(--muted);
@@ -1364,6 +1370,19 @@ body{
   <div class="cancel-panel-text" id="cancelPanelText"></div>
   <button class="btn-primary" style="background:var(--red);color:#fff" id="cancelConfirmBtn">Да, отменить</button>
   <button class="btn-ghost" id="cancelDismissBtn">Оставить бронь</button>
+</div>
+
+<div class="panel" id="reschedulePanel">
+  <div class="panel-title">Перенести бронь</div>
+  <div class="cancel-panel-text" id="reschedulePanelText"></div>
+  <div class="rs-fields">
+    <label class="rs-field"><span>Дата</span><input type="date" id="rsDate"></label>
+    <label class="rs-field"><span>Начало</span><input type="time" id="rsFrom" step="1800"></label>
+    <label class="rs-field"><span>Конец</span><input type="time" id="rsTo" step="1800"></label>
+  </div>
+  <div class="save-note" id="rsError" style="color:var(--red)"></div>
+  <button class="btn-primary" id="rsConfirmBtn">Перенести</button>
+  <button class="btn-ghost" id="rsDismissBtn">Отмена</button>
 </div>
 
 <div class="panel" id="clearHistoryPanel">
@@ -2198,11 +2217,18 @@ body{
       <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
     `;
     if(BK_CANCELABLE.has(b.status)){
+      const row=document.createElement('div');
+      row.className='booking-card-actions';
+      const rs=document.createElement('button');
+      rs.className='booking-move-btn';
+      rs.textContent='Перенести';
+      rs.addEventListener('click', ()=>openReschedule(b));
       const btn=document.createElement('button');
       btn.className='booking-cancel-btn';
-      btn.textContent='Отменить бронь';
+      btn.textContent='Отменить';
       btn.addEventListener('click', onCancelClick);
-      card.appendChild(btn);
+      row.appendChild(rs); row.appendChild(btn);
+      card.appendChild(row);
     }
     return card;
   }
@@ -2248,6 +2274,59 @@ body{
   document.getElementById('catalogMyBookingsBtn').addEventListener('click', ()=> openMyBookings('catalog'));
   document.getElementById('bookingsBackBtn').addEventListener('click', closeMyBookings);
 
+  let pendingRescheduleId=null, pendingRescheduleTenant=null, pendingRescheduleHall=null;
+  const reschedulePanel=document.getElementById('reschedulePanel');
+
+  function openReschedule(booking){
+    pendingRescheduleId=booking.id;
+    pendingRescheduleTenant=booking.studioId || null;
+    pendingRescheduleHall=booking.hallId || null;
+    const hall = booking.hallName || hallName(booking.hallId);
+    document.getElementById('reschedulePanelText').innerHTML =
+      `<b>${esc(hall)}</b><br>сейчас: ${esc(dateLabelFromISO(booking.date))}, `+
+      `${minutesToLabel(booking.start)}–${minutesToLabel(booking.end)}`;
+    document.getElementById('rsDate').value = String(booking.date).slice(0,10);
+    document.getElementById('rsFrom').value = minutesToLabel(booking.start);
+    document.getElementById('rsTo').value = minutesToLabel(booking.end);
+    document.getElementById('rsError').textContent='';
+    overlay.dataset.open='true';
+    reschedulePanel.dataset.open='true';
+  }
+  function closeReschedule(){
+    overlay.dataset.open='false';
+    reschedulePanel.dataset.open='false';
+    pendingRescheduleId=null; pendingRescheduleTenant=null; pendingRescheduleHall=null;
+  }
+  document.getElementById('rsDismissBtn').addEventListener('click', closeReschedule);
+  document.getElementById('rsConfirmBtn').addEventListener('click', async ()=>{
+    if(pendingRescheduleId===null) return;
+    const toMin = (v)=>{ const m=/^(\d{2}):(\d{2})$/.exec(v||''); return m ? (+m[1])*60+(+m[2]) : NaN; };
+    const date=document.getElementById('rsDate').value;
+    const start=toMin(document.getElementById('rsFrom').value);
+    const end=toMin(document.getElementById('rsTo').value);
+    const err=document.getElementById('rsError');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ err.textContent='Укажите дату'; return; }
+    if(!Number.isInteger(start)||!Number.isInteger(end)||end<=start){ err.textContent='Начало должно быть раньше конца'; return; }
+    const btn=document.getElementById('rsConfirmBtn');
+    btn.disabled=true; btn.textContent='Переносим…';
+    try{
+      const res = await api('POST', '/bookings/'+pendingRescheduleId+'/reschedule',
+        { date, start, end }, pendingRescheduleTenant);
+      haptic('medium');
+      closeReschedule();
+      if(res && res.rescheduleFree === false){
+        alert('Бронь перенесена. По правилам студии такой перенос платный — студия свяжется по доплате.');
+      }
+      if(bookingsView.dataset.visible==='true') renderBookings();
+      if(adminView.dataset.visible==='true') renderAdmin();
+      refreshGrid();
+    }catch(e){
+      err.textContent = e.message || 'Не удалось перенести';
+    }finally{
+      btn.disabled=false; btn.textContent='Перенести';
+    }
+  });
+
   function openCancelConfirm(booking){
     pendingCancelId=booking.id;
     pendingCancelTenant=booking.studioId || null;
@@ -2263,7 +2342,7 @@ body{
     pendingCancelId=null;
     pendingCancelTenant=null;
   }
-  overlay.addEventListener('click', closeCancelConfirm);
+  overlay.addEventListener('click', ()=>{ closeCancelConfirm(); closeReschedule(); });
   document.getElementById('cancelDismissBtn').addEventListener('click', closeCancelConfirm);
   document.getElementById('cancelConfirmBtn').addEventListener('click', async ()=>{
     if(pendingCancelId===null) return;
