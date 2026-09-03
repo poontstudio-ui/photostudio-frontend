@@ -2355,16 +2355,25 @@ body{
   function applyPendingSlot(ps){
     const hall = HALLS.find(h => h.id === ps.hallId);
     if(!hall){ return; }
+    if(Number.isInteger(ps.people) && ps.people > 0){
+      state.people = Math.min(ps.people, hall.capacity);
+    }
     openHall(hall.id);
-    // сдвинуть окно дат так, чтобы нужная дата попала в сетку (обычно она рядом)
     const di = state.dates.findIndex(d => dateKey(d) === ps.date);
     if(di >= 0) state.dateIndex = di;
     const startSlot = Math.round(ps.start / SLOT_MIN);
     const slots = Math.max(1, Math.round((ps.end - ps.start) / SLOT_MIN));
-    // ключ столбца в days-режиме = dateKey
-    if(!setSel(ps.date, startSlot, startSlot + slots)) autoSelect();
+    const ok = setSel(ps.date, startSlot, startSlot + slots);
+    if(!ok) autoSelect();
     renderGrid(); renderPeople(); renderSummary();
-    showRepeatHint(hall.name, ps.start, ps.end - ps.start, true);
+    const el = document.getElementById('repeatHint');
+    const durMin = ps.end - ps.start;
+    const dur = (function(){ const m=durMin,h=Math.floor(m/60),r=m%60; return r?(h?h+' ч '+r+' мин':r+' мин'):h+' ч'; })();
+    el.innerHTML = `<span>Из поиска: <b>${esc(hall.name)}</b> · ${dur}` +
+      (ok ? ' — проверьте и подтвердите.' : '. Это время только что заняли — выбрали ближайшее свободное.') +
+      `</span><button type="button" id="repeatHintClose" aria-label="Скрыть">✕</button>`;
+    el.hidden = false;
+    document.getElementById('repeatHintClose').addEventListener('click', ()=>{ el.hidden = true; });
     window.scrollTo(0, 0);
   }
 
@@ -3073,17 +3082,19 @@ body{
         '<div class="search-result-hall">'+esc(r.hallName)+'</div>'+
         '<div class="search-result-meta">'+esc(props.join(' · '))+'</div>'+
         '<button type="button">Выбрать это время</button>';
+      const pplWanted = parseInt(document.getElementById('tsPeople').value, 10);
       el.querySelector('button').addEventListener('click', ()=>{
         haptic('medium');
-        chooseStudioWithSlot(r.studioId, r.hallId, date, start, end);
+        chooseStudioWithSlot(r.studioId, r.hallId, date, start, end,
+          Number.isInteger(pplWanted) && pplWanted > 0 ? Math.min(pplWanted, r.capacity) : null);
       });
       catalogList.appendChild(el);
     });
   }
 
-  let pendingSlot = null;   // {hallId, date, start, end} — применить после bootStudio
-  function chooseStudioWithSlot(studioId, hallId, date, startMin, endMin){
-    pendingSlot = { hallId, date, start: startMin, end: endMin };
+  let pendingSlot = null;   // {hallId, date, start, end, people, fromSearch} — применить после bootStudio
+  function chooseStudioWithSlot(studioId, hallId, date, startMin, endMin, people){
+    pendingSlot = { hallId, date, start: startMin, end: endMin, people: people || null, fromSearch: true };
     chooseStudio(studioId);
   }
 
