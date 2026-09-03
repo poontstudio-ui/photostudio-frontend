@@ -777,6 +777,12 @@ body{
 .hall-fact span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
 .hall-fact b{font-family:var(--f-mono);font-weight:500;font-size:14px;}
 .hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
+.hall-photos-gallery{display:flex;gap:8px;overflow-x:auto;margin:2px 0 12px;padding-bottom:4px;scrollbar-width:none;}
+.hall-photos-gallery::-webkit-scrollbar{display:none;}
+.hall-photos-gallery img{height:150px;width:auto;border-radius:12px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);}
+.hall-card-thumb{width:100%;height:96px;object-fit:cover;border-radius:10px;margin-bottom:8px;border:1px solid var(--line);display:block;}
+.hall-photo-view{position:fixed;inset:0;background:rgba(10,8,6,.94);z-index:120;display:flex;align-items:center;justify-content:center;padding:16px;}
+.hall-photo-view img{max-width:100%;max-height:100%;border-radius:10px;}
 
 /* ---------- Сетка занятости: столбцы = залы (или дни), строки = часы ---------- */
 .grid-scroll{
@@ -1221,8 +1227,8 @@ body{
         <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем залам">←</button>
         <div class="hall-info-title" id="hallInfoTitle"></div>
       </div>
+      <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
-      <div class="hall-soon">Фотографии, описание и оборудование зала появятся здесь.</div>
     </div>
 
     <div class="section" id="dateSection">
@@ -1904,7 +1910,9 @@ body{
     HALLS.forEach(h => {
       const card = document.createElement('div');
       card.className = 'hall-card';
-      card.innerHTML =
+      const thumb = (Array.isArray(h.photos) && h.photos[0])
+        ? '<img class="hall-card-thumb" src="'+esc(h.photos[0])+'" alt="" loading="lazy">' : '';
+      card.innerHTML = thumb +
         '<div class="hall-card-name">'+esc(h.name)+'<span>›</span></div>'+
         '<div class="hall-card-sub">до '+esc(h.capacity)+' чел.</div>'+
         '<div class="hall-card-rate">'+esc(h.rate)+' BYN/ч</div>';
@@ -1917,9 +1925,32 @@ body{
     const hall = gridHall();
     if(!openHallId || !hall) return;
     document.getElementById('hallInfoTitle').textContent = hall.name;
-    document.getElementById('hallFacts').innerHTML =
-      '<div class="hall-fact"><span>Вместимость</span><b>до '+esc(hall.capacity)+' чел.</b></div>'+
-      '<div class="hall-fact"><span>Ставка</span><b>'+esc(hall.rate)+' BYN/ч</b></div>';
+    const g = document.getElementById('hallPhotos');
+    const photos = Array.isArray(hall.photos) ? hall.photos : [];
+    if(photos.length){
+      g.innerHTML = photos.map(u => '<img src="'+esc(u)+'" alt="" loading="lazy">').join('');
+      g.hidden = false;
+      g.querySelectorAll('img').forEach(im => im.addEventListener('click', ()=>openPhoto(im.src)));
+    } else { g.hidden = true; g.innerHTML = ''; }
+    const facts = [
+      '<div class="hall-fact"><span>Вместимость</span><b>до '+esc(hall.capacity)+' чел.</b></div>',
+      '<div class="hall-fact"><span>Ставка</span><b>'+esc(hall.rate)+' BYN/ч</b></div>',
+    ];
+    if(hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
+    if(hall.daylight) facts.push('<div class="hall-fact"><span>Свет</span><b>дневной</b></div>');
+    if(hall.areaM2) facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
+    if(hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
+    document.getElementById('hallFacts').innerHTML = facts.join('');
+  }
+
+  const HALL_TYPE_RU = { cyclorama:'Циклорама', interior:'Интерьер', hardlight:'Тёмный', daylight:'Дневной свет', other:'Другое' };
+
+  function openPhoto(src){
+    const v = document.createElement('div');
+    v.className = 'hall-photo-view';
+    v.innerHTML = '<img src="'+esc(src)+'" alt="">';
+    v.addEventListener('click', ()=>v.remove());
+    document.body.appendChild(v);
   }
 
   // Страница зала и обзор студии — один и тот же экран, меняются только
