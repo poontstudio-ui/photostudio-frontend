@@ -995,6 +995,7 @@ body{
   padding:10px 14px;
   margin-bottom:18px;
 }
+.panel-summary-hint{font-size:12px;color:var(--muted);margin:-2px 0 6px;line-height:1.35;}
 .panel-summary-row{
   display:flex;
   justify-content:space-between;
@@ -1326,6 +1327,7 @@ body{
     <div class="panel-summary-row"><span class="ps-label">Зал</span><span class="ps-value" id="psHall"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Дата</span><span class="ps-value" id="psDate"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Время</span><span class="ps-value" id="psTime"></span></div>
+    <div class="panel-summary-hint" id="psShoot" hidden></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
   </div>
   <div class="field">
@@ -1456,6 +1458,7 @@ body{
 
   let HALLS = [], EQUIPMENT = [], WEEK_HOURS;   // EQUIPMENT — только для кабинета владельца
   let STUDIO_TZ = 'Europe/Minsk';   // IANA-таймзона студии, приходит в /config
+  let STUDIO_BUFFER_MIN = 0;        // буфер после брони, режется из времени клиента (/config)
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
@@ -1465,6 +1468,7 @@ body{
     if(!HALLS.some(h => h.id === state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
     WEEK_HOURS = normalizeWeekHours(cfg);
     STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
+    STUDIO_BUFFER_MIN = Number.isInteger(cfg.bufferMin) ? cfg.bufferMin : 0;
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
@@ -1942,6 +1946,19 @@ body{
     if(overlay.dataset.open === 'true') lockScroll(); else unlockScroll();
   }).observe(overlay, { attributes:true, attributeFilter:['data-open'] });
 
+  // Буфер режется из конца брони: клиент снимает до endMinutes − буфер,
+  // студия успевает принять следующую группу впритык.
+  function setShootingHint(endMinutes){
+    const el = document.getElementById('psShoot');
+    if(!el) return;
+    if(STUDIO_BUFFER_MIN > 0){
+      el.textContent = `Съёмка до ${minutesToLabel(endMinutes - STUDIO_BUFFER_MIN)} · ${STUDIO_BUFFER_MIN} мин в конце — на сборы`;
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
+  }
+
   function openPanel(){
     const endMinutes=state.startMinutes + state.durationHours*60;
     document.getElementById('psHall').textContent = currentHall().name;
@@ -1949,6 +1966,7 @@ body{
       currentDate().toLocaleDateString('ru-RU',{weekday:'short', day:'numeric', month:'long'});
     document.getElementById('psTime').textContent =
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${state.durationHours} ч`;
+    setShootingHint(endMinutes);
     renderPeople();   // вместимость зависит от зала — обновляем при открытии
     document.getElementById('psPrice').textContent = `${priceLabel()} BYN`;
     overlay.dataset.open='true';
