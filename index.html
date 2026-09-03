@@ -583,6 +583,24 @@ body{
 .catalog-row-sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
 .catalog-row-chevron{color:var(--muted);flex:0 0 auto;font-size:18px;}
 .catalog-empty{color:var(--muted);font-size:13px;padding:30px 4px;}
+.catalog-mode-toggle{margin-top:10px;background:none;border:none;color:var(--amber);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 0;}
+.time-search{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;}
+.ts-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.ts-grid label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;}
+.ts-grid input{background:var(--surface-raised);border:1px solid var(--line);border-radius:9px;padding:9px 10px;color:var(--text);font-family:inherit;font-size:14px;}
+.ts-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.ts-chip{background:var(--surface-raised);border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12px;color:var(--muted);cursor:pointer;}
+.ts-chip[data-on="true"]{border-color:var(--amber);color:var(--amber);}
+.ts-check{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);}
+.ts-check input{width:auto;}
+.ts-note{font-size:12px;color:var(--muted);min-height:14px;}
+.search-result{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;}
+.search-result-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
+.search-result-studio{font-family:var(--f-display);font-weight:600;font-size:17px;}
+.search-result-price{font-family:var(--f-mono);font-size:14px;color:var(--amber);white-space:nowrap;}
+.search-result-hall{font-size:13px;color:var(--text);margin-top:4px;}
+.search-result-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+.search-result button{margin-top:10px;width:100%;background:transparent;border:1px solid var(--amber-dim);color:var(--amber);border-radius:9px;padding:9px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;}
 
 .bookings-view{
   display:none;
@@ -1159,6 +1177,19 @@ body{
         </div>
       </div>
       <input type="text" id="studioSearch" class="catalog-search" placeholder="Поиск студии по названию" autocomplete="off" spellcheck="false">
+      <button class="catalog-mode-toggle" id="searchModeToggle" type="button">Найти по времени →</button>
+      <div class="time-search" id="timeSearch" hidden>
+        <div class="ts-grid">
+          <label>Дата<input type="date" id="tsDate"></label>
+          <label>Человек<input type="number" id="tsPeople" min="1" placeholder="любое"></label>
+          <label>С<input type="time" id="tsFrom" step="1800" value="12:00"></label>
+          <label>До<input type="time" id="tsTo" step="1800" value="15:00"></label>
+        </div>
+        <div class="ts-chips" id="tsTypeChips"></div>
+        <label class="ts-check"><input type="checkbox" id="tsDaylight"> только с дневным светом</label>
+        <button class="btn-primary" id="tsGo" style="width:100%;margin-top:4px">Найти свободные залы</button>
+        <div class="ts-note" id="tsNote"></div>
+      </div>
     </div>
     <div class="catalog-list" id="catalogList"></div>
   </div>
@@ -2319,6 +2350,24 @@ body{
     window.scrollTo(0, 0);
   }
 
+  // Из результата поиска: открыть зал и выделить ровно это окно (оно уже
+  // проверено сервером как свободное) на нужную дату.
+  function applyPendingSlot(ps){
+    const hall = HALLS.find(h => h.id === ps.hallId);
+    if(!hall){ return; }
+    openHall(hall.id);
+    // сдвинуть окно дат так, чтобы нужная дата попала в сетку (обычно она рядом)
+    const di = state.dates.findIndex(d => dateKey(d) === ps.date);
+    if(di >= 0) state.dateIndex = di;
+    const startSlot = Math.round(ps.start / SLOT_MIN);
+    const slots = Math.max(1, Math.round((ps.end - ps.start) / SLOT_MIN));
+    // ключ столбца в days-режиме = dateKey
+    if(!setSel(ps.date, startSlot, startSlot + slots)) autoSelect();
+    renderGrid(); renderPeople(); renderSummary();
+    showRepeatHint(hall.name, ps.start, ps.end - ps.start, true);
+    window.scrollTo(0, 0);
+  }
+
   // Пытается выделить [b.start, +dur] в одном из столбцов сетки (по дням).
   function trySelectSameTime(startMin, durMin){
     const startSlot = Math.round(startMin / SLOT_MIN);
@@ -2943,6 +2992,101 @@ body{
     if(!Array.isArray(ALL_CITIES)) ALL_CITIES = [];
   }
 
+  const TS_TYPES = { cyclorama:'Циклорама', interior:'Интерьер', hardlight:'Тёмный', daylight:'Дневной свет', other:'Другое' };
+  let tsType = null;                 // выбранный тип зала
+  let searchMode = false;
+
+  function initTimeSearch(){
+    const chips = document.getElementById('tsTypeChips');
+    if(chips.childElementCount) return;
+    for(const k of Object.keys(TS_TYPES)){
+      const c = document.createElement('span');
+      c.className = 'ts-chip'; c.dataset.type = k; c.dataset.on = 'false';
+      c.textContent = TS_TYPES[k];
+      c.addEventListener('click', ()=>{
+        const on = c.dataset.on === 'true';
+        chips.querySelectorAll('.ts-chip').forEach(x=>x.dataset.on='false');
+        tsType = on ? null : k;
+        c.dataset.on = on ? 'false' : 'true';
+      });
+      chips.appendChild(c);
+    }
+    // дата по умолчанию — сегодня в студийной зоне неизвестна на каталоге, берём локальную
+    const d = new Date();
+    document.getElementById('tsDate').value =
+      d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+
+  document.getElementById('searchModeToggle').addEventListener('click', ()=>{
+    searchMode = !searchMode;
+    const panel = document.getElementById('timeSearch');
+    panel.hidden = !searchMode;
+    document.getElementById('studioSearch').style.display = searchMode ? 'none' : '';
+    document.getElementById('searchModeToggle').textContent =
+      searchMode ? '← Все студии города' : 'Найти по времени →';
+    if(searchMode){ initTimeSearch(); catalogList.innerHTML = '<div class="catalog-empty">Задайте параметры и нажмите «Найти».</div>'; }
+    else { renderStudios(selectedCity); }
+  });
+
+  document.getElementById('tsGo').addEventListener('click', runTimeSearch);
+
+  async function runTimeSearch(){
+    const note = document.getElementById('tsNote');
+    if(!selectedCity){ note.textContent = 'Сначала выберите город.'; return; }
+    const date = document.getElementById('tsDate').value;
+    const toMin = (v)=>{ const m=/^(\d{2}):(\d{2})$/.exec(v||''); return m ? (+m[1])*60+(+m[2]) : NaN; };
+    const start = toMin(document.getElementById('tsFrom').value);
+    const end = toMin(document.getElementById('tsTo').value);
+    const people = parseInt(document.getElementById('tsPeople').value, 10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ note.textContent = 'Укажите дату.'; return; }
+    if(!Number.isInteger(start) || !Number.isInteger(end) || end <= start){ note.textContent = 'Начало должно быть раньше конца.'; return; }
+    const qs = new URLSearchParams({ city: selectedCity, date, start, end });
+    if(tsType) qs.set('type', tsType);
+    if(document.getElementById('tsDaylight').checked) qs.set('daylight', '1');
+    if(Number.isInteger(people) && people > 0) qs.set('people', people);
+    note.textContent = 'Ищем…';
+    catalogList.innerHTML = '<div class="catalog-empty">Загрузка…</div>';
+    let rows;
+    try{ rows = await fetch(API_BASE + '/api/search?' + qs).then(r=>r.json()); }
+    catch(e){ note.textContent = 'Не удалось выполнить поиск.'; catalogList.innerHTML=''; return; }
+    if(rows && rows.error){ note.textContent = rows.error; catalogList.innerHTML=''; return; }
+    note.textContent = '';
+    renderSearchResults(rows || [], date, start, end);
+  }
+
+  function renderSearchResults(rows, date, start, end){
+    if(!rows.length){ catalogList.innerHTML = '<div class="catalog-empty">На это время свободных залов не нашлось. Попробуйте другое время или снимите фильтры.</div>'; return; }
+    catalogList.innerHTML = '';
+    rows.forEach(r=>{
+      const props = [];
+      if(r.hallType && TS_TYPES[r.hallType]) props.push(TS_TYPES[r.hallType]);
+      if(r.daylight) props.push('дневной свет');
+      if(r.areaM2) props.push(r.areaM2 + ' м²');
+      if(r.ceilingCm) props.push('потолок ' + (r.ceilingCm/100).toFixed(1).replace('.0','') + ' м');
+      props.push('до ' + r.capacity + ' чел.');
+      const el = document.createElement('div');
+      el.className = 'search-result';
+      el.innerHTML =
+        '<div class="search-result-top"><span class="search-result-studio">'+esc(r.studioName)+'</span>'+
+          '<span class="search-result-price">'+esc(r.price)+' BYN</span></div>'+
+        (r.address ? '<div class="search-result-meta">'+esc(r.address)+'</div>' : '')+
+        '<div class="search-result-hall">'+esc(r.hallName)+'</div>'+
+        '<div class="search-result-meta">'+esc(props.join(' · '))+'</div>'+
+        '<button type="button">Выбрать это время</button>';
+      el.querySelector('button').addEventListener('click', ()=>{
+        haptic('medium');
+        chooseStudioWithSlot(r.studioId, r.hallId, date, start, end);
+      });
+      catalogList.appendChild(el);
+    });
+  }
+
+  let pendingSlot = null;   // {hallId, date, start, end} — применить после bootStudio
+  function chooseStudioWithSlot(studioId, hallId, date, startMin, endMin){
+    pendingSlot = { hallId, date, start: startMin, end: endMin };
+    chooseStudio(studioId);
+  }
+
   async function renderStudios(city){
     if(!city){
       citySelectValue.textContent = 'Выберите город';
@@ -3002,6 +3146,10 @@ body{
       document.getElementById('studioBackBtn').style.display = cameFromCatalog ? 'flex' : 'none';
       revealOwnerButtonIfOwner();
       prefillContact();
+      if(pendingSlot){
+        const ps = pendingSlot; pendingSlot = null;
+        applyPendingSlot(ps);
+      }
     } catch(e){
       document.getElementById('loadingScreen').textContent =
         'Не удалось загрузить студию. Проверьте соединение и попробуйте снова.';
