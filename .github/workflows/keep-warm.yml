@@ -38,7 +38,7 @@ jobs:
     steps:
       - name: Разбудить бэкенд
         run: |
-          URL="https://photostudio-backend-yehh.onrender.com/health?shallow=1"
+          URL="https://api.poont.space/health?shallow=1"
           # --retry: первый запрос после сна может не дождаться старта инстанса.
           # --max-time 90 с запасом покрывает холодный старт Render free.
           code=$(curl -sS -o /tmp/body.txt -w "%{http_code}" \
