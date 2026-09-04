@@ -731,9 +731,8 @@ body{
 }
 .hall-cards::-webkit-scrollbar{display:none;}
 .hall-card{
-  flex:0 0 auto;
-  min-width:160px;
-  max-width:220px;
+  flex:0 0 168px;
+  width:168px;
   background:var(--surface);
   border:1px solid var(--line);
   border-radius:16px;
@@ -771,7 +770,8 @@ body{
   justify-content:space-between;
   gap:8px;
 }
-.hall-card-name span{color:var(--muted);font-weight:400;font-size:16px;}
+.hall-card-name-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hall-card-name span{flex:0 0 auto;color:var(--muted);font-weight:400;font-size:16px;}
 .hall-card-sub{font-size:13px;color:var(--muted);margin-top:5px;}
 .hall-card-rate{
   font-family:var(--f-display);
@@ -1262,7 +1262,7 @@ body{
       <button class="icon-btn" id="ownerBtn" type="button" aria-label="Кабинет владельца" title="Кабинет владельца" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
-          <path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V19a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H4a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V4a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.14.6.62 1.06 1.51 1H20a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
         </svg>
       </button>
     </div>
@@ -2131,7 +2131,7 @@ body{
       }
       card.innerHTML = photo +
         '<div class="hall-card-body">'+
-        '<div class="hall-card-name">'+esc(h.name)+'<span>›</span></div>'+
+        '<div class="hall-card-name"><span class="hall-card-name-text">'+esc(h.name)+'</span><span>›</span></div>'+
         '<div class="hall-card-sub">до '+esc(h.capacity)+' чел.</div>'+
         '<div class="hall-card-rate">'+esc(hallRateLabel(h))+'</div>'+
         '</div>';
