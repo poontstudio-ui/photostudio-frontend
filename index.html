@@ -1542,6 +1542,7 @@ body{
   let STUDIO_BUFFER_MIN = 0;        // буфер после брони, режется из времени клиента (/config)
   let SLOT_MIN = 60;               // шаг сетки времени: 30 или 60, из /config
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
+  let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
@@ -1554,6 +1555,11 @@ body{
     STUDIO_BUFFER_MIN = Number.isInteger(cfg.bufferMin) ? cfg.bufferMin : 0;
     SLOT_MIN = cfg.slotStep === 30 ? 30 : 60;
     STUDIO_MIN_BOOKING_MIN = Number.isInteger(cfg.minBookingMin) ? cfg.minBookingMin : 60;
+    STUDIO_LASTMINUTE = {
+      enabled: !!(cfg.lastminute && cfg.lastminute.enabled),
+      hours: (cfg.lastminute && Number.isInteger(cfg.lastminute.hours)) ? cfg.lastminute.hours : 24,
+      pct: (cfg.lastminute && Number.isInteger(cfg.lastminute.pct)) ? cfg.lastminute.pct : 20,
+    };
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
@@ -1616,9 +1622,22 @@ body{
     const p = list.find(x => Math.abs(x.hours - hours) < 1e-9);
     return p ? p.price : null;
   }
-  // Итог = аренда зала за выбранный интервал (правила цены суммируются по
-  // под-интервалам). Пакет — фикс-цена. Оборудование убрано. Сервер пересчитывает.
-  function computePrice(){
+  // Часов до старта выбранной брони в TZ студии. Зеркало server hoursUntilBooking.
+  function hoursUntilStart(){
+    const today = businessToday();
+    const sel = currentDate();
+    const dayDiff = Math.round((sel.getTime() - today.getTime()) / 86400000);
+    return dayDiff * 24 + (state.startMinutes - businessNowMinutes()) / 60;
+  }
+  // Активна ли скидка «горящего» окна для текущего выбора (П3-3). Пакет — нет.
+  function lastMinuteActive(){
+    const lm = STUDIO_LASTMINUTE;
+    if(state.packageHours != null || !lm.enabled || !(lm.pct >= 1 && lm.pct <= 90)) return false;
+    const h = hoursUntilStart();
+    return h >= 0 && h <= lm.hours;
+  }
+  // Базовая (без скидки) аренда зала за выбранный интервал.
+  function baseRoomPrice(){
     const hall = currentHall();
     if(state.packageHours != null){
       const pp = packagePriceOf(hall, state.packageHours);
@@ -1632,6 +1651,15 @@ body{
     let perMin = 0;
     for(let m = start; m < end; m++) perMin += minuteRate(hall, rules, dow, m);
     return perMin / 60;
+  }
+  // Итог. Пакет — фикс-цена. Иначе аренда зала, при «горящем» окне — со скидкой.
+  // Сервер пересчитывает авторитетно.
+  function computePrice(){
+    const base = baseRoomPrice();
+    if(state.packageHours == null && lastMinuteActive()){
+      return +(base * (100 - STUDIO_LASTMINUTE.pct) / 100).toFixed(2);
+    }
+    return base;
   }
   function priceLabel(){ return (+computePrice().toFixed(2)).toString().replace(/\.00$/,''); }
 
@@ -2161,7 +2189,8 @@ body{
     const col = gridColumns().find(c => c.key === sel.key);
     bar.textContent = `${col.hall.name} · ${col.date.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · `
       + `${minutesToLabel(sel.start*SLOT_MIN)}–${minutesToLabel(sel.end*SLOT_MIN)}`;
-    total.textContent = `${priceLabel()} BYN · ${durationLabel()}` + (state.packageHours != null ? ' · пакет' : '');
+    total.textContent = `${priceLabel()} BYN · ${durationLabel()}`
+      + (state.packageHours != null ? ' · пакет' : (lastMinuteActive() ? ` · −${STUDIO_LASTMINUTE.pct}%` : ''));
     rec.dataset.enabled='true';
   }
 
