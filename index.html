@@ -779,10 +779,8 @@ body{
 .hall-fact span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
 .hall-fact b{font-family:var(--f-mono);font-weight:500;font-size:14px;}
 .hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
-.studio-map-wrap{margin-top:14px;}
-.studio-map-wrap[hidden]{display:none;}
 .studio-map-addr{font-size:12px;color:var(--muted);margin-bottom:6px;}
-.studio-map{width:100%;height:180px;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);}
+.studio-map{width:100%;height:200px;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);}
 .catalog-map{width:100%;height:calc(100vh - 220px);min-height:320px;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);margin:14px 20px 0;}
 .catalog-map[hidden]{display:none;}
 .catalog-map-toggle{margin-left:8px;}
@@ -1258,10 +1256,6 @@ body{
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
       <div class="hall-packages" id="hallPackages" hidden></div>
-      <div class="studio-map-wrap" id="studioMapWrap" hidden>
-        <div class="studio-map-addr" id="studioMapAddr"></div>
-        <div class="studio-map" id="studioMap"></div>
-      </div>
     </div>
 
     <div class="section" id="dateSection">
@@ -1282,6 +1276,12 @@ body{
         <span><span class="timeline-legend-dot" style="background:var(--red-dim)"></span>занято</span>
         <span><span class="timeline-legend-dot" style="background:var(--amber)"></span>ваш выбор</span>
       </div>
+    </div>
+
+    <div class="section" id="studioMapWrap" hidden>
+      <div class="section-label">На карте</div>
+      <div class="studio-map-addr" id="studioMapAddr"></div>
+      <div class="studio-map" id="studioMap"></div>
     </div>
   </div>
 
@@ -2104,10 +2104,10 @@ body{
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
     renderHallPackages(hall);
-    renderStudioMap();
   }
 
-  // Мини-карта студии на экране зала: метка по координатам из /config.
+  // Карта студии — отдельная секция под сеткой времени, метка по координатам
+  // из /config. Уровень студии, не зала: показывается и в списке залов.
   function renderStudioMap(){
     const wrap = document.getElementById('studioMapWrap');
     if(!wrap) return;
@@ -2272,6 +2272,7 @@ body{
     renderGrid();
     renderPeople();
     renderSummary();
+    renderStudioMap();
   }
 
   // ---- Panel (confirmation) ----
