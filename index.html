@@ -779,6 +779,17 @@ body{
 .hall-fact span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
 .hall-fact b{font-family:var(--f-mono);font-weight:500;font-size:14px;}
 .hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
+.hall-packages{margin-top:12px;}
+.hall-packages:not([hidden]){display:block;}
+.hall-packages .pkg-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
+.hall-packages .pkg-row{display:flex;flex-wrap:wrap;gap:8px;}
+.pkg-chip{
+  border:1px solid var(--line-strong);background:var(--surface);
+  border-radius:10px;padding:9px 12px;cursor:pointer;font-size:13px;
+  display:flex;flex-direction:column;gap:2px;min-width:84px;
+}
+.pkg-chip b{font-family:var(--f-mono);font-weight:600;font-size:14px;color:var(--amber);}
+.pkg-chip[data-active="true"]{border-color:var(--amber);background:var(--amber-dim);}
 .hall-photos-gallery{display:flex;gap:8px;overflow-x:auto;margin:2px 0 12px;padding-bottom:4px;scrollbar-width:none;}
 .hall-photos-gallery::-webkit-scrollbar{display:none;}
 .hall-photos-gallery img{height:150px;width:auto;border-radius:12px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);}
@@ -1237,6 +1248,7 @@ body{
       </div>
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
+      <div class="hall-packages" id="hallPackages" hidden></div>
     </div>
 
     <div class="section" id="dateSection">
@@ -1545,6 +1557,7 @@ body{
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
+    state.packageHours = null;
     openHallId = null;
     clearSelection();
     document.title = cfg.name + ' — Бронирование';
@@ -1597,10 +1610,20 @@ body{
     }
     return hall.rate;
   }
+  // Пакет зала на N часов -> цена, либо null. Зеркало lib/rules.js packagePrice.
+  function packagePriceOf(hall, hours){
+    const list = Array.isArray(hall && hall.packages) ? hall.packages : [];
+    const p = list.find(x => Math.abs(x.hours - hours) < 1e-9);
+    return p ? p.price : null;
+  }
   // Итог = аренда зала за выбранный интервал (правила цены суммируются по
-  // под-интервалам). Оборудование из брони убрано. Сервер пересчитывает.
+  // под-интервалам). Пакет — фикс-цена. Оборудование убрано. Сервер пересчитывает.
   function computePrice(){
     const hall = currentHall();
+    if(state.packageHours != null){
+      const pp = packagePriceOf(hall, state.packageHours);
+      if(pp != null) return pp;
+    }
     const rules = Array.isArray(hall.priceRules) ? hall.priceRules : [];
     if(!rules.length) return hall.rate * state.durationHours;
     const start = state.startMinutes;
@@ -1625,6 +1648,13 @@ body{
       }
     }
     return Math.max(1, Math.ceil(minMin / SLOT_MIN));
+  }
+  // Целевая длина нового выделения в слотах: пакет (если выбран) или минимум окна.
+  function targetSlotsAt(col, slot){
+    if(state.packageHours != null){
+      return Math.max(1, Math.round(state.packageHours * 60 / SLOT_MIN));
+    }
+    return minSlotsAt(col, slot);
   }
   // Подпись ставки зала в каталоге: с правилами точной цифры нет — «от N».
   function hallRateLabel(h){
@@ -1665,6 +1695,7 @@ body{
     people: 1,
     hallId: null,        // выбранный зал (id из cfg.halls)
     equipment: [],       // ВСЕГДА пусто: выбор оборудования убран из брони
+    packageHours: null,  // выбранный пакет (фикс цена/длительность) или null
   };
 
   function currentDate(){ return state.dates[state.dateIndex]; }
@@ -1845,6 +1876,10 @@ body{
     }
     state.startMinutes = sel.start * SLOT_MIN;
     state.durationHours = (sel.end - sel.start) * SLOT_MIN / 60;
+    // Пакет держится, только пока длительность совпадает с ним. Изменил вручную — сбросили.
+    if(state.packageHours != null && Math.abs(state.durationHours - state.packageHours) > 1e-9){
+      state.packageHours = null;
+    }
     if(state.people > currentHall().capacity) state.people = currentHall().capacity;
   }
 
@@ -1861,23 +1896,23 @@ body{
     const { start, end } = gridSlotRange();
     for(const c of cols){
       for(let i=start; i<end; i++){
-        if(cellState(c, i) === 'free' && setSel(c.key, i, i + minSlotsAt(c, i))) return;
+        if(cellState(c, i) === 'free' && setSel(c.key, i, i + targetSlotsAt(c, i))) return;
       }
     }
   }
 
-  // Тап: по соседней клетке — расширить, внутри выделения — схлопнуть до минимума,
-  // иначе — новое выделение длиной в минимум для этого окна (фаза B).
+  // Тап: по соседней клетке — расширить, внутри выделения — схлопнуть до цели,
+  // иначе — новое выделение длиной в пакет / минимум окна (фазы B, C).
   function tapCell(colKey, slot){
     const col = gridColumns().find(c => c.key === colKey);
-    const min = col ? minSlotsAt(col, slot) : 1;
+    const tgt = col ? targetSlotsAt(col, slot) : 1;
     if(sel.key === colKey && hasSelection()){
       const len = sel.end - sel.start;
       if(slot === sel.end     && len < maxSlots() && setSel(colKey, sel.start, slot+1)) return true;
       if(slot === sel.start-1 && len < maxSlots() && setSel(colKey, slot, sel.end)) return true;
-      if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot + (col ? minSlotsAt(col, slot) : 1));
+      if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot + tgt);
     }
-    return setSel(colKey, slot, slot + min);
+    return setSel(colKey, slot, slot + tgt);
   }
 
   const gridHeadEl = document.getElementById('gridHead');
@@ -1994,6 +2029,40 @@ body{
     if(hall.areaM2) facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
     if(hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
+    renderHallPackages(hall);
+  }
+
+  function pkgHoursLabel(h){
+    const whole = Math.floor(h), half = (h - whole) >= 0.5;
+    return (whole ? whole + ' ч' : '') + (half ? (whole ? ' 30 мин' : '30 мин') : '');
+  }
+  function renderHallPackages(hall){
+    const box = document.getElementById('hallPackages');
+    const list = Array.isArray(hall.packages) ? hall.packages.slice().sort((a,b)=>a.hours-b.hours) : [];
+    if(!list.length){ box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = '<div class="pkg-title">Пакеты</div><div class="pkg-row">' +
+      list.map(p => {
+        const on = state.packageHours != null && Math.abs(state.packageHours - p.hours) < 1e-9;
+        return '<button class="pkg-chip" type="button" data-h="'+p.hours+'" data-active="'+on+'">' +
+          '<span>'+esc(pkgHoursLabel(p.hours))+'</span><b>'+esc(p.price)+' BYN</b></button>';
+      }).join('') + '</div>';
+    box.querySelectorAll('.pkg-chip').forEach(btn => btn.addEventListener('click', () => {
+      const h = parseFloat(btn.dataset.h);
+      const already = state.packageHours != null && Math.abs(state.packageHours - h) < 1e-9;
+      state.packageHours = already ? null : h;
+      state.hallId = hall.id;
+      if(!already) state.durationHours = h;
+      clearSelection();
+      autoSelect();
+      haptic('light');
+      renderAll();
+      if(state.packageHours != null && !hasSelection()){
+        // не нашлось свободного окна нужной длины — откатываем выбор пакета
+        state.packageHours = null;
+        autoSelect(); renderAll();
+      }
+    }));
   }
 
   const HALL_TYPE_RU = { cyclorama:'Циклорама', interior:'Интерьер', hardlight:'Тёмный', daylight:'Дневной свет', other:'Другое' };
@@ -2060,6 +2129,7 @@ body{
 
   function openHall(id){
     openHallId = id;
+    state.packageHours = null;
     clearSelection();
     applyHallMode();
     renderAll();
@@ -2091,7 +2161,7 @@ body{
     const col = gridColumns().find(c => c.key === sel.key);
     bar.textContent = `${col.hall.name} · ${col.date.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · `
       + `${minutesToLabel(sel.start*SLOT_MIN)}–${minutesToLabel(sel.end*SLOT_MIN)}`;
-    total.textContent = `${priceLabel()} BYN · ${durationLabel()}`;
+    total.textContent = `${priceLabel()} BYN · ${durationLabel()}` + (state.packageHours != null ? ' · пакет' : '');
     rec.dataset.enabled='true';
   }
 
@@ -2309,6 +2379,7 @@ body{
         equipment: state.equipment.slice(),
         name: nameInput.value.trim(),
         phone: phoneInput.value.trim(),
+        packageHours: state.packageHours != null ? state.packageHours : undefined,
         // Откуда пришёл клиент: 'catalog' — выбрал студию в каталоге платформы,
         // 'direct' — попал по прямой ссылке студии (deep link / ?tenant=).
         // Нужно для будущей комиссии; сервер значение перепроверяет.
