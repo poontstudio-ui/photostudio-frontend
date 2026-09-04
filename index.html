@@ -1528,7 +1528,8 @@ body{
   let HALLS = [], EQUIPMENT = [], WEEK_HOURS;   // EQUIPMENT — только для кабинета владельца
   let STUDIO_TZ = 'Europe/Minsk';   // IANA-таймзона студии, приходит в /config
   let STUDIO_BUFFER_MIN = 0;        // буфер после брони, режется из времени клиента (/config)
-  let SLOT_MIN = 60;               // шаг сетки времени: 30 или 60 (= минимум брони), из /config
+  let SLOT_MIN = 60;               // шаг сетки времени: 30 или 60, из /config
+  let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
@@ -1540,6 +1541,7 @@ body{
     STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
     STUDIO_BUFFER_MIN = Number.isInteger(cfg.bufferMin) ? cfg.bufferMin : 0;
     SLOT_MIN = cfg.slotStep === 30 ? 30 : 60;
+    STUDIO_MIN_BOOKING_MIN = Number.isInteger(cfg.minBookingMin) ? cfg.minBookingMin : 60;
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
@@ -1609,6 +1611,21 @@ body{
     return perMin / 60;
   }
   function priceLabel(){ return (+computePrice().toFixed(2)).toString().replace(/\.00$/,''); }
+
+  // Минимум брони для старта в slot этого столбца: правило окна (minMin) или
+  // студийный минимум. Зеркало lib/rules.js minDurationFor. -> число слотов.
+  function minSlotsAt(col, slot){
+    var minMin = STUDIO_MIN_BOOKING_MIN;
+    var rules = (col.hall && Array.isArray(col.hall.priceRules)) ? col.hall.priceRules : [];
+    if(rules.length){
+      var dow = col.date.getDay(), sm = slot * SLOT_MIN;
+      for(const r of rules){
+        if(Array.isArray(r.dow) && r.dow.length && !r.dow.includes(dow)) continue;
+        if(sm >= r.from && sm < r.to){ if(r.minMin != null) minMin = r.minMin; break; }
+      }
+    }
+    return Math.max(1, Math.ceil(minMin / SLOT_MIN));
+  }
   // Подпись ставки зала в каталоге: с правилами точной цифры нет — «от N».
   function hallRateLabel(h){
     const rules = Array.isArray(h && h.priceRules) ? h.priceRules : [];
@@ -1844,20 +1861,23 @@ body{
     const { start, end } = gridSlotRange();
     for(const c of cols){
       for(let i=start; i<end; i++){
-        if(cellState(c, i) === 'free'){ setSel(c.key, i, i+1); return; }
+        if(cellState(c, i) === 'free' && setSel(c.key, i, i + minSlotsAt(c, i))) return;
       }
     }
   }
 
-  // Тап: по соседней клетке — расширить, внутри выделения — схлопнуть, иначе — новое.
+  // Тап: по соседней клетке — расширить, внутри выделения — схлопнуть до минимума,
+  // иначе — новое выделение длиной в минимум для этого окна (фаза B).
   function tapCell(colKey, slot){
+    const col = gridColumns().find(c => c.key === colKey);
+    const min = col ? minSlotsAt(col, slot) : 1;
     if(sel.key === colKey && hasSelection()){
       const len = sel.end - sel.start;
       if(slot === sel.end     && len < maxSlots() && setSel(colKey, sel.start, slot+1)) return true;
       if(slot === sel.start-1 && len < maxSlots() && setSel(colKey, slot, sel.end)) return true;
-      if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot+1);
+      if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot + (col ? minSlotsAt(col, slot) : 1));
     }
-    return setSel(colKey, slot, slot+1);
+    return setSel(colKey, slot, slot + min);
   }
 
   const gridHeadEl = document.getElementById('gridHead');
