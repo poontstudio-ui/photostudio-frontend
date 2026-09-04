@@ -1586,11 +1586,36 @@ body{
   }
   function hallName(id){ return (allHallsById[id] || {}).name || id || ''; }
 
-  // Итог = ставка зала * часы. Оборудование из брони убрано (вернётся отдельно).
+  // Ставка минуты с учётом правил цены зала (по времени суток / дню недели).
+  // Зеркало server: lib/rules.js minuteRate — первое подходящее правило.
+  function minuteRate(hall, rules, dow, minute){
+    for(const r of rules){
+      if(Array.isArray(r.dow) && r.dow.length && !r.dow.includes(dow)) continue;
+      if(minute >= r.from && minute < r.to) return r.rate;
+    }
+    return hall.rate;
+  }
+  // Итог = аренда зала за выбранный интервал (правила цены суммируются по
+  // под-интервалам). Оборудование из брони убрано. Сервер пересчитывает.
   function computePrice(){
-    return currentHall().rate * state.durationHours;
+    const hall = currentHall();
+    const rules = Array.isArray(hall.priceRules) ? hall.priceRules : [];
+    if(!rules.length) return hall.rate * state.durationHours;
+    const start = state.startMinutes;
+    const end = start + Math.round(state.durationHours * 60);
+    const dow = currentDate().getDay();
+    let perMin = 0;
+    for(let m = start; m < end; m++) perMin += minuteRate(hall, rules, dow, m);
+    return perMin / 60;
   }
   function priceLabel(){ return (+computePrice().toFixed(2)).toString().replace(/\.00$/,''); }
+  // Подпись ставки зала в каталоге: с правилами точной цифры нет — «от N».
+  function hallRateLabel(h){
+    const rules = Array.isArray(h && h.priceRules) ? h.priceRules : [];
+    if(!rules.length) return h.rate + ' BYN/ч';
+    const lo = Math.min(h.rate, ...rules.map(r => r.rate));
+    return 'от ' + lo + ' BYN/ч';
+  }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
   const GRID_DAYS = 7;               // столбцов в режиме одного зала
   const DURATION_MAX_MIN = 8 * 60;   // максимум брони
@@ -1716,7 +1741,7 @@ body{
       const d = currentDate();
       return HALLS.map(h => ({
         key:h.id, hall:h, date:d,
-        label:h.name, sub:h.rate+' BYN/ч', today:false,
+        label:h.name, sub:hallRateLabel(h), today:false,
       }));
     }
     const hall = gridHall();
@@ -1923,7 +1948,7 @@ body{
       card.innerHTML = thumb +
         '<div class="hall-card-name">'+esc(h.name)+'<span>›</span></div>'+
         '<div class="hall-card-sub">до '+esc(h.capacity)+' чел.</div>'+
-        '<div class="hall-card-rate">'+esc(h.rate)+' BYN/ч</div>';
+        '<div class="hall-card-rate">'+esc(hallRateLabel(h))+'</div>';
       card.addEventListener('click', ()=>{ haptic('light'); openHall(h.id); });
       box.appendChild(card);
     });
@@ -1942,7 +1967,7 @@ body{
     } else { g.hidden = true; g.innerHTML = ''; }
     const facts = [
       '<div class="hall-fact"><span>Вместимость</span><b>до '+esc(hall.capacity)+' чел.</b></div>',
-      '<div class="hall-fact"><span>Ставка</span><b>'+esc(hall.rate)+' BYN/ч</b></div>',
+      '<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel(hall))+'</b></div>',
     ];
     if(hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
     if(hall.daylight) facts.push('<div class="hall-fact"><span>Свет</span><b>дневной</b></div>');
