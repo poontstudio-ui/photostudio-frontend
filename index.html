@@ -1523,6 +1523,16 @@ body{
     return _ymapsPromise;
   }
   function mapsAvailable(){ return !!PLATFORM.yandexMapsKey; }
+  // «В Карты →» — необязательный промо-блок Яндекса (открыть в их приложении),
+  // физически отдельный от обязательной атрибуции «© Яндекс Условия» (её не
+  // трогаем — без неё нарушаются условия использования API). Control
+  // рендерится асинхронно, поэтому опрашиваем немного.
+  function hideMapOpenPromo(mapEl, tries){
+    tries = tries || 0;
+    const el = mapEl.querySelector('[class*="-map-copyrights-promo"]');
+    if(el){ el.style.display = 'none'; return; }
+    if(tries < 20) setTimeout(() => hideMapOpenPromo(mapEl, tries + 1), 100);
+  }
 
   const params = new URLSearchParams(window.location.search);
   function parseStudioParam(raw){
@@ -2144,6 +2154,7 @@ body{
       // Контейнер квадратный (aspect-ratio); на момент создания карты его
       // размер иногда ещё не устоялся — пересчитываем на следующий тик.
       setTimeout(() => map.container.fitToViewport(), 0);
+      hideMapOpenPromo(mapEl);
     }).catch(() => { _studioMapDrawn = false; mapEl.style.display = 'none'; });
   }
 
@@ -3510,6 +3521,7 @@ body{
       if(pts.length > 1){
         _catMap.setBounds(coll.getBounds(), { checkZoomRange: true, zoomMargin: 40 });
       }
+      hideMapOpenPromo(el);
     }).catch(() => setCatalogMap(false));
   }
 
