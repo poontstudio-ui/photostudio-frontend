@@ -1646,6 +1646,11 @@ body{
     STUDIO_LON = Number.isFinite(cfg.lon) ? cfg.lon : null;
     STUDIO_ADDRESS = cfg.address || '';
     STUDIO_GO_REF = typeof cfg.yandexGoRef === 'string' ? cfg.yandexGoRef : '';
+    // Ключ карт приходит здесь же — отдельный запрос /api/config в ветке
+    // студии больше не нужен (он отдавал ровно эти два поля).
+    if(typeof cfg.yandexMapsKey === 'string' && cfg.yandexMapsKey){
+      PLATFORM.yandexMapsKey = cfg.yandexMapsKey;
+    }
     _studioMapDrawn = false;
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
@@ -2519,12 +2524,14 @@ body{
 
   // Подставляем последний ручной ввод имени/телефона с сервера (общий для всех
   // студий). Что не пришло — добираем из CloudStorage.
+  // Один запрос /me отдаёт и контакты для автоподстановки, и роль в студии.
   async function prefillContact(){
     try{
       const me = await api('GET', '/me');
       if(me && me.lastName && !nameInput.value.trim()) nameInput.value = me.lastName;
       if(me && me.lastPhone && phoneIsBlank()) phoneInput.value = me.lastPhone;
       validateForm();
+      if(me) revealOwnerButtonIfOwner(me.role);
     }catch(e){ /* вне Telegram / нет initData — просто пропускаем */ }
     loadDraftFields();
   }
@@ -3258,12 +3265,12 @@ body{
   });
   overlay.addEventListener('click', closeClearHistory);
 
-  async function revealOwnerButtonIfOwner(){
-    try{
-      await api('GET', '/admin/overview');
+  // Роль приходит в /me вместе с контактами — отдельный запрос не нужен.
+  // Раньше здесь дёргался /admin/overview: выгрузка всех броней студии ради
+  // ответа «показывать ли шестерёнку», и 403 у всех, кто не владелец.
+  function revealOwnerButtonIfOwner(role){
+    if(role === 'owner' || role === 'admin'){
       document.getElementById('ownerBtn').style.display='flex';
-    } catch(e){
-      // не владелец (403) или initData недоступна вне Telegram — шестерёнка остаётся скрытой
     }
   }
 
@@ -3594,14 +3601,18 @@ body{
       const config = await loadTenantConfig(TENANT_ID);
       applyTenantConfig(config);
       renderAll();
+      // Занятость и профиль друг от друга не зависят — раньше они шли по
+      // очереди, а с ними и /api/config с /admin/overview: пять запросов
+      // подряд до первого экрана. Осталось два шага: конфиг, затем эти два
+      // параллельно.
+      const contactReady = prefillContact();
       await refreshGrid();
       document.getElementById('loadingScreen').style.display='none';
       catalogView.dataset.visible='false';
       document.getElementById('mainView').dataset.hidden='false';
       document.getElementById('summaryBar').style.display='flex';
       document.getElementById('studioBackBtn').style.display = cameFromCatalog ? 'flex' : 'none';
-      revealOwnerButtonIfOwner();
-      prefillContact();
+      await contactReady;
       if(pendingSlot){
         const ps = pendingSlot; pendingSlot = null;
         applyPendingSlot(ps);
@@ -3626,10 +3637,12 @@ body{
   }
 
   async function boot(){
-    await loadPlatformConfig();
+    // В ветке студии платформенный конфиг не запрашиваем: ключ карт приходит
+    // в /t/:id/config (см. applyTenantConfig). В каталоге тенанта нет —
+    // там он по-прежнему нужен, и грузится параллельно со списком городов.
     if(TENANT_ID){ await bootStudio(); await maybeApplyRepeatParam(); return; }
     showCatalog();
-    await loadCities();
+    await Promise.all([loadPlatformConfig(), loadCities()]);
     let last = null;
     try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
     const initial = (last && ALL_CITIES.some(c=>c.city===last)) ? last
