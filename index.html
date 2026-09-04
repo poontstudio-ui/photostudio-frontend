@@ -779,6 +779,13 @@ body{
 .hall-fact span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
 .hall-fact b{font-family:var(--f-mono);font-weight:500;font-size:14px;}
 .hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
+.studio-map-wrap{margin-top:14px;}
+.studio-map-wrap[hidden]{display:none;}
+.studio-map-addr{font-size:12px;color:var(--muted);margin-bottom:6px;}
+.studio-map{width:100%;height:180px;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);}
+.catalog-map{width:100%;height:calc(100vh - 220px);min-height:320px;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);margin:14px 20px 0;}
+.catalog-map[hidden]{display:none;}
+.catalog-map-toggle{margin-left:8px;}
 .hall-packages{margin-top:12px;}
 .hall-packages:not([hidden]){display:block;}
 .hall-packages .pkg-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
@@ -1203,6 +1210,7 @@ body{
       </div>
       <input type="text" id="studioSearch" class="catalog-search" placeholder="Поиск студии по названию" autocomplete="off" spellcheck="false">
       <button class="catalog-mode-toggle" id="searchModeToggle" type="button">Найти по времени →</button>
+      <button class="catalog-mode-toggle catalog-map-toggle" id="catalogMapBtn" type="button" hidden>На карте</button>
       <div class="time-search" id="timeSearch" hidden>
         <div class="ts-grid">
           <label>Дата<input type="date" id="tsDate"></label>
@@ -1217,6 +1225,7 @@ body{
       </div>
     </div>
     <div class="catalog-list" id="catalogList"></div>
+    <div class="catalog-map" id="catalogMap" hidden></div>
   </div>
 
   <div class="main-view" id="mainView">
@@ -1249,6 +1258,10 @@ body{
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
       <div class="hall-packages" id="hallPackages" hidden></div>
+      <div class="studio-map-wrap" id="studioMapWrap" hidden>
+        <div class="studio-map-addr" id="studioMapAddr"></div>
+        <div class="studio-map" id="studioMap"></div>
+      </div>
     </div>
 
     <div class="section" id="dateSection">
@@ -1478,6 +1491,31 @@ body{
   const API_BASE = 'https://photostudio-backend-yehh.onrender.com';
   const LAST_CITY_KEY = 'ps_last_city';
 
+  // Платформенный конфиг (ключ Яндекс.Карт). Грузится один раз на старте.
+  const PLATFORM = { yandexMapsKey: '' };
+  async function loadPlatformConfig(){
+    try{
+      const c = await fetch(API_BASE + '/api/config').then(r=>r.json());
+      if(c && typeof c.yandexMapsKey === 'string') PLATFORM.yandexMapsKey = c.yandexMapsKey;
+    }catch(e){ /* карт не будет — не критично */ }
+  }
+  // Ленивая загрузка Yandex Maps JS API. Один <script> на всё приложение.
+  let _ymapsPromise = null;
+  function loadYmaps(){
+    if(_ymapsPromise) return _ymapsPromise;
+    if(!PLATFORM.yandexMapsKey) return Promise.reject(new Error('нет ключа карт'));
+    _ymapsPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://api-maps.yandex.ru/2.1/?apikey=' + encodeURIComponent(PLATFORM.yandexMapsKey) + '&lang=ru_RU';
+      s.async = true;
+      s.onload = () => window.ymaps.ready(() => resolve(window.ymaps));
+      s.onerror = () => { _ymapsPromise = null; reject(new Error('карты не загрузились')); };
+      document.head.appendChild(s);
+    });
+    return _ymapsPromise;
+  }
+  function mapsAvailable(){ return !!PLATFORM.yandexMapsKey; }
+
   const params = new URLSearchParams(window.location.search);
   function parseStudioParam(raw){
     if(!raw) return null;
@@ -1544,6 +1582,8 @@ body{
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
   let HALL_PROPS = { hallType:true, daylight:true, areaM2:true, ceilingCm:true }; // свойства зала по вертикали (П4-1)
+  let STUDIO_LAT = null, STUDIO_LON = null, STUDIO_ADDRESS = '';  // координаты студии для карты
+  let _studioMapDrawn = false;                                    // карта студии уже отрисована
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
@@ -1562,6 +1602,10 @@ body{
       pct: (cfg.lastminute && Number.isInteger(cfg.lastminute.pct)) ? cfg.lastminute.pct : 20,
     };
     if(cfg.verticalUi && cfg.verticalUi.hallProps) HALL_PROPS = cfg.verticalUi.hallProps;
+    STUDIO_LAT = Number.isFinite(cfg.lat) ? cfg.lat : null;
+    STUDIO_LON = Number.isFinite(cfg.lon) ? cfg.lon : null;
+    STUDIO_ADDRESS = cfg.address || '';
+    _studioMapDrawn = false;
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
@@ -2060,6 +2104,30 @@ body{
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
     renderHallPackages(hall);
+    renderStudioMap();
+  }
+
+  // Мини-карта студии на экране зала: метка по координатам из /config.
+  function renderStudioMap(){
+    const wrap = document.getElementById('studioMapWrap');
+    if(!wrap) return;
+    if(!mapsAvailable() || !Number.isFinite(STUDIO_LAT) || !Number.isFinite(STUDIO_LON)){
+      wrap.hidden = true; return;
+    }
+    wrap.hidden = false;
+    document.getElementById('studioMapAddr').textContent = STUDIO_ADDRESS || '';
+    if(_studioMapDrawn) return;
+    _studioMapDrawn = true;
+    loadYmaps().then(ymaps => {
+      const el = document.getElementById('studioMap');
+      el.innerHTML = '';
+      const map = new ymaps.Map(el, {
+        center: [STUDIO_LAT, STUDIO_LON], zoom: 16, controls: ['zoomControl'],
+      }, { suppressMapOpenBlock: true });
+      map.behaviors.disable('scrollZoom');
+      map.geoObjects.add(new ymaps.Placemark([STUDIO_LAT, STUDIO_LON],
+        { balloonContent: esc(STUDIO_ADDRESS || '') }, { preset: 'islands#redDotIcon' }));
+    }).catch(() => { _studioMapDrawn = false; wrap.hidden = true; });
   }
 
   function pkgHoursLabel(h){
@@ -3179,6 +3247,7 @@ body{
     citySelectValue.textContent = city;
     try{ localStorage.setItem(LAST_CITY_KEY, city); }catch(e){}
     studioSearch.value = '';
+    if(catalogMapShown) setCatalogMap(false);
     renderStudios(city);
   }
 
@@ -3212,7 +3281,7 @@ body{
     catch(e){ catalogList.innerHTML = '<div class="catalog-empty">Не удалось выполнить поиск.</div>'; return; }
     if(q !== studioSearch.value.trim()) return;   // пришёл ответ на устаревший запрос
     if(!Array.isArray(rows) || !rows.length){
-      catalogList.innerHTML = '<div class="catalog-empty">Ничего не найдено.</div>'; return;
+      catalogStudios = []; updateMapBtn(); catalogList.innerHTML = '<div class="catalog-empty">Ничего не найдено.</div>'; return;
     }
     rows.sort((a,b)=>{
       const ax = a.city === selectedCity ? 0 : 1, bx = b.city === selectedCity ? 0 : 1;
@@ -3220,6 +3289,8 @@ body{
     });
     catalogList.innerHTML = '';
     rows.forEach(s => catalogList.appendChild(studioRow(s, true)));
+    catalogStudios = rows;
+    updateMapBtn();
   }
 
   async function loadCities(){
@@ -3254,8 +3325,15 @@ body{
       d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   }
 
+  document.getElementById('catalogMapBtn').addEventListener('click', ()=>{
+    haptic('light');
+    setCatalogMap(!catalogMapShown);
+  });
+
   document.getElementById('searchModeToggle').addEventListener('click', ()=>{
     searchMode = !searchMode;
+    if(catalogMapShown) setCatalogMap(false);
+    if(searchMode){ catalogStudios = []; updateMapBtn(); }
     const panel = document.getElementById('timeSearch');
     panel.hidden = !searchMode;
     document.getElementById('studioSearch').style.display = searchMode ? 'none' : '';
@@ -3329,6 +3407,7 @@ body{
   async function renderStudios(city){
     if(!city){
       citySelectValue.textContent = 'Выберите город';
+      catalogStudios = []; updateMapBtn();
       catalogList.innerHTML = ALL_CITIES.length
         ? '<div class="catalog-empty">Выберите город выше.</div>'
         : '<div class="catalog-empty">Пока нет доступных студий.</div>';
@@ -3339,10 +3418,56 @@ body{
     try{ studios = await fetch(API_BASE + '/api/studios?city=' + encodeURIComponent(city)).then(r=>r.json()); }
     catch(e){ catalogList.innerHTML = '<div class="catalog-empty">Не удалось загрузить студии.</div>'; return; }
     if(!Array.isArray(studios) || !studios.length){
-      catalogList.innerHTML = '<div class="catalog-empty">В этом городе пока нет студий.</div>'; return;
+      catalogStudios = []; updateMapBtn(); catalogList.innerHTML = '<div class="catalog-empty">В этом городе пока нет студий.</div>'; return;
     }
     catalogList.innerHTML = '';
     studios.forEach(s => catalogList.appendChild(studioRow(s, false)));
+    catalogStudios = studios;
+    updateMapBtn();
+  }
+
+  // ---- Каталог на карте ----
+  let catalogStudios = [];        // последний загруженный список (для карты)
+  let catalogMapShown = false;
+  let _catMap = null;
+  function studiosWithGeo(){ return catalogStudios.filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon)); }
+  function updateMapBtn(){
+    const btn = document.getElementById('catalogMapBtn');
+    btn.hidden = !(mapsAvailable() && studiosWithGeo().length);
+    if(btn.hidden && catalogMapShown) setCatalogMap(false);
+  }
+  function setCatalogMap(on){
+    catalogMapShown = on;
+    document.getElementById('catalogMap').hidden = !on;
+    catalogList.style.display = on ? 'none' : '';
+    const btn = document.getElementById('catalogMapBtn');
+    btn.textContent = on ? 'Списком' : 'На карте';
+    btn.dataset.on = on ? 'true' : 'false';
+    if(on) drawCatalogMap();
+  }
+  function drawCatalogMap(){
+    const pts = studiosWithGeo();
+    if(!pts.length) return;
+    loadYmaps().then(ymaps => {
+      const el = document.getElementById('catalogMap');
+      if(_catMap){ _catMap.destroy(); _catMap = null; }
+      el.innerHTML = '';
+      _catMap = new ymaps.Map(el, { center: [pts[0].lat, pts[0].lon], zoom: 12, controls: ['zoomControl'] },
+        { suppressMapOpenBlock: true });
+      const coll = new ymaps.GeoObjectCollection();
+      pts.forEach(s => {
+        const pm = new ymaps.Placemark([s.lat, s.lon],
+          { balloonContentHeader: esc(s.name), balloonContentBody: esc(s.address || ''),
+            hintContent: esc(s.name) },
+          { preset: 'islands#redIcon' });
+        pm.events.add('click', () => { haptic('medium'); chooseStudio(s.id); });
+        coll.add(pm);
+      });
+      _catMap.geoObjects.add(coll);
+      if(pts.length > 1){
+        _catMap.setBounds(coll.getBounds(), { checkZoomRange: true, zoomMargin: 40 });
+      }
+    }).catch(() => setCatalogMap(false));
   }
 
   // true, если в текущую студию пришли через каталог (а не по deep-link /
@@ -3352,6 +3477,7 @@ body{
   function chooseStudio(id){
     TENANT_ID = id;
     cameFromCatalog = true;
+    if(catalogMapShown) setCatalogMap(false);
     catalogView.dataset.visible='false';
     const ls = document.getElementById('loadingScreen');
     ls.textContent = 'Загрузка…';
@@ -3409,6 +3535,7 @@ body{
   }
 
   async function boot(){
+    await loadPlatformConfig();
     if(TENANT_ID){ await bootStudio(); await maybeApplyRepeatParam(); return; }
     showCatalog();
     await loadCities();
