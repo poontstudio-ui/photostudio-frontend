@@ -732,19 +732,39 @@ body{
 .hall-cards::-webkit-scrollbar{display:none;}
 .hall-card{
   flex:0 0 auto;
-  min-width:150px;
-  max-width:210px;
+  min-width:160px;
+  max-width:220px;
   background:var(--surface);
   border:1px solid var(--line);
-  border-radius:12px;
-  padding:12px 14px;
+  border-radius:16px;
+  overflow:hidden;
   cursor:pointer;
 }
 .hall-card:active{border-color:var(--amber);}
+.hall-card-photo{position:relative;width:100%;aspect-ratio:4/3;background:var(--surface-raised);}
+.hall-card-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+.hall-card-placeholder{
+  width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:0 12px;
+  background-image:repeating-linear-gradient(135deg,var(--ph-a) 0 12px,var(--ph-b) 12px 24px);
+}
+.hall-card-placeholder-label{
+  background:rgba(255,255,255,.62);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  color:#33363b;
+  font-size:12px;
+  font-weight:500;
+  padding:6px 11px;
+  border-radius:8px;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hall-card-body{padding:12px 14px 14px;}
 .hall-card-name{
   font-family:var(--f-display);
   font-weight:600;
-  font-size:17px;
+  font-size:18px;
   line-height:1.15;
   display:flex;
   align-items:center;
@@ -752,10 +772,11 @@ body{
   gap:8px;
 }
 .hall-card-name span{color:var(--muted);font-weight:400;font-size:16px;}
-.hall-card-sub{font-size:11px;color:var(--muted);margin-top:5px;}
+.hall-card-sub{font-size:13px;color:var(--muted);margin-top:5px;}
 .hall-card-rate{
-  font-family:var(--f-mono);
-  font-size:13px;
+  font-family:var(--f-display);
+  font-weight:700;
+  font-size:18px;
   color:var(--amber);
   margin-top:8px;
 }
@@ -802,7 +823,6 @@ body{
 .hall-photos-gallery{display:flex;gap:8px;overflow-x:auto;margin:2px 0 12px;padding-bottom:4px;scrollbar-width:none;}
 .hall-photos-gallery::-webkit-scrollbar{display:none;}
 .hall-photos-gallery img{height:150px;width:auto;border-radius:12px;object-fit:cover;flex:0 0 auto;border:1px solid var(--line);}
-.hall-card-thumb{width:100%;height:96px;object-fit:cover;border-radius:10px;margin-bottom:8px;border:1px solid var(--line);display:block;}
 .lightbox{position:fixed;inset:0;background:rgba(8,6,5,.96);z-index:120;display:flex;align-items:center;justify-content:center;}
 .lightbox-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:16px 8px;}
 .lightbox img{max-width:100%;max-height:100%;border-radius:10px;object-fit:contain;user-select:none;-webkit-user-select:none;}
@@ -2087,18 +2107,34 @@ body{
   }
 
   // ---- Карточки залов и страница зала ----
+  // Пары цветов для диагональной штриховки плейсхолдера, когда у зала ещё
+  // нет фото — чередуются по индексу, чтобы карточки не сливались.
+  const HALL_PLACEHOLDER_COLORS = [
+    ['#e2e4e8', '#eef0f3'],
+    ['#232326', '#2e2e32'],
+    ['#e4d6bd', '#eee2cd'],
+    ['#c7d6e0', '#d8e5ed'],
+  ];
   function renderHallCards(){
     const box = document.getElementById('hallCards');
     box.innerHTML = '';
-    HALLS.forEach(h => {
+    HALLS.forEach((h, i) => {
       const card = document.createElement('div');
       card.className = 'hall-card';
-      const thumb = (Array.isArray(h.photos) && h.photos[0])
-        ? '<img class="hall-card-thumb" src="'+esc(h.photos[0])+'" alt="" loading="lazy">' : '';
-      card.innerHTML = thumb +
+      let photo;
+      if(Array.isArray(h.photos) && h.photos[0]){
+        photo = '<div class="hall-card-photo"><img src="'+esc(h.photos[0])+'" alt="" loading="lazy"></div>';
+      } else {
+        const [a, b] = HALL_PLACEHOLDER_COLORS[i % HALL_PLACEHOLDER_COLORS.length];
+        photo = '<div class="hall-card-photo"><div class="hall-card-placeholder" style="--ph-a:'+a+';--ph-b:'+b+'">'+
+          '<span class="hall-card-placeholder-label">фото: '+esc(h.name)+'</span></div></div>';
+      }
+      card.innerHTML = photo +
+        '<div class="hall-card-body">'+
         '<div class="hall-card-name">'+esc(h.name)+'<span>›</span></div>'+
         '<div class="hall-card-sub">до '+esc(h.capacity)+' чел.</div>'+
-        '<div class="hall-card-rate">'+esc(hallRateLabel(h))+'</div>';
+        '<div class="hall-card-rate">'+esc(hallRateLabel(h))+'</div>'+
+        '</div>';
       card.addEventListener('click', ()=>{ haptic('light'); openHall(h.id); });
       box.appendChild(card);
     });
