@@ -780,7 +780,7 @@ body{
 .hall-fact b{font-family:var(--f-mono);font-weight:500;font-size:14px;}
 .hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
 .studio-map-addr{font-size:12px;color:var(--muted);margin-bottom:6px;}
-.studio-map{width:100%;height:200px;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);}
+.studio-map{width:100%;aspect-ratio:1/1;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);}
 .studio-map-actions{display:flex;gap:8px;margin-top:10px;}
 .map-action{flex:1;padding:11px 8px;border-radius:12px;border:1px solid var(--line-strong);
   background:var(--surface);color:var(--text);font-family:var(--f-body);font-size:13px;font-weight:600;cursor:pointer;}
@@ -2141,6 +2141,9 @@ body{
       map.behaviors.disable('scrollZoom');
       map.geoObjects.add(new ymaps.Placemark([STUDIO_LAT, STUDIO_LON],
         { balloonContent: esc(STUDIO_ADDRESS || '') }, { preset: 'islands#redDotIcon' }));
+      // Контейнер квадратный (aspect-ratio); на момент создания карты его
+      // размер иногда ещё не устоялся — пересчитываем на следующий тик.
+      setTimeout(() => map.container.fitToViewport(), 0);
     }).catch(() => { _studioMapDrawn = false; mapEl.style.display = 'none'; });
   }
 
