@@ -1543,6 +1543,7 @@ body{
   let SLOT_MIN = 60;               // шаг сетки времени: 30 или 60, из /config
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
+  let HALL_PROPS = { hallType:true, daylight:true, areaM2:true, ceilingCm:true }; // свойства зала по вертикали (П4-1)
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
@@ -1560,6 +1561,7 @@ body{
       hours: (cfg.lastminute && Number.isInteger(cfg.lastminute.hours)) ? cfg.lastminute.hours : 24,
       pct: (cfg.lastminute && Number.isInteger(cfg.lastminute.pct)) ? cfg.lastminute.pct : 20,
     };
+    if(cfg.verticalUi && cfg.verticalUi.hallProps) HALL_PROPS = cfg.verticalUi.hallProps;
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
     state.dateIndex = 0;
@@ -2052,10 +2054,10 @@ body{
       '<div class="hall-fact"><span>Вместимость</span><b>до '+esc(hall.capacity)+' чел.</b></div>',
       '<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel(hall))+'</b></div>',
     ];
-    if(hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
-    if(hall.daylight) facts.push('<div class="hall-fact"><span>Свет</span><b>дневной</b></div>');
-    if(hall.areaM2) facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
-    if(hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
+    if(HALL_PROPS.hallType && hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
+    if(HALL_PROPS.daylight && hall.daylight) facts.push('<div class="hall-fact"><span>Свет</span><b>дневной</b></div>');
+    if(HALL_PROPS.areaM2 && hall.areaM2) facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
+    if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
     renderHallPackages(hall);
   }
