@@ -781,6 +781,10 @@ body{
 .hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
 .studio-map-addr{font-size:12px;color:var(--muted);margin-bottom:6px;}
 .studio-map{width:100%;height:200px;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);}
+.studio-map-actions{display:flex;gap:8px;margin-top:10px;}
+.map-action{flex:1;padding:11px 8px;border-radius:12px;border:1px solid var(--line-strong);
+  background:var(--surface);color:var(--text);font-family:var(--f-body);font-size:13px;font-weight:600;cursor:pointer;}
+.map-action:active{background:var(--surface-raised);}
 .catalog-map{width:100%;height:calc(100vh - 220px);min-height:320px;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);margin:14px 20px 0;}
 .catalog-map[hidden]{display:none;}
 .catalog-map-toggle{margin-left:8px;}
@@ -1282,6 +1286,10 @@ body{
       <div class="section-label">На карте</div>
       <div class="studio-map-addr" id="studioMapAddr"></div>
       <div class="studio-map" id="studioMap"></div>
+      <div class="studio-map-actions">
+        <button class="map-action" id="btnRoute" type="button">Как добраться</button>
+        <button class="map-action" id="btnTaxi" type="button">Вызвать такси</button>
+      </div>
     </div>
   </div>
 
@@ -1583,7 +1591,9 @@ body{
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
   let HALL_PROPS = { hallType:true, daylight:true, areaM2:true, ceilingCm:true }; // свойства зала по вертикали (П4-1)
   let STUDIO_LAT = null, STUDIO_LON = null, STUDIO_ADDRESS = '';  // координаты студии для карты
+  let STUDIO_GO_REF = '';                                         // партнёрский ref для ссылок Яндекс Go
   let _studioMapDrawn = false;                                    // карта студии уже отрисована
+  let _mapBtnsWired = false;
   const allHallsById = {};   // id -> зал, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
@@ -1605,6 +1615,7 @@ body{
     STUDIO_LAT = Number.isFinite(cfg.lat) ? cfg.lat : null;
     STUDIO_LON = Number.isFinite(cfg.lon) ? cfg.lon : null;
     STUDIO_ADDRESS = cfg.address || '';
+    STUDIO_GO_REF = typeof cfg.yandexGoRef === 'string' ? cfg.yandexGoRef : '';
     _studioMapDrawn = false;
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
     state.dates = buildDates(14);
@@ -2111,23 +2122,51 @@ body{
   function renderStudioMap(){
     const wrap = document.getElementById('studioMapWrap');
     if(!wrap) return;
-    if(!mapsAvailable() || !Number.isFinite(STUDIO_LAT) || !Number.isFinite(STUDIO_LON)){
-      wrap.hidden = true; return;
-    }
+    const hasGeo = Number.isFinite(STUDIO_LAT) && Number.isFinite(STUDIO_LON);
+    if(!hasGeo){ wrap.hidden = true; return; }   // без координат — ни карты, ни кнопок
     wrap.hidden = false;
     document.getElementById('studioMapAddr').textContent = STUDIO_ADDRESS || '';
+    wireMapButtons();
+
+    const mapEl = document.getElementById('studioMap');
+    if(!mapsAvailable()){ mapEl.style.display = 'none'; return; }  // нет ключа карт — только адрес + кнопки
+    mapEl.style.display = '';
     if(_studioMapDrawn) return;
     _studioMapDrawn = true;
     loadYmaps().then(ymaps => {
-      const el = document.getElementById('studioMap');
-      el.innerHTML = '';
-      const map = new ymaps.Map(el, {
+      mapEl.innerHTML = '';
+      const map = new ymaps.Map(mapEl, {
         center: [STUDIO_LAT, STUDIO_LON], zoom: 16, controls: ['zoomControl'],
       }, { suppressMapOpenBlock: true });
       map.behaviors.disable('scrollZoom');
       map.geoObjects.add(new ymaps.Placemark([STUDIO_LAT, STUDIO_LON],
         { balloonContent: esc(STUDIO_ADDRESS || '') }, { preset: 'islands#redDotIcon' }));
-    }).catch(() => { _studioMapDrawn = false; wrap.hidden = true; });
+    }).catch(() => { _studioMapDrawn = false; mapEl.style.display = 'none'; });
+  }
+
+  // Внешняя ссылка: в Telegram — через WebApp.openLink, иначе обычная вкладка.
+  function openExternal(url){
+    if(tg && typeof tg.openLink === 'function') tg.openLink(url);
+    else window.open(url, '_blank', 'noopener');
+  }
+  // «Как добраться» -> маршрут в Яндекс.Картах; «Вызвать такси» -> Яндекс Go.
+  // Точку А (откуда) подставляет сам Яндекс по геопозиции пользователя.
+  function wireMapButtons(){
+    if(_mapBtnsWired) return;
+    _mapBtnsWired = true;
+    document.getElementById('btnRoute').addEventListener('click', () => {
+      if(!Number.isFinite(STUDIO_LAT)) return;
+      haptic('light');
+      openExternal('https://yandex.ru/maps/?rtext=~' + STUDIO_LAT + ',' + STUDIO_LON + '&rtt=auto&z=16');
+    });
+    document.getElementById('btnTaxi').addEventListener('click', () => {
+      if(!Number.isFinite(STUDIO_LAT)) return;
+      haptic('light');
+      let u = 'https://3.redirect.appmetrica.yandex.com/route?end-lat=' + STUDIO_LAT
+            + '&end-lon=' + STUDIO_LON + '&level=50&lang=ru&appmetrica_tracking_id=1178268795219780156';
+      if(STUDIO_GO_REF) u += '&ref=' + encodeURIComponent(STUDIO_GO_REF);
+      openExternal(u);
+    });
   }
 
   function pkgHoursLabel(h){
