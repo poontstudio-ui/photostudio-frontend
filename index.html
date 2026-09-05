@@ -707,6 +707,18 @@ body{
   font-size:13px;
   cursor:pointer;
 }
+.booking-confirm-btn{
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:1px solid var(--green);
+  background:transparent;
+  color:var(--green);
+  font-family:var(--f-body);
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+}
 
 /* ---------- Cancel confirm panel ---------- */
 .rs-fields{display:flex;flex-direction:column;gap:10px;margin:4px 0 12px;}
@@ -2632,7 +2644,44 @@ body{
                   declined:'Отклонена', cancelled:'Отменена', no_show:'Не пришёл' };
   const BK_CANCELABLE = new Set(['pending', 'confirmed']);
 
-  function renderBookingCard(b, onCancelClick, showOwnerName){
+  // Всплывающее сообщение об ошибке — своё окно Telegram, если доступно
+  // (в кабинете владельца нет отдельного места под текст ошибки, а alert()
+  // в WebView смотрится чужеродно).
+  function notifyError(msg){
+    if(tg && typeof tg.showAlert === 'function') tg.showAlert(msg);
+    else alert(msg);
+  }
+
+  // Действия владельца по жизненному циклу брони — тот же набор и те же
+  // состояния, что в браузерном кабинете (bkActions в studio.html): pending
+  // решается подтверждением/отклонением; confirmed — завершением, отметкой
+  // «не пришёл» или отменой. Раньше единственным способом отказать заявке
+  // тут было «Отменить» (общая с клиентом кнопка) — тот же результат для
+  // клиента, но не тот путь в БД (cancel вместо decline, другой cancel_kind).
+  // Теперь у pending — ровно confirm/decline, без путаницы с cancel.
+  const OWNER_LIFECYCLE = {
+    pending:   [{ action:'confirm',  label:'Подтвердить', cls:'booking-confirm-btn' },
+                { action:'decline',  label:'Отклонить',   cls:'booking-cancel-btn'  }],
+    confirmed: [{ action:'complete', label:'Завершить',   cls:'booking-confirm-btn' },
+                { action:'no-show',  label:'Не пришёл',   cls:'booking-cancel-btn'  },
+                { action:'cancel',   label:'Отменить',    cls:'booking-cancel-btn'  }],
+  };
+  async function ownerBookingAction(b, action, row){
+    row.querySelectorAll('button').forEach(x=>{ x.disabled=true; });
+    // cancel — общий с клиентом роут (/bookings/:id/cancel), остальное —
+    // владельческий жизненный цикл (/admin/bookings/:id/<action>).
+    const url = action === 'cancel' ? '/bookings/'+b.id+'/cancel' : '/admin/bookings/'+b.id+'/'+action;
+    try{
+      await api('POST', url, null, b.studioId);
+      haptic('medium');
+      renderAdmin();
+    } catch(e){
+      row.querySelectorAll('button').forEach(x=>{ x.disabled=false; });
+      notifyError(e.message);
+    }
+  }
+
+  function renderBookingCard(b, onCancelClick, isAdmin){
     const card=document.createElement('div');
     card.className='booking-card';
     card.dataset.status=b.status;
@@ -2643,26 +2692,41 @@ body{
         <div class="booking-status" data-status="${esc(b.status)}">${esc(BK_ST[b.status] || b.status)}</div>
       </div>
       ${b.studioName ? '<div class="booking-studio">'+esc(b.studioName)+(b.studioCity ? ' · '+esc(b.studioCity) : '')+'</div>' : ''}
-      ${showOwnerName ? '<div class="admin-booking-owner">'+esc(b.name || 'Без имени')+'</div>' : ''}
+      ${isAdmin ? '<div class="admin-booking-owner">'+esc(b.name || 'Без имени')+'</div>' : ''}
       <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
     `;
     const row=document.createElement('div');
     row.className='booking-card-actions';
-    const rep=document.createElement('button');
-    rep.className='booking-move-btn';
-    rep.textContent='Повторить';
-    rep.addEventListener('click', ()=>repeatBooking(b));
-    row.appendChild(rep);
-    if(BK_CANCELABLE.has(b.status)){
-      const rs=document.createElement('button');
-      rs.className='booking-move-btn';
-      rs.textContent='Перенести';
-      rs.addEventListener('click', ()=>openReschedule(b));
-      const btn=document.createElement('button');
-      btn.className='booking-cancel-btn';
-      btn.textContent='Отменить';
-      btn.addEventListener('click', onCancelClick);
-      row.appendChild(rs); row.appendChild(btn);
+    if(isAdmin){
+      // Владельцу — жизненный цикл (confirm/decline/complete/no-show/cancel),
+      // как в браузерном кабинете. Ни «Повторить» (создало бы бронь от имени
+      // владельца), ни «Перенести» (в браузерном кабинете этого действия
+      // тоже нет — если понадобится отдельно, это осознанное решение, не
+      // случайный лишний пункт) тут не показываем.
+      (OWNER_LIFECYCLE[b.status] || []).forEach(a=>{
+        const btn=document.createElement('button');
+        btn.className=a.cls;
+        btn.textContent=a.label;
+        btn.addEventListener('click', ()=>ownerBookingAction(b, a.action, row));
+        row.appendChild(btn);
+      });
+    } else {
+      const rep=document.createElement('button');
+      rep.className='booking-move-btn';
+      rep.textContent='Повторить';
+      rep.addEventListener('click', ()=>repeatBooking(b));
+      row.appendChild(rep);
+      if(BK_CANCELABLE.has(b.status)){
+        const rs=document.createElement('button');
+        rs.className='booking-move-btn';
+        rs.textContent='Перенести';
+        rs.addEventListener('click', ()=>openReschedule(b));
+        const btn=document.createElement('button');
+        btn.className='booking-cancel-btn';
+        btn.textContent='Отменить';
+        btn.addEventListener('click', onCancelClick);
+        row.appendChild(rs); row.appendChild(btn);
+      }
     }
     card.appendChild(row);
     return card;
