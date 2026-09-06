@@ -1657,7 +1657,8 @@ body{
   let SLOT_MIN = 60;               // шаг сетки времени: 30 или 60, из /config
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
-  let HALL_PROPS = { hallType:true, daylight:true, areaM2:true, ceilingCm:true }; // свойства зала по вертикали (П4-1)
+  let HALL_PROPS = { hallType:true, daylight:true, artificialLight:true, blackout:true,
+    airConditioning:true, bluetoothSpeaker:true, floor:true, areaM2:true, ceilingCm:true }; // свойства зала по вертикали (П4-1)
   let STUDIO_LAT = null, STUDIO_LON = null, STUDIO_ADDRESS = '';  // координаты студии для карты
   let STUDIO_GO_REF = '';                                         // партнёрский ref для ссылок Яндекс Go
   let _studioMapDrawn = false;                                    // карта студии уже отрисована
@@ -2199,9 +2200,14 @@ body{
       '<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel(hall))+'</b></div>',
     ];
     if(HALL_PROPS.hallType && hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
-    if(HALL_PROPS.daylight && hall.daylight) facts.push('<div class="hall-fact"><span>Свет</span><b>дневной</b></div>');
+    if(HALL_PROPS.daylight && hall.daylight) facts.push('<div class="hall-fact"><span>Свет</span><b>естественный</b></div>');
+    if(HALL_PROPS.artificialLight && hall.artificialLight) facts.push('<div class="hall-fact"><span>Свет</span><b>искусственный</b></div>');
+    if(HALL_PROPS.blackout && hall.blackout) facts.push('<div class="hall-fact"><span>Затемнение</span><b>блэкаут</b></div>');
+    if(HALL_PROPS.airConditioning && hall.airConditioning) facts.push('<div class="hall-fact"><span>Климат</span><b>кондиционер</b></div>');
+    if(HALL_PROPS.bluetoothSpeaker && hall.bluetoothSpeaker) facts.push('<div class="hall-fact"><span>Звук</span><b>Bluetooth-колонка</b></div>');
     if(HALL_PROPS.areaM2 && hall.areaM2) facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
+    if(HALL_PROPS.floor && Number.isInteger(hall.floor)) facts.push('<div class="hall-fact"><span>Этаж</span><b>'+(hall.floor<=0?'цоколь':esc(hall.floor))+'</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
     renderHallPackages(hall);
   }
@@ -3562,9 +3568,14 @@ body{
     rows.forEach(r=>{
       const props = [];
       if(r.hallType && TS_TYPES[r.hallType]) props.push(TS_TYPES[r.hallType]);
-      if(r.daylight) props.push('дневной свет');
+      if(r.daylight) props.push('естественный свет');
+      if(r.artificialLight) props.push('искусственный свет');
+      if(r.blackout) props.push('блэкаут');
+      if(r.airConditioning) props.push('кондиционер');
+      if(r.bluetoothSpeaker) props.push('Bluetooth-колонка');
       if(r.areaM2) props.push(r.areaM2 + ' м²');
       if(r.ceilingCm) props.push('потолок ' + (r.ceilingCm/100).toFixed(1).replace('.0','') + ' м');
+      if(Number.isInteger(r.floor)) props.push(r.floor<=0 ? 'цокольный этаж' : r.floor + '-й этаж');
       props.push('до ' + r.capacity + ' чел.');
       const el = document.createElement('div');
       el.className = 'search-result';
