@@ -811,6 +811,11 @@ body{
 }
 .hall-fact span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;}
 .hall-fact b{font-family:var(--f-mono);font-weight:500;font-size:14px;}
+.amenity-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.amenity-chips .chip{font-size:12px;line-height:1;padding:6px 10px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--line);color:var(--text);}
+.amenity-chips.ok .chip{background:rgba(60,160,80,.12);border-color:rgba(60,160,80,.35);color:#3ba05a;}
+.amenity-chips:empty{display:none;}
 .hall-soon{font-size:12px;color:var(--muted-dim);margin-top:12px;line-height:1.5;}
 .studio-map-addr{font-size:12px;color:var(--muted);margin-bottom:6px;}
 .studio-map{width:100%;aspect-ratio:1/1;border-radius:var(--radius);overflow:hidden;background:var(--surface-raised);border:1px solid var(--line);}
@@ -1284,6 +1289,12 @@ body{
       <div class="hall-cards" id="hallCards"></div>
     </div>
 
+    <div class="section" id="studioAmenitiesSection" hidden>
+      <div class="section-label">Удобства студии</div>
+      <div class="amenity-chips" id="studioAmenityChips"></div>
+      <div class="amenity-chips ok" id="studioPolicyChips"></div>
+    </div>
+
     <div class="section" id="hallInfoSection" style="display:none">
       <div class="hall-info-head">
         <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем залам">←</button>
@@ -1291,6 +1302,7 @@ body{
       </div>
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
+      <div class="amenity-chips" id="hallChips" hidden></div>
       <div class="hall-packages" id="hallPackages" hidden></div>
     </div>
 
@@ -1657,8 +1669,35 @@ body{
   let SLOT_MIN = 60;               // шаг сетки времени: 30 или 60, из /config
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
-  let HALL_PROPS = { hallType:true, daylight:true, artificialLight:true, blackout:true,
-    airConditioning:true, bluetoothSpeaker:true, floor:true, areaM2:true, ceilingCm:true }; // свойства зала по вертикали (П4-1)
+  let HALL_PROPS = { hallType:true, areaM2:true, ceilingCm:true, floor:true, styles:true,
+    daylight:true, constantLight:true, strobeLight:true, lightModifiers:true, ceilingRail:true, blackout:true,
+    paperBackdrops:true, chromakey:true, fabricBackdrops:true,
+    panoramicWindows:true, texturedWall:true, fireplace:true, mezzanine:true, balcony:true, soundproofing:true,
+    airConditioning:true, bluetoothSpeaker:true }; // свойства зала по вертикали (П4-1)
+  let STUDIO_AMENITIES = {};   // удобства/правила студии из /config (миграция 0030)
+  var HALL_STYLE_RU = { loft:'Лофт', scandi:'Скандинавский', classic:'Классический', minimal:'Минимализм',
+    dark:'Тёмный', industrial:'Индустриальный', vintage:'Винтаж', provence:'Прованс' };
+  var HALL_AMENITY_LIST = [
+    {f:'daylight',label:'Естественный свет'},{f:'constantLight',label:'Постоянный свет'},
+    {f:'strobeLight',label:'Импульсный свет'},{f:'lightModifiers',label:'Модификаторы света'},
+    {f:'ceilingRail',label:'Потолочная система'},{f:'blackout',label:'Блэкаут'},
+    {f:'paperBackdrops',label:'Бумажные фоны'},{f:'chromakey',label:'Хромакей'},
+    {f:'fabricBackdrops',label:'Тканевые фоны'},{f:'panoramicWindows',label:'Большие окна'},
+    {f:'texturedWall',label:'Фактурная стена'},{f:'fireplace',label:'Камин'},
+    {f:'mezzanine',label:'Второй свет'},{f:'balcony',label:'Балкон / терраса'},
+    {f:'soundproofing',label:'Звукоизоляция'},{f:'airConditioning',label:'Кондиционер'},
+    {f:'bluetoothSpeaker',label:'Bluetooth-колонка'} ];
+  var STUDIO_AMENITY_LIST = [
+    {f:'wifi',label:'Wi-Fi'},{f:'makeupRoom',label:'Гримёрная'},{f:'makeupMirror',label:'Гримёрное зеркало'},
+    {f:'restroom',label:'Санузел'},{f:'shower',label:'Душ'},{f:'kitchen',label:'Кухня / чай-кофе'},
+    {f:'loungeArea',label:'Зона отдыха'},{f:'separateEntrance',label:'Отдельный вход'},
+    {f:'elevator',label:'Лифт'},{f:'heating',label:'Отопление'},
+    {f:'onSiteManager',label:'Администратор'},{f:'garmentSteamer',label:'Отпариватель'} ];
+  var POLICY_LIST = [
+    {f:'allowPets',label:'Можно с животными'},{f:'allowKids',label:'Можно с детьми'},
+    {f:'allowNsfw',label:'Можно ню / 18+'},{f:'allowVideo',label:'Можно видеосъёмку'},
+    {f:'allowSmokeMachine',label:'Можно дым-машину'},{f:'allowCatering',label:'Можно кейтеринг'} ];
+  var PARKING_RU = { yard:'Парковка во дворе', free:'Бесплатная парковка', paid:'Платная парковка рядом', none:'Парковки нет' };
   let STUDIO_LAT = null, STUDIO_LON = null, STUDIO_ADDRESS = '';  // координаты студии для карты
   let STUDIO_GO_REF = '';                                         // партнёрский ref для ссылок Яндекс Go
   let _studioMapDrawn = false;                                    // карта студии уже отрисована
@@ -1681,6 +1720,8 @@ body{
       pct: (cfg.lastminute && Number.isInteger(cfg.lastminute.pct)) ? cfg.lastminute.pct : 20,
     };
     if(cfg.verticalUi && cfg.verticalUi.hallProps) HALL_PROPS = cfg.verticalUi.hallProps;
+    STUDIO_AMENITIES = cfg.amenities || {};
+    renderStudioAmenities();
     STUDIO_LAT = Number.isFinite(cfg.lat) ? cfg.lat : null;
     STUDIO_LON = Number.isFinite(cfg.lon) ? cfg.lon : null;
     STUDIO_ADDRESS = cfg.address || '';
@@ -2200,16 +2241,29 @@ body{
       '<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel(hall))+'</b></div>',
     ];
     if(HALL_PROPS.hallType && hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
-    if(HALL_PROPS.daylight && hall.daylight) facts.push('<div class="hall-fact"><span>Свет</span><b>естественный</b></div>');
-    if(HALL_PROPS.artificialLight && hall.artificialLight) facts.push('<div class="hall-fact"><span>Свет</span><b>искусственный</b></div>');
-    if(HALL_PROPS.blackout && hall.blackout) facts.push('<div class="hall-fact"><span>Затемнение</span><b>блэкаут</b></div>');
-    if(HALL_PROPS.airConditioning && hall.airConditioning) facts.push('<div class="hall-fact"><span>Климат</span><b>кондиционер</b></div>');
-    if(HALL_PROPS.bluetoothSpeaker && hall.bluetoothSpeaker) facts.push('<div class="hall-fact"><span>Звук</span><b>Bluetooth-колонка</b></div>');
     if(HALL_PROPS.areaM2 && hall.areaM2) facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
     if(HALL_PROPS.floor && Number.isInteger(hall.floor)) facts.push('<div class="hall-fact"><span>Этаж</span><b>'+(hall.floor<=0?'цоколь':esc(hall.floor))+'</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
+    // Стиль + удобства — чипами.
+    var chips = (Array.isArray(hall.styles)?hall.styles:[]).filter(function(s){return HALL_STYLE_RU[s];}).map(function(s){return HALL_STYLE_RU[s];})
+      .concat(HALL_AMENITY_LIST.filter(function(a){return HALL_PROPS[a.f] && hall[a.f];}).map(function(a){return a.label;}));
+    var cw = document.getElementById('hallChips');
+    if(cw){ cw.innerHTML = chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join(''); cw.hidden = !chips.length; }
     renderHallPackages(hall);
+  }
+
+  // Удобства/правила студии — секция под списком залов, из /config.amenities.
+  function renderStudioAmenities(){
+    var sec = document.getElementById('studioAmenitiesSection');
+    if(!sec) return;
+    var a = STUDIO_AMENITIES || {};
+    var am = STUDIO_AMENITY_LIST.filter(function(x){ return a[x.f]; }).map(function(x){ return x.label; });
+    if(a.parking && PARKING_RU[a.parking]) am.push(PARKING_RU[a.parking]);
+    var pol = POLICY_LIST.filter(function(x){ return a[x.f]; }).map(function(x){ return x.label; });
+    document.getElementById('studioAmenityChips').innerHTML = am.map(function(c){ return '<span class="chip">'+esc(c)+'</span>'; }).join('');
+    document.getElementById('studioPolicyChips').innerHTML = pol.map(function(c){ return '<span class="chip">'+esc(c)+'</span>'; }).join('');
+    sec.hidden = !(am.length || pol.length);
   }
 
   // Карта студии — отдельная секция под сеткой времени, метка по координатам
@@ -2359,6 +2413,9 @@ body{
     const on = !!openHallId;
     document.getElementById('hallCardsSection').style.display = on ? 'none' : '';
     document.getElementById('hallInfoSection').style.display = on ? '' : 'none';
+    // Удобства студии — контекст «обзора студии», при входе в зал прячем.
+    var sa = document.getElementById('studioAmenitiesSection');
+    if(sa) sa.style.display = on ? 'none' : '';
     document.getElementById('gridLabel').textContent = on ? 'Время брони' : 'Занятость залов';
     if(HALLS.length <= 1) document.getElementById('gridLabel').textContent = 'Время брони';
   }
@@ -3568,11 +3625,20 @@ body{
     rows.forEach(r=>{
       const props = [];
       if(r.hallType && TS_TYPES[r.hallType]) props.push(TS_TYPES[r.hallType]);
+      (Array.isArray(r.styles)?r.styles:[]).forEach(function(s){ if(HALL_STYLE_RU[s]) props.push(HALL_STYLE_RU[s]); });
       if(r.daylight) props.push('естественный свет');
-      if(r.artificialLight) props.push('искусственный свет');
+      if(r.constantLight) props.push('постоянный свет');
+      if(r.strobeLight) props.push('импульсный свет');
       if(r.blackout) props.push('блэкаут');
+      if(r.paperBackdrops) props.push('бумажные фоны');
+      if(r.chromakey) props.push('хромакей');
+      if(r.panoramicWindows) props.push('большие окна');
+      if(r.texturedWall) props.push('фактурная стена');
+      if(r.soundproofing) props.push('звукоизоляция');
       if(r.airConditioning) props.push('кондиционер');
       if(r.bluetoothSpeaker) props.push('Bluetooth-колонка');
+      if(r.wifi) props.push('Wi-Fi');
+      if(r.parking && PARKING_RU[r.parking] && r.parking !== 'none') props.push(PARKING_RU[r.parking]);
       if(r.areaM2) props.push(r.areaM2 + ' м²');
       if(r.ceilingCm) props.push('потолок ' + (r.ceilingCm/100).toFixed(1).replace('.0','') + ' м');
       if(Number.isInteger(r.floor)) props.push(r.floor<=0 ? 'цокольный этаж' : r.floor + '-й этаж');
