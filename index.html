@@ -2318,6 +2318,16 @@ body{
   gridScrollEl.addEventListener('scroll', ()=>{
     gridHeadWrap.scrollLeft = gridScrollEl.scrollLeft;
   }, { passive:true });
+  // Ширину шапки (режим 'halls') держим равной телу и при ресайзе — поворот
+  // экрана, изменение вьюпорта Telegram: иначе после сужения шапка оставалась
+  // прежней ширины и подписи залов уезжали от своих колонок.
+  if(window.ResizeObserver){
+    new ResizeObserver(()=>{
+      if(gridEl.dataset.fit === 'true') return;
+      const w = gridEl.getBoundingClientRect().width;
+      if(w) gridHeadEl.style.width = w + 'px';
+    }).observe(gridEl);
+  }
 
   function renderGrid(){
     const cols = gridColumns();
