@@ -1234,6 +1234,7 @@ body{
     <div class="catalog-head">
       <div class="catalog-head-title">Студии</div>
       <button class="header-link" id="catalogMyBookingsBtn" type="button">Мои брони</button>
+      <button class="header-link" id="catalogAuthBtn" type="button" hidden>Войти</button>
     </div>
     <div class="catalog-topbar">
       <div class="city-select" id="citySelect" data-open="false">
@@ -1276,6 +1277,7 @@ body{
         <div class="brand-sub">Бронь репетиционной точки</div>
       </div>
       <button class="header-link" id="myBookingsBtn" type="button">Мои брони</button>
+      <button class="header-link" id="authBtn" type="button" hidden>Войти</button>
       <button class="icon-btn" id="ownerBtn" type="button" aria-label="Кабинет владельца" title="Кабинет владельца" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
@@ -1507,6 +1509,20 @@ body{
   <div class="save-note" id="verifyError" style="color:var(--red)"></div>
   <button class="btn-ghost" id="verifyResendBtn">Отправить код ещё раз</button>
   <button class="btn-ghost" id="verifyBackBtn">Назад</button>
+</div>
+
+<!-- Вход/выход вне брони — кнопка в шапке (см. authBtn/catalogAuthBtn).
+     Тот же код подтверждения (verifyPanel), просто источник номера — это
+     поле, а не форма брони. -->
+<div class="panel" id="loginPanel">
+  <div class="panel-title">Вход по номеру телефона</div>
+  <div class="field">
+    <label for="loginPhoneInput">Телефон</label>
+    <input id="loginPhoneInput" type="tel" inputmode="numeric" placeholder="+375 (29) 123-45-67" value="+375 ">
+  </div>
+  <button class="btn-primary" id="loginSendBtn" disabled>Получить код</button>
+  <div class="save-note" id="loginError" style="color:var(--red)"></div>
+  <button class="btn-ghost" id="loginCancelBtn">Отмена</button>
 </div>
 
 <div class="panel" id="cancelPanel">
@@ -2531,6 +2547,13 @@ body{
   const verifyError=document.getElementById('verifyError');
   const verifyResendBtn=document.getElementById('verifyResendBtn');
   const verifyBackBtn=document.getElementById('verifyBackBtn');
+  const loginPanel=document.getElementById('loginPanel');
+  const loginPhoneInput=document.getElementById('loginPhoneInput');
+  const loginSendBtn=document.getElementById('loginSendBtn');
+  const loginError=document.getElementById('loginError');
+  const loginCancelBtn=document.getElementById('loginCancelBtn');
+  const authBtn=document.getElementById('authBtn');
+  const catalogAuthBtn=document.getElementById('catalogAuthBtn');
 
   // Блокировка прокрутки фона, пока открыта любая модалка (overlay). iOS/Telegram
   // WebView не держит скролл body просто через overflow:hidden — нужен
@@ -2764,10 +2787,14 @@ body{
   }
 
   // ---- Подтверждение номера вне Telegram (план «Телефон вместо Telegram», Ф1) ----
-  // Шаг 2 той же формы: имя/телефон уже введены, дальше — код. Один раз на
+  // Два источника одного и того же шага «код»: либо шаг 2 формы брони
+  // (имя/телефон уже введены), либо самостоятельный вход/выход кнопкой в
+  // шапке — verifyPurpose отличает, что делать после успеха. Один раз на
   // устройство — сессия из /verify/check оседает в localStorage, следующие
-  // брони её просто переиспользуют (см. authHeaders/getPhoneToken выше).
-  function toE164Phone(){ return '+375' + digitsAfterPrefix(phoneInput.value); }
+  // брони/входы её просто переиспользуют (см. authHeaders/getPhoneToken выше).
+  let verifyPurpose = 'booking';   // 'booking' | 'login'
+  let verifyPhoneDigits = '';      // 9 цифр после +375 — из формы брони или из loginPhoneInput
+  function toE164Phone(){ return '+375' + verifyPhoneDigits; }
 
   async function requestVerifyCode(){
     const res = await fetch(API_BASE + '/api/verify/start', {
@@ -2794,12 +2821,16 @@ body{
   }
   function startResendCooldown(sec){ verifyResendAt = Date.now() + sec*1000; tickResendCooldown(); }
 
-  function showVerifyStep(){
+  function showVerifyStep(purpose, phoneDigits){
+    verifyPurpose = purpose;
+    verifyPhoneDigits = phoneDigits;
+    overlay.dataset.open='true';
     panel.dataset.open='false';
+    loginPanel.dataset.open='false';
     verifyCodeInput.value='';
     verifyError.textContent='';
     verifySubmitBtn.disabled=true;
-    verifyHint.textContent = 'Код придёт в Telegram или SMS на ' + phoneInput.value.trim();
+    verifyHint.textContent = 'Код придёт в Telegram или SMS на ' + formatByPhone(toE164Phone());
     verifyPanel.dataset.open='true';
     requestVerifyCode()
       .then(()=>startResendCooldown(60))
@@ -2824,7 +2855,8 @@ body{
   verifyBackBtn.addEventListener('click', ()=>{
     haptic('light');
     hideVerifyStep();
-    panel.dataset.open='true';
+    if(verifyPurpose === 'booking') panel.dataset.open='true';
+    else loginPanel.dataset.open='true'; // самостоятельный вход — назад к вводу номера
   });
 
   verifySubmitBtn.addEventListener('click', async ()=>{
@@ -2842,8 +2874,13 @@ body{
       setPhoneToken(data.token);
       haptic('medium');
       hideVerifyStep();
-      panel.dataset.open='true';
-      await submitBooking();
+      if(verifyPurpose === 'booking'){
+        panel.dataset.open='true';
+        await submitBooking();
+      } else {
+        overlay.dataset.open='false';
+        updateAuthUI();
+      }
     } catch(e){
       verifyError.textContent = e.message;
     } finally{
@@ -2860,11 +2897,73 @@ body{
     // отправляем уже из verifySubmitBtn выше. Иначе (в Telegram, или уже
     // подтверждали номер на этом устройстве) — сразу как раньше.
     if(!(tg && tg.initData) && !getPhoneToken()){
-      showVerifyStep();
+      showVerifyStep('booking', digitsAfterPrefix(phoneInput.value));
       return;
     }
     await submitBooking();
   });
+
+  // ---- Самостоятельные «Войти»/«Выйти» в шапке (вне брони) ----
+  // Внутри Telegram кнопок нет вообще — там вход автоматический и выходить
+  // не из чего. Вне Telegram кнопка — тумблер: «Войти» открывает ввод
+  // номера (тот же код, что и в брони), «Выйти» просто стирает сессию.
+  function updateAuthUI(){
+    const show = !(tg && tg.initData);
+    const loggedIn = !!getPhoneToken();
+    [authBtn, catalogAuthBtn].forEach(btn=>{
+      if(!btn) return;
+      btn.hidden = !show;
+      btn.textContent = loggedIn ? 'Выйти' : 'Войти';
+    });
+  }
+
+  function validateLoginPhone(){
+    loginSendBtn.disabled = digitsAfterPrefix(loginPhoneInput.value).length !== 9;
+  }
+  loginPhoneInput.addEventListener('focus', ()=>{
+    if(!loginPhoneInput.value) loginPhoneInput.value='+375 ';
+  });
+  loginPhoneInput.addEventListener('input', ()=>{
+    const caret = loginPhoneInput.selectionStart;
+    const target = dDigitsBeforeCaret(loginPhoneInput.value, caret);
+    loginPhoneInput.value = formatByPhone(loginPhoneInput.value);
+    const newPos = caretPosForDDigitCount(loginPhoneInput.value, target);
+    loginPhoneInput.setSelectionRange(newPos, newPos);
+    validateLoginPhone();
+  });
+
+  function openLoginPanel(){
+    overlay.dataset.open='true';
+    loginError.textContent='';
+    validateLoginPhone();
+    loginPanel.dataset.open='true';
+  }
+  function closeLoginPanel(){
+    loginPanel.dataset.open='false';
+    overlay.dataset.open='false';
+  }
+  loginCancelBtn.addEventListener('click', ()=>{ haptic('light'); closeLoginPanel(); });
+  loginSendBtn.addEventListener('click', ()=>{
+    if(loginSendBtn.disabled) return;
+    haptic('medium');
+    loginError.textContent='';
+    showVerifyStep('login', digitsAfterPrefix(loginPhoneInput.value));
+  });
+
+  function handleAuthClick(){
+    haptic('light');
+    if(getPhoneToken()){
+      clearPhoneToken();
+      updateAuthUI();
+    } else {
+      openLoginPanel();
+    }
+  }
+  authBtn.addEventListener('click', handleAuthClick);
+  catalogAuthBtn.addEventListener('click', handleAuthClick);
+  overlay.addEventListener('click', ()=>{ hideVerifyStep(); closeLoginPanel(); });
+
+  updateAuthUI();
 
   document.getElementById('bookAnotherBtn').addEventListener('click', ()=>{
     state.people=1;
