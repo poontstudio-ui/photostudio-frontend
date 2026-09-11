@@ -1682,8 +1682,9 @@ body{
     try{ data = await res.json(); }catch(e){}
     if(res.ok) return data;
     if(res.status===501 && TENANT_ID) return api('GET', '/bookings/mine');
+    if(res.status===401 && !(tg && tg.initData)) clearPhoneToken();
     const message = res.status===401
-      ? 'Откройте мини-апп через кнопку бота в Telegram.'
+      ? (tg ? 'Откройте мини-апп через кнопку бота в Telegram.' : 'Сессия истекла — подтвердите номер ещё раз через любую бронь.')
       : res.status===501
         ? 'Общий список броней пока недоступен. Откройте студию — её брони видны внутри.'
         : (data && data.error) ? data.error : 'Не удалось загрузить брони ('+res.status+').';
@@ -2811,7 +2812,7 @@ body{
 
   verifyCodeInput.addEventListener('input', ()=>{
     verifyCodeInput.value = verifyCodeInput.value.replace(/\D/g,'').slice(0,6);
-    verifySubmitBtn.disabled = verifyCodeInput.value.length < 4;
+    verifySubmitBtn.disabled = verifyCodeInput.value.length !== 6; // код всегда ровно 6 цифр (generateVerificationCode на сервере)
   });
 
   verifyResendBtn.addEventListener('click', ()=>{
@@ -2846,7 +2847,7 @@ body{
     } catch(e){
       verifyError.textContent = e.message;
     } finally{
-      verifySubmitBtn.disabled = verifyCodeInput.value.length < 4;
+      verifySubmitBtn.disabled = verifyCodeInput.value.length !== 6; // код всегда ровно 6 цифр (generateVerificationCode на сервере)
       verifySubmitBtn.textContent='Подтвердить';
     }
   });
