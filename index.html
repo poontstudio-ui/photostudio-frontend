@@ -2061,13 +2061,26 @@ body{
     return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
   }
 
+  // Лента дат прокручивается к выбранному дню. Без этого после прыжка
+  // слайдером месяцев (выбирается 1 число) лента оставалась прокрученной
+  // туда, где её бросило прошлое окно, и активный чип был за экраном —
+  // выглядело так, будто день не выбран вовсе. scrollIntoView не подходит:
+  // он тянет за собой вертикальную прокрутку страницы.
+  function scrollChipIntoView(row, chip){
+    if(!row || !chip) return;
+    const target = chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2;
+    row.scrollLeft = Math.max(0, Math.min(target, row.scrollWidth - row.clientWidth));
+  }
+
   function renderDates(){
     const row = document.getElementById('dateRow');
     row.innerHTML='';
+    let activeChip = null;
     state.dates.forEach((d,i)=>{
       const chip=document.createElement('div');
       chip.className='date-chip';
       chip.dataset.active=(i===state.dateIndex).toString();
+      if(i===state.dateIndex) activeChip = chip;
       chip.innerHTML=`
         <div class="date-day">${DAY_NAMES[d.getDay()]}</div>
         <div class="date-num">${d.getDate()}</div>
@@ -2082,13 +2095,14 @@ body{
       });
       row.appendChild(chip);
     });
+    scrollChipIntoView(row, activeChip);
   }
 
-  // Слайдер месяцев: перепрыгивает окно дат (state.dates, те же 14 дней, что
-  // и обычная лента) на выбранный месяц — текущий месяц по-прежнему считает
-  // от сегодня, будущие месяцы всегда с 1 числа. Активный чип определяем по
-  // тому, где сейчас начинается state.dates, а не по дню недели внутри —
-  // клик по дню в date-row месяц не переключает.
+  // Слайдер месяцев: перепрыгивает окно дат (state.dates — все дни до конца
+  // выбранного месяца, см. buildDatesForMonthWindow) на выбранный месяц:
+  // текущий месяц считает от сегодня, будущие — всегда с 1 числа. Активный
+  // чип определяем по тому, где сейчас начинается state.dates, а не по дню
+  // недели внутри — клик по дню в date-row месяц не переключает.
   function renderMonths(){
     const row = document.getElementById('monthRow');
     if(!row) return;
