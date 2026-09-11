@@ -1505,7 +1505,7 @@ body{
   </div>
   <div class="field">
     <label for="noteInput">Комментарий (необязательно)</label>
-    <textarea id="noteInput" placeholder="Например: своя аппаратура, состав 4 человека"></textarea>
+    <textarea id="noteInput" maxlength="300" placeholder="Например: своя аппаратура, состав 4 человека"></textarea>
   </div>
   <button class="btn-primary" id="confirmBtn" disabled>Подтвердить бронь</button>
   <div class="offer-note">Отправляя форму, вы соглашаетесь с офертой.</div>
@@ -2566,6 +2566,7 @@ body{
   const panel=document.getElementById('panel');
   const nameInput=document.getElementById('nameInput');
   const phoneInput=document.getElementById('phoneInput');
+  const noteInput=document.getElementById('noteInput');
   const confirmBtn=document.getElementById('confirmBtn');
   const verifyPanel=document.getElementById('verifyPanel');
   const verifyHint=document.getElementById('verifyHint');
@@ -2781,6 +2782,7 @@ body{
         equipment: state.equipment.slice(),
         name: nameInput.value.trim(),
         phone: phoneInput.value.trim(),
+        comment: noteInput.value.trim() || undefined,
         packageHours: state.packageHours != null ? state.packageHours : undefined,
         // Откуда пришёл клиент: 'catalog' — выбрал студию в каталоге платформы,
         // 'direct' — попал по прямой ссылке студии (deep link / ?tenant=).
@@ -3049,7 +3051,7 @@ body{
   document.getElementById('bookAnotherBtn').addEventListener('click', ()=>{
     state.people=1;
     clearSelection();
-    document.getElementById('noteInput').value='';
+    noteInput.value='';
     validateForm();
     document.getElementById('successView').dataset.visible='false';
     document.getElementById('mainView').dataset.hidden='false';
