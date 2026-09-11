@@ -192,6 +192,37 @@ body{
   color:var(--muted);
 }
 
+/* ---------- Month strip — прыжок на более позднюю дату, тот же приём
+   горизонтального скролла, что и у date-row, только чипы компактнее ---------- */
+.month-row{
+  display:flex;
+  gap:6px;
+  overflow-x:auto;
+  padding-bottom:8px;
+  margin-bottom:2px;
+  scrollbar-width:none;
+}
+.month-row::-webkit-scrollbar{display:none;}
+.month-chip{
+  flex:0 0 auto;
+  padding:6px 13px;
+  border-radius:50px;
+  border:1px solid var(--line);
+  background:var(--surface);
+  color:var(--muted);
+  font-size:12px;
+  font-weight:500;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:border-color .15s ease, background .15s ease, color .15s ease;
+}
+.month-chip[data-active="true"]{
+  border-color:var(--amber);
+  background:var(--surface-raised);
+  color:var(--text);
+  font-weight:600;
+}
+
 /* ---------- Date strip ---------- */
 .date-row{
   display:flex;
@@ -1310,6 +1341,7 @@ body{
 
     <div class="section" id="dateSection">
       <div class="section-label">Дата</div>
+      <div class="month-row" id="monthRow"></div>
       <div class="date-row" id="dateRow"></div>
     </div>
 
@@ -1954,14 +1986,32 @@ body{
 
   // Дни отсчитываем от «сегодня в Минске», а не от даты устройства: иначе
   // ночью (00:00–03:00) первый чип — уже вчерашний день.
-  function buildDates(n){
+  function buildDatesFrom(start, n){
     const out=[];
-    const today=businessToday();
     for(let i=0;i<n;i++){
-      const d=new Date(today);
-      d.setDate(today.getDate()+i);
+      const d=new Date(start);
+      d.setDate(start.getDate()+i);
       out.push(d);
     }
+    return out;
+  }
+  function buildDates(n){ return buildDatesFrom(businessToday(), n); }
+
+  // Слайдер месяцев над датами (см. renderMonths) — чтобы добраться до брони
+  // позже, чем на 14 дней вперёд, без ручного пролистывания. Бэкенд дальность
+  // брони не ограничивает вообще — только эта клиентская лента дат была
+  // жёстко на 14 дней от сегодня.
+  const MONTHS_AHEAD = 12;
+  function monthLabel(d, includeYear){
+    let s = d.toLocaleDateString('ru-RU', {month:'short'}).replace(/\.$/, '');
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+    if(includeYear) s += " '" + String(d.getFullYear()).slice(2);
+    return s;
+  }
+  function buildMonthOptions(n){
+    const today = businessToday();
+    const out = [];
+    for(let i=0;i<n;i++) out.push(new Date(today.getFullYear(), today.getMonth()+i, 1));
     return out;
   }
 
@@ -2027,6 +2077,37 @@ body{
     });
   }
 
+  // Слайдер месяцев: перепрыгивает окно дат (state.dates, те же 14 дней, что
+  // и обычная лента) на выбранный месяц — текущий месяц по-прежнему считает
+  // от сегодня, будущие месяцы всегда с 1 числа. Активный чип определяем по
+  // тому, где сейчас начинается state.dates, а не по дню недели внутри —
+  // клик по дню в date-row месяц не переключает.
+  function renderMonths(){
+    const row = document.getElementById('monthRow');
+    if(!row) return;
+    const months = buildMonthOptions(MONTHS_AHEAD);
+    const today = businessToday();
+    const anchor = state.dates[0];
+    row.innerHTML='';
+    months.forEach((m, i)=>{
+      const chip=document.createElement('div');
+      chip.className='month-chip';
+      const isActive = anchor && anchor.getFullYear()===m.getFullYear() && anchor.getMonth()===m.getMonth();
+      chip.dataset.active = isActive.toString();
+      chip.textContent = monthLabel(m, m.getFullYear() !== today.getFullYear());
+      chip.addEventListener('click', ()=>{
+        if(isActive) return;
+        haptic('light');
+        state.dates = buildDatesFrom(i===0 ? today : m, 14);
+        state.dateIndex = 0;
+        clearSelection();
+        renderAll();
+        refreshGrid();
+      });
+      row.appendChild(chip);
+    });
+  }
+
   function renderPeople(){
     const cap = currentHall().capacity;
     if(state.people > cap) state.people = cap;
@@ -2072,9 +2153,13 @@ body{
     }
     const hall = gridHall();
     if(!hall) return [];
-    return state.dates.slice(0, GRID_DAYS).map((d,i) => ({
+    // today — фактическое сегодня, а не «первый видимый столбец»: при
+    // прыжке слайдером месяцев на будущий месяц первый столбец — 1 число,
+    // не сегодня (было i===0, ломалось именно на этом сценарии).
+    const todayKey = dateKey(businessToday());
+    return state.dates.slice(0, GRID_DAYS).map((d) => ({
       key:dateKey(d), hall, date:d,
-      label:DAY_NAMES[d.getDay()], sub:String(d.getDate()), today:i===0,
+      label:DAY_NAMES[d.getDay()], sub:String(d.getDate()), today:dateKey(d)===todayKey,
     }));
   }
 
@@ -2216,7 +2301,12 @@ body{
   function renderGrid(){
     const cols = gridColumns();
     const { start, end } = gridSlotRange();
-    document.getElementById('dateSection').style.display = gridMode()==='halls' ? '' : 'none';
+    // Месяц-слайдер нужен в обоих режимах сетки — он двигает окно
+    // state.dates, а не только ленту дат. Ленту дней (dateRow) прячем в
+    // режиме 'days': там дни уже показаны столбцами самой сетки.
+    const hasHalls = HALLS.length > 0;
+    document.getElementById('dateSection').style.display = hasHalls ? '' : 'none';
+    document.getElementById('dateRow').style.display = (hasHalls && gridMode()==='halls') ? '' : 'none';
     if(!cols.length || end <= start){
       gridHeadEl.innerHTML = '';
       gridHeadWrap.style.display = 'none';
@@ -2554,6 +2644,7 @@ body{
     applyHallMode();
     renderHallCards();
     renderHallInfo();
+    renderMonths();
     renderDates();
     renderGrid();
     renderPeople();
@@ -3404,7 +3495,11 @@ body{
     document.getElementById('statRevenue').textContent=overview.stats.revenue;
     document.getElementById('statAvg').textContent=overview.stats.avgCheck;
 
-    const totalSlotsWeek=state.dates.slice(0,7)
+    // Именно «сегодня + 7 дней», а не state.dates.slice(0,7) — то окно
+    // сдвигается слайдером месяцев на клиентской сетке дат и не должно
+    // влиять на статистику владельца («Занятость за 7 дней» всегда от
+    // реального сегодня, bookedHoursWeek ниже тоже считает от Date.now()).
+    const totalSlotsWeek=buildDatesFrom(businessToday(), 7)
       .reduce((sum,d)=>{ const w=dayWindow(d); return sum + Math.max(0, w.end-w.start); }, 0);
     const bookedHoursWeek=active.filter(b=>{
       const diffDays=Math.floor((Date.now()-new Date(b.date+'T00:00:00').getTime())/86400000);
