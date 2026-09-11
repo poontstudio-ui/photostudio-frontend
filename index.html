@@ -2900,6 +2900,7 @@ body{
       let data=null; try{ data = await res.json(); }catch(e){}
       if(!res.ok) throw new Error((data && data.error) || 'Неверный код');
       setPhoneToken(data.token);
+      updateAuthUI(); // сессия появилась независимо от повода — шапка должна знать сразу, не только при самостоятельном входе
       haptic('medium');
       hideVerifyStep();
       if(verifyPurpose === 'booking'){
@@ -2907,7 +2908,6 @@ body{
         await submitBooking();
       } else {
         overlay.dataset.open='false';
-        updateAuthUI();
       }
     } catch(e){
       verifyError.textContent = e.message;
