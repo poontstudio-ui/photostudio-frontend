@@ -1843,7 +1843,7 @@ body{
     }
     _studioMapDrawn = false;
     // Дни считаем от «сегодня в студии» — пересобираем после смены таймзоны.
-    state.dates = buildDates(14);
+    state.dates = buildDatesForMonthWindow(businessToday());
     state.dateIndex = 0;
     state.packageHours = null;
     openHallId = null;
@@ -1995,12 +1995,19 @@ body{
     }
     return out;
   }
-  function buildDates(n){ return buildDatesFrom(businessToday(), n); }
+  function daysInMonth(year, month){ return new Date(year, month+1, 0).getDate(); }
 
   // Слайдер месяцев над датами (см. renderMonths) — чтобы добраться до брони
-  // позже, чем на 14 дней вперёд, без ручного пролистывания. Бэкенд дальность
-  // брони не ограничивает вообще — только эта клиентская лента дат была
-  // жёстко на 14 дней от сегодня.
+  // позже 14 дней вперёд без ручного пролистывания. Бэкенд дальность брони
+  // не ограничивает вообще. Окно должно вмещать ВСЕ дни выбранного месяца
+  // (иначе в режиме 'halls' дата-лента обрывается на середине месяца) — но
+  // не короче GRID_DAYS, иначе сетке в режиме 'days' элементарно нечем
+  // заполнить 7 колонок у конца месяца. Берём максимум из двух.
+  function buildDatesForMonthWindow(anchorDate){
+    const remaining = daysInMonth(anchorDate.getFullYear(), anchorDate.getMonth()) - anchorDate.getDate() + 1;
+    return buildDatesFrom(anchorDate, Math.max(remaining, GRID_DAYS));
+  }
+
   const MONTHS_AHEAD = 12;
   function monthLabel(d, includeYear){
     let s = d.toLocaleDateString('ru-RU', {month:'short'}).replace(/\.$/, '');
@@ -2017,7 +2024,7 @@ body{
 
   const state = {
     dateIndex: 0,
-    dates: buildDates(14),
+    dates: buildDatesForMonthWindow(businessToday()),
     startMinutes: 12*60, // по умолчанию 12:00
     durationHours: 1,
     people: 1,
@@ -2098,7 +2105,7 @@ body{
       chip.addEventListener('click', ()=>{
         if(isActive) return;
         haptic('light');
-        state.dates = buildDatesFrom(i===0 ? today : m, 14);
+        state.dates = buildDatesForMonthWindow(i===0 ? today : m);
         state.dateIndex = 0;
         clearSelection();
         renderAll();
