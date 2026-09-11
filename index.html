@@ -1492,6 +1492,23 @@ body{
   <button class="btn-ghost" id="cancelBtn">Назад</button>
 </div>
 
+<!-- Вне Telegram бронь подтверждается кодом на телефон (план «Телефон
+     вместо Telegram», Ф1) — только при первой брони с этого устройства,
+     дальше сессия хранится в localStorage. Шаг 2 формы брони, не отдельный
+     сценарий «регистрации». -->
+<div class="panel" id="verifyPanel">
+  <div class="panel-title">Подтвердите номер</div>
+  <div class="save-note" id="verifyHint" style="color:var(--muted)"></div>
+  <div class="field">
+    <label for="verifyCodeInput">Код из Telegram или SMS</label>
+    <input id="verifyCodeInput" type="tel" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code">
+  </div>
+  <button class="btn-primary" id="verifySubmitBtn" disabled>Подтвердить</button>
+  <div class="save-note" id="verifyError" style="color:var(--red)"></div>
+  <button class="btn-ghost" id="verifyResendBtn">Отправить код ещё раз</button>
+  <button class="btn-ghost" id="verifyBackBtn">Назад</button>
+</div>
+
 <div class="panel" id="cancelPanel">
   <div class="panel-title">Отменить бронь?</div>
   <div class="cancel-panel-text" id="cancelPanelText"></div>
@@ -1613,8 +1630,22 @@ body{
     });
   }
 
+  // Телефонная сессия (план «Телефон вместо Telegram», Ф1) — тот же Bearer-
+  // токен, что кабинет получает от Login Widget, только выданный по коду из
+  // /api/verify/check. Хранится на устройстве — код спрашиваем только при
+  // первой брони, не при каждой.
+  const PHONE_TOKEN_KEY = 'ps_phone_session';
+  function getPhoneToken(){ try{ return localStorage.getItem(PHONE_TOKEN_KEY) || ''; }catch(e){ return ''; } }
+  function setPhoneToken(token){ try{ localStorage.setItem(PHONE_TOKEN_KEY, token); }catch(e){} }
+  function clearPhoneToken(){ try{ localStorage.removeItem(PHONE_TOKEN_KEY); }catch(e){} }
+
+  // В Telegram — initData как раньше. Вне Telegram — телефонная сессия, если
+  // уже подтверждали номер на этом устройстве; иначе запрос уйдёт без
+  // авторизации и получит 401 (обработка — ниже).
   function authHeaders(){
-    return { 'X-Telegram-Init-Data': (tg && tg.initData) ? tg.initData : '' };
+    if(tg && tg.initData) return { 'X-Telegram-Init-Data': tg.initData };
+    const pt = getPhoneToken();
+    return pt ? { 'Authorization': 'Bearer ' + pt } : {};
   }
 
   // tenantId по умолчанию — текущая студия; передаётся явно для операций над
@@ -1631,8 +1662,11 @@ body{
     let data = null;
     try{ data = await res.json(); }catch(e){}
     if(!res.ok){
+      // Протухшая/отозванная телефонная сессия — забываем её, чтобы следующая
+      // попытка сама предложила подтвердить номер заново, а не билась в 401.
+      if(res.status===401 && !(tg && tg.initData)) clearPhoneToken();
       const message = res.status===401
-        ? 'Откройте мини-апп через кнопку бота в Telegram — вне Telegram авторизация недоступна.'
+        ? (tg ? 'Откройте мини-апп через кнопку бота в Telegram.' : 'Сессия истекла — подтвердите номер ещё раз.')
         : (data && data.error) ? data.error : 'Не удалось выполнить запрос ('+res.status+').';
       throw new Error(message);
     }
@@ -2489,6 +2523,13 @@ body{
   const nameInput=document.getElementById('nameInput');
   const phoneInput=document.getElementById('phoneInput');
   const confirmBtn=document.getElementById('confirmBtn');
+  const verifyPanel=document.getElementById('verifyPanel');
+  const verifyHint=document.getElementById('verifyHint');
+  const verifyCodeInput=document.getElementById('verifyCodeInput');
+  const verifySubmitBtn=document.getElementById('verifySubmitBtn');
+  const verifyError=document.getElementById('verifyError');
+  const verifyResendBtn=document.getElementById('verifyResendBtn');
+  const verifyBackBtn=document.getElementById('verifyBackBtn');
 
   // Блокировка прокрутки фона, пока открыта любая модалка (overlay). iOS/Telegram
   // WebView не держит скролл body просто через overflow:hidden — нужен
@@ -2671,12 +2712,11 @@ body{
     saveDraftField(CLOUD_KEY_NAME, nameInput.value.trim());
   });
 
-  confirmBtn.addEventListener('click', async ()=>{
-    if(confirmBtn.disabled) return;
-    haptic('heavy');
+  const confirmErrorNote=document.getElementById('confirmError');
+
+  async function submitBooking(){
     const start=state.startMinutes, end=state.startMinutes+Math.round(state.durationHours*60);
-    const errorNote=document.getElementById('confirmError');
-    errorNote.textContent='';
+    confirmErrorNote.textContent='';
     confirmBtn.disabled=true;
     confirmBtn.textContent='Отправка…';
 
@@ -2714,12 +2754,115 @@ body{
       document.getElementById('successView').dataset.visible='true';
       if(tg && tg.MainButton){ tg.MainButton.hide(); }
     } catch(e){
-      errorNote.textContent=e.message;
+      confirmErrorNote.textContent=e.message;
       refreshGrid();
     } finally{
       confirmBtn.disabled=false;
       confirmBtn.textContent='Подтвердить бронь';
     }
+  }
+
+  // ---- Подтверждение номера вне Telegram (план «Телефон вместо Telegram», Ф1) ----
+  // Шаг 2 той же формы: имя/телефон уже введены, дальше — код. Один раз на
+  // устройство — сессия из /verify/check оседает в localStorage, следующие
+  // брони её просто переиспользуют (см. authHeaders/getPhoneToken выше).
+  function toE164Phone(){ return '+375' + digitsAfterPrefix(phoneInput.value); }
+
+  async function requestVerifyCode(){
+    const res = await fetch(API_BASE + '/api/verify/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ phone: toE164Phone() }),
+    });
+    let data=null; try{ data = await res.json(); }catch(e){}
+    if(!res.ok) throw new Error((data && data.error) || 'Не удалось отправить код');
+    return data;
+  }
+
+  let verifyResendAt = 0, verifyResendTimer = null;
+  function tickResendCooldown(){
+    clearTimeout(verifyResendTimer);
+    const left = Math.ceil((verifyResendAt - Date.now())/1000);
+    if(left > 0){
+      verifyResendBtn.disabled = true;
+      verifyResendBtn.textContent = `Отправить код ещё раз (${left})`;
+      verifyResendTimer = setTimeout(tickResendCooldown, 1000);
+    } else {
+      verifyResendBtn.disabled = false;
+      verifyResendBtn.textContent = 'Отправить код ещё раз';
+    }
+  }
+  function startResendCooldown(sec){ verifyResendAt = Date.now() + sec*1000; tickResendCooldown(); }
+
+  function showVerifyStep(){
+    panel.dataset.open='false';
+    verifyCodeInput.value='';
+    verifyError.textContent='';
+    verifySubmitBtn.disabled=true;
+    verifyHint.textContent = 'Код придёт в Telegram или SMS на ' + phoneInput.value.trim();
+    verifyPanel.dataset.open='true';
+    requestVerifyCode()
+      .then(()=>startResendCooldown(60))
+      .catch(e=>{ verifyError.textContent = e.message; });
+  }
+  function hideVerifyStep(){
+    verifyPanel.dataset.open='false';
+    clearTimeout(verifyResendTimer);
+  }
+
+  verifyCodeInput.addEventListener('input', ()=>{
+    verifyCodeInput.value = verifyCodeInput.value.replace(/\D/g,'').slice(0,6);
+    verifySubmitBtn.disabled = verifyCodeInput.value.length < 4;
+  });
+
+  verifyResendBtn.addEventListener('click', ()=>{
+    if(verifyResendBtn.disabled) return;
+    verifyError.textContent='';
+    requestVerifyCode().then(()=>startResendCooldown(60)).catch(e=>{ verifyError.textContent = e.message; });
+  });
+
+  verifyBackBtn.addEventListener('click', ()=>{
+    haptic('light');
+    hideVerifyStep();
+    panel.dataset.open='true';
+  });
+
+  verifySubmitBtn.addEventListener('click', async ()=>{
+    if(verifySubmitBtn.disabled) return;
+    verifyError.textContent='';
+    verifySubmitBtn.disabled=true;
+    verifySubmitBtn.textContent='Проверяем…';
+    try{
+      const res = await fetch(API_BASE + '/api/verify/check', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ phone: toE164Phone(), code: verifyCodeInput.value.trim() }),
+      });
+      let data=null; try{ data = await res.json(); }catch(e){}
+      if(!res.ok) throw new Error((data && data.error) || 'Неверный код');
+      setPhoneToken(data.token);
+      haptic('medium');
+      hideVerifyStep();
+      panel.dataset.open='true';
+      await submitBooking();
+    } catch(e){
+      verifyError.textContent = e.message;
+    } finally{
+      verifySubmitBtn.disabled = verifyCodeInput.value.length < 4;
+      verifySubmitBtn.textContent='Подтвердить';
+    }
+  });
+
+  confirmBtn.addEventListener('click', async ()=>{
+    if(confirmBtn.disabled) return;
+    haptic('heavy');
+    confirmErrorNote.textContent='';
+    // Вне Telegram и без сохранённой телефонной сессии — сперва код, бронь
+    // отправляем уже из verifySubmitBtn выше. Иначе (в Telegram, или уже
+    // подтверждали номер на этом устройстве) — сразу как раньше.
+    if(!(tg && tg.initData) && !getPhoneToken()){
+      showVerifyStep();
+      return;
+    }
+    await submitBooking();
   });
 
   document.getElementById('bookAnotherBtn').addEventListener('click', ()=>{
