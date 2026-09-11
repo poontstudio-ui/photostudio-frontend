@@ -1348,11 +1348,30 @@ body{
     <button class="btn-primary" style="max-width:220px" id="bookAnotherBtn">Назад</button>
   </div>
 
+  <!-- Экран завершения привязки Telegram (Ф2 плана «Телефон вместо Telegram»,
+       см. link_ в startapp) — отдельный от successView, чтобы не путать
+       «бронь подтверждена» и «Telegram привязан», хотя визуально тот же
+       success-паттерн. Показывается вместо всего обычного boot() целиком —
+       для привязки студия/каталог не нужны вообще. -->
+  <div class="success-view" id="linkTelegramView">
+    <div class="success-ring" id="linkTelegramRing">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 12.5L9.5 18L20 6" stroke="#E8A33D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="success-title" id="linkTelegramTitle">Привязываем…</div>
+    <div class="success-detail" id="linkTelegramDetail"></div>
+    <button class="btn-primary" style="max-width:220px" id="linkTelegramCloseBtn" hidden>Готово</button>
+  </div>
+
   <div class="bookings-view" id="bookingsView">
     <div class="bookings-header">
       <button class="back-btn" id="bookingsBackBtn" type="button">←</button>
       <div class="bookings-title">Мои брони</div>
     </div>
+    <!-- Видна, только пока у телефонного аккаунта нет своего Telegram —
+         предлагать привязку внутри «Мои брони» логичнее, чем захламлять
+         шапку ещё одной постоянной кнопкой (см. Ф2 плана). -->
+    <button class="header-link" id="linkTelegramPromptBtn" type="button" hidden
+      style="margin:0 16px 12px;display:inline-block">Привязать Telegram — бесплатные уведомления</button>
     <div class="bookings-list" id="bookingsList"></div>
   </div>
 
@@ -1618,10 +1637,18 @@ body{
     const id = m ? m[1] : String(raw);
     return /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null;
   }
-  let TENANT_ID = params.get('tenant')
+  // Диплинк привязки Telegram (план «Телефон вместо Telegram», Ф2):
+  // startapp=link_<packedToken> — отдельная ветка загрузки, студия тут ни
+  // при чём вообще. Проверяем ДО parseStudioParam ниже — без этого длинный
+  // токен просто отсеялся бы лимитом в 64 символа и тихо не сработал бы,
+  // а короткий мог бы случайно сойти за tenant id.
+  const RAW_STARTAPP = params.get('startapp') || (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || '';
+  const LINK_TOKEN_MATCH = /^link_([A-Za-z0-9_-]+)$/.exec(RAW_STARTAPP);
+  const LINK_TOKEN = LINK_TOKEN_MATCH ? LINK_TOKEN_MATCH[1] : null;
+  let TENANT_ID = LINK_TOKEN ? null : (params.get('tenant')
     || parseStudioParam(params.get('startapp'))
     || parseStudioParam(tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param)
-    || null;
+    || null);
 
   // Встраивание в кабинет владельца (?embed=admin, см. «+ Бронь» в
   // studio.html): здесь нет ни Telegram initData, ни его сессии — только
@@ -2554,6 +2581,7 @@ body{
   const loginCancelBtn=document.getElementById('loginCancelBtn');
   const authBtn=document.getElementById('authBtn');
   const catalogAuthBtn=document.getElementById('catalogAuthBtn');
+  const linkTelegramPromptBtn=document.getElementById('linkTelegramPromptBtn');
 
   // Блокировка прокрутки фона, пока открыта любая модалка (overlay). iOS/Telegram
   // WebView не держит скролл body просто через overflow:hidden — нужен
@@ -2943,6 +2971,10 @@ body{
       btn.hidden = !show;
       btn.textContent = loggedIn ? 'Выйти' : 'Войти';
     });
+    // Привязать Telegram есть смысл предлагать, только пока сам номер уже
+    // подтверждён (иначе нечего привязывать) и мы вне Telegram (иначе он и
+    // так уже канал по умолчанию — привязывать нечего).
+    if(linkTelegramPromptBtn) linkTelegramPromptBtn.hidden = !(show && loggedIn);
   }
 
   function validateLoginPhone(){
@@ -2990,6 +3022,27 @@ body{
   authBtn.addEventListener('click', handleAuthClick);
   catalogAuthBtn.addEventListener('click', handleAuthClick);
   overlay.addEventListener('click', ()=>{ hideVerifyStep(); closeLoginPanel(); });
+
+  // «Привязать Telegram» (Ф2): дёргаем /api/link-telegram/start своей же
+  // телефонной Bearer-сессией (authHeaders её уже подставит), получаем
+  // t.me-ссылку с одноразовым (10 мин) токеном в startapp и уходим по ней —
+  // дальше это уже открывается В Telegram, страница здесь не при чём.
+  if(linkTelegramPromptBtn) linkTelegramPromptBtn.addEventListener('click', async ()=>{
+    haptic('light');
+    linkTelegramPromptBtn.disabled = true;
+    try{
+      const res = await fetch(API_BASE + '/api/link-telegram/start', {
+        method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()},
+      });
+      const data = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((data && data.error) || 'Не удалось создать ссылку привязки');
+      location.href = data.url;
+    } catch(e){
+      alert(e.message); // редкий путь, отдельной панели под это не заводили
+    } finally{
+      linkTelegramPromptBtn.disabled = false;
+    }
+  });
 
   updateAuthUI();
 
@@ -4087,6 +4140,43 @@ body{
     history.replaceState(null, '', u.toString());
   }
 
+  // Диплинк привязки Telegram (Ф2) — совершенно отдельная от обычной брони
+  // ветка: студия/каталог тут ни при чём, поэтому не заходим в boot() вовсе.
+  // Срабатывает, только когда реально открыты В Telegram (иначе initData
+  // нет и подтвердить личность нечем — тогда просто тихо уходим в обычный
+  // boot(), ссылка была открыта по ошибке не в том месте).
+  async function completeTelegramLink(){
+    document.getElementById('loadingScreen').style.display='none';
+    document.getElementById('linkTelegramView').dataset.visible='true';
+    const ring = document.getElementById('linkTelegramRing');
+    const title = document.getElementById('linkTelegramTitle');
+    const detail = document.getElementById('linkTelegramDetail');
+    const closeBtn = document.getElementById('linkTelegramCloseBtn');
+    try{
+      const res = await fetch(API_BASE + '/api/link-telegram', {
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'X-Telegram-Init-Data': tg.initData},
+        body: JSON.stringify({ token: LINK_TOKEN }),
+      });
+      const data = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((data && data.error) || 'Не удалось привязать Telegram');
+      haptic('medium');
+      title.textContent = 'Telegram привязан';
+      detail.textContent = data.alreadyLinked
+        ? 'Этот Telegram уже был привязан к вашему аккаунту.'
+        : 'Теперь уведомления о бронях приходят сюда — бесплатно и мгновенно.';
+    } catch(e){
+      ring.style.borderColor = 'var(--red)';
+      title.textContent = 'Не получилось привязать';
+      detail.textContent = e.message;
+    } finally{
+      closeBtn.hidden = false;
+    }
+  }
+  document.getElementById('linkTelegramCloseBtn').addEventListener('click', ()=>{
+    if(tg && tg.close) tg.close();
+  });
+
   async function boot(){
     // В ветке студии платформенный конфиг не запрашиваем: ключ карт приходит
     // в /t/:id/config (см. applyTenantConfig). В каталоге тенанта нет —
@@ -4100,7 +4190,7 @@ body{
                   : (ALL_CITIES.length ? ALL_CITIES[0].city : null);
     if(initial){ selectCity(initial); } else { renderStudios(null); }
   }
-  boot();
+  if(LINK_TOKEN && tg && tg.initData){ completeTelegramLink(); } else { boot(); }
 })();
 </script>
 
