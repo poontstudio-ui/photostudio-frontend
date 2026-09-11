@@ -38,6 +38,10 @@
   --muted:#5a5f68;
   --muted-dim:#8a9099;
   --radius:12px;
+  /* мягкий акцент для выбранного — тот же визуал сетки, что в кабинете
+     владельца (studio.html): выбор — заливка, а не сплошной синий с рамкой */
+  --accent-soft:#eaf2fe;
+  --sel-fill:#d4e5fd;
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -207,19 +211,18 @@ body{
   flex:0 0 auto;
   padding:6px 13px;
   border-radius:50px;
-  border:1px solid var(--line);
-  background:var(--surface);
+  border:none;
+  background:none;
   color:var(--muted);
-  font-size:12px;
+  font-size:13px;
   font-weight:500;
   white-space:nowrap;
   cursor:pointer;
-  transition:border-color .15s ease, background .15s ease, color .15s ease;
+  transition:background .15s ease, color .15s ease;
 }
 .month-chip[data-active="true"]{
-  border-color:var(--amber);
-  background:var(--surface-raised);
-  color:var(--text);
+  background:var(--accent-soft);
+  color:var(--amber-strong);
   font-weight:600;
 }
 
@@ -234,19 +237,16 @@ body{
 .date-row::-webkit-scrollbar{display:none;}
 .date-chip{
   flex:0 0 auto;
-  width:52px;
+  width:50px;
   padding:10px 0;
-  border-radius:50px;
-  border:1px solid var(--line);
-  background:var(--surface);
+  border-radius:16px;
+  border:none;
+  background:none;
   text-align:center;
   cursor:pointer;
-  transition:border-color .15s ease, background .15s ease;
+  transition:background .15s ease;
 }
-.date-chip[data-active="true"]{
-  border-color:var(--amber);
-  background:var(--surface-raised);
-}
+.date-chip[data-active="true"]{background:var(--accent-soft);}
 .date-day{
   font-size:10px;
   color:var(--muted);
@@ -259,7 +259,7 @@ body{
   font-size:15px;
   font-weight:600;
 }
-.date-chip[data-active="true"] .date-num{color:var(--amber);}
+.date-chip[data-active="true"] .date-num{color:var(--amber-strong);}
 
 /* ---------- Steppers (live in the sticky bottom bar) ---------- */
 .stepper{
@@ -947,7 +947,9 @@ body{
   left:0;
   z-index:2;
   background:var(--bg);
-  box-shadow:4px 0 0 var(--bg);   /* закрывает gap справа от колонки */
+  /* закрывает зазоры сетки справа и сверху/снизу — иначе уехавший под
+     колонку прямоугольник занятости просвечивает в щелях */
+  box-shadow:4px 0 0 var(--bg), 0 -2px 0 var(--bg), 0 2px 0 var(--bg);
   font-family:var(--f-mono);
   font-size:10px;
   color:var(--muted-dim);
@@ -961,10 +963,21 @@ body{
   height:38px;
   border-radius:6px;
   background:var(--surface);
-  border:1px solid var(--line);
   cursor:pointer;
 }
-.grid-cell[data-state="busy"]{background:var(--red-dim);border-color:#f0c9c9;cursor:not-allowed;}
+/* Занятое время рисует .grid-busy — один сплошной прямоугольник на подряд
+   идущие занятые слоты (как в кабинете владельца), а не заливка каждой
+   клетки. Сама клетка под ним прозрачная. */
+.grid-cell[data-state="free"]:active{background:var(--surface-raised);}
+@media (hover:hover){ .grid-cell[data-state="free"]:hover{background:var(--surface-raised);} }
+.grid-cell[data-state="busy"]{background:none;cursor:not-allowed;}
+.grid-busy{
+  position:relative;
+  z-index:1;
+  border-radius:6px;
+  background:var(--red-dim);
+  pointer-events:none;
+}
 .grid-cell[data-state="past"],
 .grid-cell[data-state="closed"]{
   cursor:not-allowed;
@@ -972,7 +985,7 @@ body{
     rgba(20,22,28,0.05), rgba(20,22,28,0.05) 5px,
     rgba(20,22,28,0.015) 5px, rgba(20,22,28,0.015) 10px);
 }
-.grid-cell[data-sel="true"]{background:var(--amber);border-color:var(--amber);}
+.grid-cell[data-sel="true"]{background:var(--sel-fill);}
 .grid-cell[data-sel-first="true"]::after{
   content:attr(data-time);
   position:absolute;
@@ -981,7 +994,7 @@ body{
   font-family:var(--f-mono);
   font-size:11px;
   font-weight:600;
-  color:#fff;
+  color:var(--amber-strong);
   pointer-events:none;
 }
 .grid-empty{color:var(--muted);font-size:13px;padding:22px 4px;}
@@ -1356,7 +1369,7 @@ body{
       </div>
       <div class="timeline-legend">
         <span><span class="timeline-legend-dot" style="background:var(--red-dim)"></span>занято</span>
-        <span><span class="timeline-legend-dot" style="background:var(--amber)"></span>ваш выбор</span>
+        <span><span class="timeline-legend-dot" style="background:var(--sel-fill)"></span>ваш выбор</span>
       </div>
     </div>
 
@@ -2361,19 +2374,39 @@ body{
     }
     gridHeadEl.innerHTML = head;
 
+    // Каждому элементу — явные grid-row/grid-column: поверх клеток ложатся
+    // явно позиционированные .grid-busy, а смешение авто- и явной расстановки
+    // в одном гриде сдвигает авто-элементы (баг, пойманный в кабинете).
+    const states = cols.map(() => []);
     let html = '';
     for(let i=start; i<end; i++){
+      const row = i - start + 1;
       const label = minutesToLabel(i * SLOT_MIN);
-      html += `<div class="grid-hour">${label}</div>`;
-      for(const c of cols){
+      html += `<div class="grid-hour" style="grid-row:${row};grid-column:1">${label}</div>`;
+      cols.forEach((c, ci)=>{
         const st = cellState(c, i);
+        states[ci].push(st);
         const on = hasSelection() && sel.key===c.key && i>=sel.start && i<sel.end;
-        html += `<div class="grid-cell" data-col="${esc(c.key)}" data-slot="${i}" data-state="${st}"`
+        html += `<div class="grid-cell" style="grid-row:${row};grid-column:${ci+2}" data-col="${esc(c.key)}" data-slot="${i}" data-state="${st}"`
               + (on ? ' data-sel="true"' : '')
               + (on && i===sel.start ? ` data-sel-first="true" data-time="${label}"` : '')
               + '></div>';
-      }
+      });
     }
+    // Подряд идущие занятые слоты столбца — один прямоугольник. Клиенту чья
+    // это бронь не важно, поэтому соседние брони сливаются в одно «занято».
+    // Прошедшее время остаётся штриховкой (cellState отдаёт его как past).
+    states.forEach((col, ci)=>{
+      let runStart = -1;
+      for(let k=0; k<=col.length; k++){
+        const busy = k < col.length && col[k] === 'busy';
+        if(busy && runStart < 0) runStart = k;
+        if(!busy && runStart >= 0){
+          html += `<div class="grid-busy" style="grid-column:${ci+2};grid-row:${runStart+1} / ${k+1}"></div>`;
+          runStart = -1;
+        }
+      }
+    });
     gridEl.dataset.slotmin = String(SLOT_MIN);
     gridEl.innerHTML = html;
     // Шапка и тело — разные гриды, и max-content считает их по-разному
