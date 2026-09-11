@@ -2086,7 +2086,17 @@ body{
   function selectionValid(){
     if(!hasSelection()) return false;
     const col = gridColumns().find(c => c.key === sel.key);
-    return !!col && spanFree(col, sel.start, sel.end);
+    if(!col || !spanFree(col, sel.start, sel.end)) return false;
+    // Одна отмеченная клетка — ещё не бронь (ждём вторую точку промежутка),
+    // если только одной клетки уже не хватает на минимум окна.
+    return (sel.end - sel.start) >= minSlotsAt(col, sel.start);
+  }
+  // Выделение свободно и правильной длины, но короче минимума окна — значит
+  // это одиночная отмеченная клетка, ждущая второй точки промежутка.
+  function selectionPending(){
+    if(!hasSelection()) return false;
+    const col = gridColumns().find(c => c.key === sel.key);
+    return !!col && spanFree(col, sel.start, sel.end) && (sel.end - sel.start) < minSlotsAt(col, sel.start);
   }
 
   // Первая свободная клетка: по столбцам слева направо, внутри — снизу вверх по времени.
@@ -2101,18 +2111,19 @@ body{
     }
   }
 
-  // Тап: по соседней клетке — расширить, внутри выделения — схлопнуть до цели,
-  // иначе — новое выделение длиной в пакет / минимум окна (фазы B, C).
+  // Тап — две точки промежутка. Нет выделения (или другой столбец) — первый
+  // тап: отмечается только эта клетка. Тап вне текущего выделения, в том же
+  // столбце — второй тап: выделяется весь промежуток от старой отметки до
+  // этой клетки (в любую сторону). Тап ВНУТРИ текущего выделения — начинаем
+  // сначала: остаётся отмечена только эта клетка.
   function tapCell(colKey, slot){
-    const col = gridColumns().find(c => c.key === colKey);
-    const tgt = col ? targetSlotsAt(col, slot) : 1;
     if(sel.key === colKey && hasSelection()){
-      const len = sel.end - sel.start;
-      if(slot === sel.end     && len < maxSlots() && setSel(colKey, sel.start, slot+1)) return true;
-      if(slot === sel.start-1 && len < maxSlots() && setSel(colKey, slot, sel.end)) return true;
-      if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot + tgt);
+      if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot + 1);
+      const a = Math.min(sel.start, slot);
+      const b = Math.max(sel.end - 1, slot) + 1;
+      return setSel(colKey, a, b);
     }
-    return setSel(colKey, slot, slot + tgt);
+    return setSel(colKey, slot, slot + 1);
   }
 
   const gridHeadEl = document.getElementById('gridHead');
@@ -2446,7 +2457,9 @@ body{
     const rec=document.getElementById('recBtn');
 
     if(!selectionValid()){
-      bar.textContent = HALLS.length ? 'Выберите время на сетке' : 'Нет доступных залов';
+      bar.textContent = !HALLS.length ? 'Нет доступных залов'
+        : selectionPending() ? 'Отметьте вторую точку промежутка'
+        : 'Выберите время на сетке';
       total.textContent = '—';
       rec.dataset.enabled='false';
       return;
