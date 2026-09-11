@@ -2796,13 +2796,24 @@ body{
   let verifyPhoneDigits = '';      // 9 цифр после +375 — из формы брони или из loginPhoneInput
   function toE164Phone(){ return '+375' + verifyPhoneDigits; }
 
+  // Сервер знает точный остаток бакета (rateLimitRetryAfterSec) — кладёт его
+  // в тело 429 как retryAfterSec. Без этого клиент после неудачи не мог
+  // понять, сколько реально ждать, и кнопка «ещё раз» либо не блокировалась
+  // вовсе, либо зависала с числом от предыдущей, уже закрытой попытки
+  // (баг живого теста 2026-09-11: вышли, зашли снова той же кнопкой раньше
+  // минуты — сервер закономерно отказал повторной отправке, а кнопка так и
+  // осталась висеть с отсчётом от первой).
   async function requestVerifyCode(){
     const res = await fetch(API_BASE + '/api/verify/start', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ phone: toE164Phone() }),
     });
     let data=null; try{ data = await res.json(); }catch(e){}
-    if(!res.ok) throw new Error((data && data.error) || 'Не удалось отправить код');
+    if(!res.ok){
+      const err = new Error((data && data.error) || 'Не удалось отправить код');
+      if(data && Number.isFinite(data.retryAfterSec)) err.retryAfterSec = data.retryAfterSec;
+      throw err;
+    }
     return data;
   }
 
@@ -2820,6 +2831,22 @@ body{
     }
   }
   function startResendCooldown(sec){ verifyResendAt = Date.now() + sec*1000; tickResendCooldown(); }
+  // Нейтральное состояние кнопки — до того, как узнаем реальный отсчёт (или
+  // если его не будет вовсе, напр. сетевая ошибка — нет смысла блокировать).
+  function resetResendButton(){
+    clearTimeout(verifyResendTimer);
+    verifyResendAt = 0;
+    verifyResendBtn.disabled = false;
+    verifyResendBtn.textContent = 'Отправить код ещё раз';
+  }
+  // На ошибке — если сервер прислал retryAfterSec (уже отправляли этот
+  // номер недавно), показываем точный отсчёт; иначе не блокируем кнопку
+  // вообще, пусть пробуют сразу.
+  function handleVerifyStartError(e){
+    verifyError.textContent = e.message;
+    if(Number.isFinite(e.retryAfterSec) && e.retryAfterSec > 0) startResendCooldown(e.retryAfterSec);
+    else resetResendButton();
+  }
 
   function showVerifyStep(purpose, phoneDigits){
     verifyPurpose = purpose;
@@ -2831,14 +2858,15 @@ body{
     verifyError.textContent='';
     verifySubmitBtn.disabled=true;
     verifyHint.textContent = 'Код придёт в Telegram или SMS на ' + formatByPhone(toE164Phone());
+    resetResendButton(); // новая сессия входа — не тащим состояние от прошлой попытки/номера
     verifyPanel.dataset.open='true';
     requestVerifyCode()
       .then(()=>startResendCooldown(60))
-      .catch(e=>{ verifyError.textContent = e.message; });
+      .catch(handleVerifyStartError);
   }
   function hideVerifyStep(){
     verifyPanel.dataset.open='false';
-    clearTimeout(verifyResendTimer);
+    resetResendButton();
   }
 
   verifyCodeInput.addEventListener('input', ()=>{
@@ -2849,7 +2877,7 @@ body{
   verifyResendBtn.addEventListener('click', ()=>{
     if(verifyResendBtn.disabled) return;
     verifyError.textContent='';
-    requestVerifyCode().then(()=>startResendCooldown(60)).catch(e=>{ verifyError.textContent = e.message; });
+    requestVerifyCode().then(()=>startResendCooldown(60)).catch(handleVerifyStartError);
   });
 
   verifyBackBtn.addEventListener('click', ()=>{
