@@ -1122,7 +1122,10 @@ body{
 .overlay{
   position:fixed;
   inset:0;
-  background:rgba(10,8,6,0.6);
+  /* Тот же затемняющий фон, что у окон кабинета: был тёплый rgba(10,8,6,.6),
+     из-за чего одинаковые по смыслу окна в двух приложениях выглядели
+     по-разному. Метрики окна ниже — тоже общие. */
+  background:rgba(20,22,28,0.45);
   z-index:30;
   opacity:0;
   pointer-events:none;
@@ -1136,14 +1139,16 @@ body{
   bottom:0;
   transform:translate(-50%, 100%);
   width:100%;
-  max-width:430px;
+  max-width:420px;
   max-height:92vh;
   overflow-y:auto;
   overscroll-behavior:contain;
   background:var(--surface);
   border-top:1px solid var(--line);
   border-radius:var(--r-md) var(--r-md) 0 0;
-  padding:22px 20px 26px;
+  /* нижний отступ с учётом «подбородка» телефона — иначе кнопка в самом низу
+     шторки попадает под системную полосу жестов */
+  padding:20px 16px calc(22px + env(safe-area-inset-bottom));
   z-index:31;
   transition:transform .25s ease;
 }
