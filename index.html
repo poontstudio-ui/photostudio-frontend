@@ -3859,6 +3859,9 @@ body{
       overview = await api('GET', '/admin/overview');
     } catch(e){
       list.innerHTML='<div class="bookings-empty">'+esc(e.message)+'</div>';
+      // Кнопку надо вернуть в работу: её выключили перед загрузкой, и на этой
+      // ветке выхода она оставалась мёртвой до перезагрузки страницы.
+      document.getElementById('clearHistoryBtn').disabled=false;
       document.getElementById('statCount').textContent='—';
       document.getElementById('statRevenue').textContent='—';
       document.getElementById('statAvg').textContent='—';
