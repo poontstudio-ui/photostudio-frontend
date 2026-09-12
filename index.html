@@ -1476,11 +1476,11 @@ body{
         </div>
         <div class="stat-card">
           <div class="stat-value" id="statRevenue">0</div>
-          <div class="stat-label">Выручка, BYN</div>
+          <div class="stat-label">Выручка, <span class="cur-label">BYN</span></div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="statAvg">0</div>
-          <div class="stat-label">Средний чек, BYN</div>
+          <div class="stat-label">Средний чек, <span class="cur-label">BYN</span></div>
         </div>
         <div class="stat-card">
           <div class="stat-value" id="statOccupancy">0%</div>
@@ -1878,6 +1878,13 @@ body{
     STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
     STUDIO_BUFFER_MIN = Number.isInteger(cfg.bufferMin) ? cfg.bufferMin : 0;
     SLOT_MIN = cfg.slotStep === 30 ? 30 : 60;
+    // Валюта студии: подставляем и в динамические подписи (через CUR), и в
+    // статические ярлыки в разметке.
+    if(typeof cfg.currency === 'string' && cfg.currency){
+      CUR = cfg.currency;
+      document.querySelectorAll('.cur-label').forEach(e => { e.textContent = CUR; });
+      document.querySelectorAll('.cur-label-h').forEach(e => { e.textContent = CUR + '/ч'; });
+    }
     STUDIO_MIN_BOOKING_MIN = Number.isInteger(cfg.minBookingMin) ? cfg.minBookingMin : 60;
     STUDIO_LASTMINUTE = {
       enabled: !!(cfg.lastminute && cfg.lastminute.enabled),
@@ -1939,6 +1946,9 @@ body{
     return new Date(y, m-1, d);
   }
 
+  // Валюта студии: приходит в /config. Раньше «BYN» было зашито в разметку в
+  // двенадцати местах, и студия в другой валюте показывала бы чужие подписи.
+  let CUR = 'BYN';
   function currentHall(){
     return HALLS.find(h => h.id === state.hallId) || HALLS[0] || { name:'', capacity:1, rate:0 };
   }
@@ -2024,9 +2034,9 @@ body{
   // Подпись ставки зала в каталоге: с правилами точной цифры нет — «от N».
   function hallRateLabel(h){
     const rules = Array.isArray(h && h.priceRules) ? h.priceRules : [];
-    if(!rules.length) return h.rate + ' BYN/ч';
+    if(!rules.length) return h.rate + ' ' + CUR + '/ч';
     const lo = Math.min(h.rate, ...rules.map(r => r.rate));
-    return 'от ' + lo + ' BYN/ч';
+    return 'от ' + lo + ' ' + CUR + '/ч';
   }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
   const GRID_DAYS = 7;               // столбцов в режиме одного зала
@@ -2623,7 +2633,7 @@ body{
       list.map(p => {
         const on = state.packageHours != null && Math.abs(state.packageHours - p.hours) < 1e-9;
         return '<button class="pkg-chip" type="button" data-h="'+p.hours+'" data-active="'+on+'">' +
-          '<span>'+esc(pkgHoursLabel(p.hours))+'</span><b>'+esc(p.price)+' BYN</b></button>';
+          '<span>'+esc(pkgHoursLabel(p.hours))+'</span><b>'+esc(p.price)+' '+CUR+'</b></button>';
       }).join('') + '</div>';
     box.querySelectorAll('.pkg-chip').forEach(btn => btn.addEventListener('click', () => {
       const h = parseFloat(btn.dataset.h);
@@ -2744,7 +2754,7 @@ body{
     const col = gridColumns().find(c => c.key === sel.key);
     bar.textContent = `${col.hall.name} · ${col.date.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · `
       + `${minutesToLabel(sel.start*SLOT_MIN)}–${minutesToLabel(sel.end*SLOT_MIN)}`;
-    total.textContent = `${priceLabel()} BYN · ${durationLabel()}`
+    total.textContent = `${priceLabel()} ${CUR} · ${durationLabel()}`
       + (state.packageHours != null ? ' · пакет' : (lastMinuteActive() ? ` · −${STUDIO_LASTMINUTE.pct}%` : ''));
     rec.dataset.enabled='true';
   }
@@ -2836,7 +2846,7 @@ body{
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${durationLabel()}`;
     setShootingHint(endMinutes);
     renderPeople();   // вместимость зависит от зала — обновляем при открытии
-    document.getElementById('psPrice').textContent = `${priceLabel()} BYN`;
+    document.getElementById('psPrice').textContent = `${priceLabel()} ${CUR}`;
     overlay.dataset.open='true';
     panel.dataset.open='true';
   }
@@ -3011,7 +3021,7 @@ body{
         `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`+
         (equipLine ? `${esc(equipLine)}<br>` : '')+
         `${esc(nameInput.value.trim())} · ${esc(phoneInput.value.trim())}<br>`+
-        `Итого: ${esc(booking.price)} BYN`;
+        `Итого: ${esc(booking.price)} ${CUR}`;
 
       closePanel();
       document.getElementById('mainView').dataset.hidden='true';
@@ -3332,7 +3342,7 @@ body{
       </div>
       ${b.studioName ? '<div class="booking-studio">'+esc(b.studioName)+(b.studioCity ? ' · '+esc(b.studioCity) : '')+'</div>' : ''}
       ${isAdmin ? '<div class="admin-booking-owner">'+esc(b.name || 'Без имени')+'</div>' : ''}
-      <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} BYN</div>
+      <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} ${CUR}</div>
     `;
     const row=document.createElement('div');
     row.className='booking-card-actions';
@@ -3976,7 +3986,7 @@ body{
         </div>
         <div class="price-input-wrap">
           <input type="number" min="0" step="1" value="${esc(h.rate)}" data-idx="${i}" data-field="rate" aria-label="Ставка">
-          <span class="price-unit">BYN/ч</span>
+          <span class="price-unit cur-label-h">BYN/ч</span>
         </div>
         ${hallsDraft.length>1 ? `<button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Удалить зал">✕</button>` : ''}
       `;
@@ -4038,7 +4048,7 @@ body{
         </div>
         <div class="price-input-wrap">
           <input type="number" min="0" step="1" value="${esc(e.price)}" data-idx="${i}" data-field="price" aria-label="Цена">
-          <span class="price-unit">BYN</span>
+          <span class="price-unit cur-label">BYN</span>
         </div>
         <select class="equip-unit-sel" data-idx="${i}" data-field="unit">
           <option value="flat"${e.unit==='flat'?' selected':''}>за бронь</option>
@@ -4526,7 +4536,7 @@ body{
       el.className = 'search-result';
       el.innerHTML =
         '<div class="search-result-top"><span class="search-result-studio">'+esc(r.studioName)+'</span>'+
-          '<span class="search-result-price">'+esc(r.price)+' BYN</span></div>'+
+          '<span class="search-result-price">'+esc(r.price)+' '+CUR+'</span></div>'+
         (r.address ? '<div class="search-result-meta">'+esc(r.address)+'</div>' : '')+
         '<div class="search-result-hall">'+esc(r.hallName)+'</div>'+
         '<div class="search-result-meta">'+esc(props.join(' · '))+'</div>'+
