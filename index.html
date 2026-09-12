@@ -1199,6 +1199,13 @@ body{
   border-color:var(--amber);
 }
 .field textarea{resize:none;height:64px;}
+/* Safari на iPhone зумит страницу, когда фокус попадает в поле со шрифтом
+   меньше 16px — на тач-устройствах поднимаем поля формы брони и поиска до
+   16px (на десктопе остаётся 14px). Запрещать зум через maximum-scale в
+   viewport нельзя: это отняло бы человеку щипковый зум на всей странице. */
+@media (pointer:coarse){
+  .field input,.field textarea,.ts-grid input{font-size:16px;}
+}
 
 .btn-primary{
   width:100%;
