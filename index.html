@@ -618,7 +618,12 @@ body{
 .catalog-empty{color:var(--muted);font-size:13px;padding:30px 4px;}
 .catalog-mode-toggle{margin-top:10px;background:none;border:none;color:var(--amber);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 0;}
 .time-search{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;}
-.ts-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+/* .time-search{display:flex} без этого перекрывает атрибут hidden — панель
+   поиска была видна ВСЕГДА, независимо от переключателя «Найти по времени».
+   Пойман попутно при проверке дат-чипов; тот же приём уже есть у соседних
+   .catalog-map[hidden]/.city-select-pop[hidden]. */
+.time-search[hidden]{display:none;}
+.ts-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
 .ts-grid label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;}
 .ts-grid input{background:var(--surface-raised);border:1px solid var(--line);border-radius:9px;padding:9px 10px;color:var(--text);font-family:inherit;font-size:14px;}
 .ts-chips{display:flex;flex-wrap:wrap;gap:6px;}
@@ -1304,11 +1309,12 @@ body{
       <button class="catalog-mode-toggle" id="searchModeToggle" type="button">Найти по времени →</button>
       <button class="catalog-mode-toggle catalog-map-toggle" id="catalogMapBtn" type="button" hidden>На карте</button>
       <div class="time-search" id="timeSearch" hidden>
+        <div class="month-row" id="tsMonthRow"></div>
+        <div class="date-row" id="tsDateRow"></div>
         <div class="ts-grid">
-          <label>Дата<input type="date" id="tsDate"></label>
-          <label>Человек<input type="number" id="tsPeople" min="1" placeholder="любое"></label>
           <label>С<input type="time" id="tsFrom" step="1800" value="12:00"></label>
           <label>До<input type="time" id="tsTo" step="1800" value="15:00"></label>
+          <label>Человек<input type="number" id="tsPeople" min="1" placeholder="любое"></label>
         </div>
         <div class="ts-chips" id="tsTypeChips"></div>
         <label class="ts-check"><input type="checkbox" id="tsDaylight"> только с дневным светом</label>
@@ -2875,9 +2881,14 @@ body{
   function cloudStorageAvailable(){
     return !!(tg && tg.CloudStorage);
   }
+  // cloudStorageAvailable() проверяет только что tg.CloudStorage существует
+  // как объект — SDK телеграма объявляет его даже там, где вызов методов
+  // реально бросает WebAppMethodUnsupported (не настоящий Telegram, старая
+  // версия клиента). Поэтому вызовы дополнительно в try/catch — тем же
+  // приёмом, что уже есть у /me выше («вне Telegram — просто пропускаем»).
   function saveDraftField(key, value){
     if(!cloudStorageAvailable()) return;
-    tg.CloudStorage.setItem(key, value, ()=>{});
+    try{ tg.CloudStorage.setItem(key, value, ()=>{}); }catch(e){}
   }
   function phoneIsBlank(){
     const v = phoneInput.value.trim();
@@ -2887,14 +2898,20 @@ body{
   // (приоритет у серверного /me, см. prefillContact).
   function loadDraftFields(){
     if(!cloudStorageAvailable()) return;
-    tg.CloudStorage.getItem(CLOUD_KEY_NAME, (err, value)=>{
-      if(!err && value && !nameInput.value.trim()) nameInput.value = value;
-      validateForm();
-    });
-    tg.CloudStorage.getItem(CLOUD_KEY_PHONE, (err, value)=>{
-      if(!err && value && phoneIsBlank()) phoneInput.value = value;
-      validateForm();
-    });
+    // Раньше без try/catch: бросало прямо из prefillContact() ПОСЛЕ его
+    // собственного try/catch (тот прикрывает только /me) — bootStudio() ловил
+    // это как «не удалось загрузить студию» целиком, хотя де-факто студия
+    // загрузилась, просто автоподстановка черновика недоступна.
+    try{
+      tg.CloudStorage.getItem(CLOUD_KEY_NAME, (err, value)=>{
+        if(!err && value && !nameInput.value.trim()) nameInput.value = value;
+        validateForm();
+      });
+      tg.CloudStorage.getItem(CLOUD_KEY_PHONE, (err, value)=>{
+        if(!err && value && phoneIsBlank()) phoneInput.value = value;
+        validateForm();
+      });
+    }catch(e){}
   }
 
   // Подставляем последний ручной ввод имени/телефона с сервера (общий для всех
@@ -3410,7 +3427,17 @@ body{
     if(Number.isInteger(ps.people) && ps.people > 0){
       state.people = Math.min(ps.people, hall.capacity);
     }
-    openHall(hall.id);
+    // openHall() ниже переводит сетку в режим 'days' ВСЕГДА (свой/чужой зал —
+    // не важно), а тот показывает только ПЕРВЫЕ GRID_DAYS дат из state.dates,
+    // а не всё окно. Дата из поиска могла формально присутствовать в массиве
+    // (окно строится на весь месяц), но за пределами этих первых 7 — setSel
+    // ниже её всё равно не находил и тихо съезжал на autoSelect() (другая
+    // дата того же зала) — баг, пойманный при ревью. Пересобираем окно ТОЧНО
+    // на дату брони: тогда она — самый первый день, и попадает в любую сетку.
+    if(state.dates.slice(0, GRID_DAYS).findIndex(d => dateKey(d) === ps.date) < 0){
+      state.dates = buildDatesForMonthWindow(new Date(ps.date + 'T00:00:00'));
+    }
+    openHall(hall.id);   // сетка 7 дней по этому залу — окно дат уже верное
     const di = state.dates.findIndex(d => dateKey(d) === ps.date);
     if(di >= 0) state.dateIndex = di;
     const startSlot = Math.round(ps.start / SLOT_MIN);
@@ -4319,9 +4346,67 @@ body{
   let tsType = null;                 // выбранный тип зала
   let searchMode = false;
 
+  // Лента дат поиска — свой стейт, не привязан ни к какой открытой студии
+  // (поиск идёт сразу по всем студиям города, у него одна общая дата на всех,
+  // а не «дата этого зала»). Дата — реальный фильтр (одна на весь поиск), а
+  // не диапазон времени: диапазон «с/до» у разных студий разного расписания
+  // общего смысла не имеет, поэтому им остаются обычные поля.
+  const TS = { dates: [], date: '' };
+  function tsRenderMonths(){
+    const row = document.getElementById('tsMonthRow');
+    const today = businessToday();
+    const months = buildMonthOptions(MONTHS_AHEAD, today);
+    const anchor = TS.dates[0];
+    row.innerHTML = '';
+    months.forEach((m, i)=>{
+      const chip = document.createElement('div');
+      chip.className = 'month-chip';
+      const isActive = !!anchor && anchor.getFullYear()===m.getFullYear() && anchor.getMonth()===m.getMonth();
+      chip.dataset.active = isActive.toString();
+      chip.textContent = monthLabel(m, m.getFullYear() !== today.getFullYear());
+      chip.addEventListener('click', ()=>{
+        if(isActive) return;
+        haptic('light');
+        TS.dates = buildDatesForMonthWindow(i===0 ? today : m);
+        TS.date = dateKey(TS.dates[0]);
+        tsRenderMonths(); tsRenderDates();
+      });
+      row.appendChild(chip);
+    });
+  }
+  function tsRenderDates(){
+    const row = document.getElementById('tsDateRow');
+    row.innerHTML = '';
+    let activeChip = null;
+    TS.dates.forEach((d)=>{
+      const key = dateKey(d);
+      const chip = document.createElement('div');
+      chip.className = 'date-chip';
+      chip.dataset.active = (key === TS.date).toString();
+      if(key === TS.date) activeChip = chip;
+      chip.innerHTML = `<div class="date-day">${DAY_NAMES[d.getDay()]}</div><div class="date-num">${d.getDate()}</div>`;
+      chip.addEventListener('click', ()=>{
+        if(key === TS.date) return;
+        haptic('light');
+        TS.date = key;
+        tsRenderDates();
+      });
+      row.appendChild(chip);
+    });
+    scrollChipIntoView(row, activeChip);
+  }
   function initTimeSearch(){
     const chips = document.getElementById('tsTypeChips');
-    if(chips.childElementCount) return;
+    if(chips.childElementCount){
+      // Панель могли открыть на следующий день — лента дат должна снова
+      // начинаться от «сегодня», а не от даты прошлого открытия.
+      if(TS.date !== dateKey(businessToday())){
+        TS.dates = buildDatesForMonthWindow(businessToday());
+        TS.date = dateKey(TS.dates[0]);
+        tsRenderMonths(); tsRenderDates();
+      }
+      return;
+    }
     for(const k of Object.keys(TS_TYPES)){
       const c = document.createElement('span');
       c.className = 'ts-chip'; c.dataset.type = k; c.dataset.on = 'false';
@@ -4334,10 +4419,9 @@ body{
       });
       chips.appendChild(c);
     }
-    // дата по умолчанию — сегодня в студийной зоне неизвестна на каталоге, берём локальную
-    const d = new Date();
-    document.getElementById('tsDate').value =
-      d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    TS.dates = buildDatesForMonthWindow(businessToday());
+    TS.date = dateKey(TS.dates[0]);
+    tsRenderMonths(); tsRenderDates();
   }
 
   document.getElementById('catalogMapBtn').addEventListener('click', ()=>{
@@ -4363,12 +4447,12 @@ body{
   async function runTimeSearch(){
     const note = document.getElementById('tsNote');
     if(!selectedCity){ note.textContent = 'Сначала выберите город.'; return; }
-    const date = document.getElementById('tsDate').value;
+    const date = TS.date;
     const toMin = (v)=>{ const m=/^(\d{2}):(\d{2})$/.exec(v||''); return m ? (+m[1])*60+(+m[2]) : NaN; };
     const start = toMin(document.getElementById('tsFrom').value);
     const end = toMin(document.getElementById('tsTo').value);
     const people = parseInt(document.getElementById('tsPeople').value, 10);
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ note.textContent = 'Укажите дату.'; return; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ note.textContent = 'Выберите дату.'; return; }
     if(!Number.isInteger(start) || !Number.isInteger(end) || end <= start){ note.textContent = 'Начало должно быть раньше конца.'; return; }
     const qs = new URLSearchParams({ city: selectedCity, date, start, end });
     if(tsType) qs.set('type', tsType);
