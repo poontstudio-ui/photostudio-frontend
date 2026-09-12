@@ -752,9 +752,17 @@ body{
 }
 
 /* ---------- Cancel confirm panel ---------- */
-.rs-fields{display:flex;flex-direction:column;gap:10px;margin:4px 0 12px;}
-.rs-field{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:14px;color:var(--muted);}
-.rs-field input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:14px;}
+/* Перенос брони — та же сетка выбора времени, что и на главном экране:
+   лента месяцев, лента дат и один столбец (зал у брони уже известен). */
+.rs-picker{margin:10px 0 4px;}
+/* Сетка прокручивается внутри себя: иначе на 13 строк кнопка «Перенести»
+   уезжает за нижний край панели и её приходится искать прокруткой. */
+.rs-picker .grid{max-height:42vh;overflow-y:auto;overscroll-behavior:contain;padding-right:2px;}
+.rs-picker .date-row{padding-bottom:10px;}
+.rs-loading{color:var(--muted);font-size:13px;padding:18px 2px;}
+.rs-sum{font-size:13px;color:var(--muted);margin:10px 0 14px;min-height:38px;}
+.rs-sum[data-state="ready"]{color:var(--text);}
+.rs-sum b{display:block;font-family:var(--f-display);font-size:19px;font-weight:700;margin-top:2px;}
 .cancel-panel-text{
   font-size:13px;
   color:var(--muted);
@@ -1599,11 +1607,12 @@ body{
 <div class="panel" id="reschedulePanel">
   <div class="panel-title">Перенести бронь</div>
   <div class="cancel-panel-text" id="reschedulePanelText"></div>
-  <div class="rs-fields">
-    <label class="rs-field"><span>Дата</span><input type="date" id="rsDate"></label>
-    <label class="rs-field"><span>Начало</span><input type="time" id="rsFrom" step="1800"></label>
-    <label class="rs-field"><span>Конец</span><input type="time" id="rsTo" step="1800"></label>
+  <div class="rs-picker" id="rsPicker">
+    <div class="month-row" id="rsMonthRow"></div>
+    <div class="date-row" id="rsDateRow"></div>
+    <div class="grid" id="rsGrid" data-fit="true"></div>
   </div>
+  <div class="rs-sum" id="rsSum"></div>
   <div class="save-note" id="rsError" style="color:var(--red)"></div>
   <button class="btn-primary" id="rsConfirmBtn">Перенести</button>
   <button class="btn-ghost" id="rsDismissBtn">Отмена</button>
@@ -2028,8 +2037,8 @@ body{
     if(includeYear) s += " '" + String(d.getFullYear()).slice(2);
     return s;
   }
-  function buildMonthOptions(n){
-    const today = businessToday();
+  function buildMonthOptions(n, from){
+    const today = from || businessToday();
     const out = [];
     for(let i=0;i<n;i++) out.push(new Date(today.getFullYear(), today.getMonth()+i, 1));
     return out;
@@ -2318,7 +2327,10 @@ body{
       if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot + 1);
       const a = Math.min(sel.start, slot);
       const b = Math.max(sel.end - 1, slot) + 1;
-      return setSel(colKey, a, b);
+      // Если между текущим выделением и тапнутой клеткой есть занятое время,
+      // промежуток не выделяется — тогда начинаем выбор с этой клетки, а не
+      // молча игнорируем тап.
+      return setSel(colKey, a, b) || setSel(colKey, slot, slot + 1);
     }
     return setSel(colKey, slot, slot + 1);
   }
@@ -3443,36 +3455,287 @@ body{
   let pendingRescheduleId=null, pendingRescheduleTenant=null, pendingRescheduleHall=null;
   const reschedulePanel=document.getElementById('reschedulePanel');
 
-  function openReschedule(booking){
-    pendingRescheduleId=booking.id;
-    pendingRescheduleTenant=booking.studioId || null;
-    pendingRescheduleHall=booking.hallId || null;
+  // ---- Перенос брони: своя мини-сетка времени ----
+  // Отдельная от главной сетки: бронь может быть в ДРУГОЙ студии («Мои брони»
+  // показывают брони всех студий), поэтому часы работы, шаг и занятость
+  // грузим по её tenant, а не берём из текущего STUDIO_*.
+  const RS = {
+    booking:null, tenant:null, hall:null,
+    tz:'Europe/Minsk', hours:null,
+    step:60,                 // шаг сетки = шаг, который примет сервер при переносе
+    minBookingMin:60,
+    pkgSlots:null,           // пакетная бронь переносится только той же длительностью
+    dates:[], date:'', busy:{},
+    sel:{ start:null, end:null },
+  };
+
+  function rsWallClock(){
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: RS.tz, hourCycle:'h23',
+      year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit',
+    }).formatToParts(new Date());
+    const g = t => parts.find(p => p.type === t).value;
+    return { date:`${g('year')}-${g('month')}-${g('day')}`, minutes:Number(g('hour'))*60 + Number(g('minute')) };
+  }
+  function rsToday(){
+    const [y,m,d] = rsWallClock().date.split('-').map(Number);
+    return new Date(y, m-1, d);
+  }
+  function rsDayWindow(dateStr){
+    const wd = new Date(dateStr + 'T00:00:00').getDay();
+    return (RS.hours && RS.hours[wd]) || { start:0, end:0 };
+  }
+  function rsSlotRange(){
+    const w = rsDayWindow(RS.date);
+    return { start: Math.floor(w.start*60/RS.step), end: Math.ceil(w.end*60/RS.step) };
+  }
+  function rsCellState(slot){
+    const w = rsDayWindow(RS.date);
+    const s0 = slot * RS.step, e0 = s0 + RS.step;
+    if(s0 < w.start*60 || e0 > w.end*60) return 'closed';
+    const now = rsWallClock();
+    if(RS.date < now.date || (RS.date === now.date && s0 < now.minutes)) return 'past';
+    const busy = RS.busy[RS.date] || [];
+    return busy.some(b => s0 < b.end && e0 > b.start) ? 'busy' : 'free';
+  }
+  function rsSpanFree(a, b){
+    if(b - a < 1 || (b - a) * RS.step > DURATION_MAX_MIN) return false;
+    for(let i=a; i<b; i++) if(rsCellState(i) !== 'free') return false;
+    return true;
+  }
+  // Минимум брони в этом слоте: правило цены зала может поднять студийный
+  // минимум — тот же расчёт, что у сервера (lib/rules.js minDurationFor).
+  function rsMinSlots(slot){
+    let minMin = RS.minBookingMin;
+    const rules = (RS.hall && Array.isArray(RS.hall.priceRules)) ? RS.hall.priceRules : [];
+    if(rules.length){
+      const dow = new Date(RS.date + 'T00:00:00').getDay(), sm = slot * RS.step;
+      for(const r of rules){
+        if(Array.isArray(r.dow) && r.dow.length && !r.dow.includes(dow)) continue;
+        if(sm >= r.from && sm < r.to){ if(r.minMin != null) minMin = r.minMin; break; }
+      }
+    }
+    return Math.max(1, Math.ceil(minMin / RS.step));
+  }
+  function rsHasSel(){ return RS.sel.start !== null; }
+  function rsClearSel(){ RS.sel = { start:null, end:null }; }
+  function rsSetSel(a, b){
+    if(!rsSpanFree(a, b)) return false;
+    RS.sel = { start:a, end:b };
+    return true;
+  }
+  // Пакетную бронь двигаем целиком — длительность менять нельзя. Обычную
+  // выбираем двумя тапами, как на главной сетке.
+  function rsTap(slot){
+    if(RS.pkgSlots) return rsSetSel(slot, slot + RS.pkgSlots);
+    if(rsHasSel()){
+      if(slot >= RS.sel.start && slot < RS.sel.end) return rsSetSel(slot, slot + 1);
+      // Промежуток до тапнутого часа перекрыт занятым — не оставляем тап без
+      // ответа (выглядит как «кнопка не работает»), а начинаем выбор заново.
+      return rsSetSel(Math.min(RS.sel.start, slot), Math.max(RS.sel.end - 1, slot) + 1)
+        || rsSetSel(slot, slot + 1);
+    }
+    return rsSetSel(slot, slot + 1);
+  }
+  function rsSelValid(){
+    if(!rsHasSel() || !rsSpanFree(RS.sel.start, RS.sel.end)) return false;
+    const len = RS.sel.end - RS.sel.start;
+    if(RS.pkgSlots) return len === RS.pkgSlots;
+    return len >= rsMinSlots(RS.sel.start);
+  }
+
+  function rsRenderMonths(){
+    const row = document.getElementById('rsMonthRow');
+    const today = rsToday();
+    const months = buildMonthOptions(MONTHS_AHEAD, today);
+    const anchor = RS.dates[0];
+    row.innerHTML = '';
+    months.forEach((m, i)=>{
+      const chip = document.createElement('div');
+      chip.className = 'month-chip';
+      const isActive = !!anchor && anchor.getFullYear()===m.getFullYear() && anchor.getMonth()===m.getMonth();
+      chip.dataset.active = isActive.toString();
+      chip.textContent = monthLabel(m, m.getFullYear() !== today.getFullYear());
+      chip.addEventListener('click', ()=>{
+        if(isActive) return;
+        haptic('light');
+        RS.dates = buildDatesForMonthWindow(i===0 ? today : m);
+        RS.date = dateKey(RS.dates[0]);
+        rsClearSel();
+        rsRenderMonths(); rsRenderDates();
+        rsLoadBusy().then(rsRenderGrid);
+      });
+      row.appendChild(chip);
+    });
+  }
+  function rsRenderDates(){
+    const row = document.getElementById('rsDateRow');
+    row.innerHTML = '';
+    let activeChip = null;
+    RS.dates.forEach((d)=>{
+      const key = dateKey(d);
+      const chip = document.createElement('div');
+      chip.className = 'date-chip';
+      chip.dataset.active = (key === RS.date).toString();
+      if(key === RS.date) activeChip = chip;
+      chip.innerHTML = `<div class="date-day">${DAY_NAMES[d.getDay()]}</div><div class="date-num">${d.getDate()}</div>`;
+      chip.addEventListener('click', ()=>{
+        if(key === RS.date) return;
+        haptic('light');
+        RS.date = key;
+        rsClearSel();
+        rsRenderDates();
+        rsRenderGrid();
+      });
+      row.appendChild(chip);
+    });
+    scrollChipIntoView(row, activeChip);
+  }
+  function rsRenderGrid(){
+    const wrap = document.getElementById('rsGrid');
+    const { start, end } = rsSlotRange();
+    if(end <= start){
+      wrap.innerHTML = '<div class="grid-empty">В этот день студия не работает.</div>';
+      rsRenderSum();
+      return;
+    }
+    wrap.style.gridTemplateColumns = '40px 1fr';
+    const states = [];
+    let html = '';
+    for(let i=start; i<end; i++){
+      const row = i - start + 1;
+      const label = minutesToLabel(i * RS.step);
+      const st = rsCellState(i);
+      states.push(st);
+      const on = rsHasSel() && i >= RS.sel.start && i < RS.sel.end;
+      html += `<div class="grid-hour" style="grid-row:${row};grid-column:1">${label}</div>`
+            + `<div class="grid-cell" style="grid-row:${row};grid-column:2" data-slot="${i}" data-state="${st}"`
+            + (on ? ' data-sel="true"' : '')
+            + (on && i===RS.sel.start ? ` data-sel-first="true" data-time="${label}"` : '')
+            + '></div>';
+    }
+    // занятость — сплошным прямоугольником, как в остальных сетках
+    let runStart = -1;
+    for(let k=0; k<=states.length; k++){
+      const busy = k < states.length && states[k] === 'busy';
+      if(busy && runStart < 0) runStart = k;
+      if(!busy && runStart >= 0){
+        html += `<div class="grid-busy" style="grid-column:2;grid-row:${runStart+1} / ${k+1}"></div>`;
+        runStart = -1;
+      }
+    }
+    wrap.innerHTML = html;
+    rsRenderSum();
+  }
+  function rsRenderSum(){
+    const box = document.getElementById('rsSum');
+    const btn = document.getElementById('rsConfirmBtn');
+    if(rsSelValid()){
+      const mins = (RS.sel.end - RS.sel.start) * RS.step;
+      box.dataset.state = 'ready';
+      box.innerHTML = 'Новое время<b>' + esc(dateLabelFromISO(RS.date)) + ', '
+        + minutesToLabel(RS.sel.start*RS.step) + '–' + minutesToLabel(RS.sel.end*RS.step)
+        + ' · ' + durationLabelOf(mins) + '</b>';
+      btn.disabled = false;
+    } else {
+      box.dataset.state = '';
+      box.textContent = RS.pkgSlots
+        ? 'Пакет переносится целиком — выберите начало на сетке'
+        : (rsHasSel() ? 'Слишком короткий промежуток — отметьте вторую точку' : 'Отметьте новое время на сетке');
+      btn.disabled = true;
+    }
+  }
+  function durationLabelOf(m){
+    const h = Math.floor(m/60), r = m%60;
+    return r ? (h ? `${h} ч ${r} мин` : `${r} мин`) : `${h} ч`;
+  }
+  document.getElementById('rsGrid').addEventListener('click', (e)=>{
+    const el = e.target && e.target.closest ? e.target.closest('.grid-cell') : null;
+    if(!el || el.dataset.state !== 'free') return;
+    if(rsTap(Number(el.dataset.slot))){ haptic('light'); rsRenderGrid(); }
+  });
+
+  // Занятость зала на всё окно дат одним запросом. Собственная бронь для
+  // самой себя препятствием не является — вычитаем её из занятости.
+  function rsLoadBusy(){
+    const from = dateKey(RS.dates[0]);
+    const days = Math.min(RS.dates.length, 31);
+    return api('GET', '/availability?hallId=' + encodeURIComponent(RS.booking.hallId)
+        + '&from=' + from + '&days=' + days, null, RS.tenant)
+      .then((byDate)=>{
+        const own = RS.booking;
+        const list = (byDate && typeof byDate === 'object') ? byDate : {};
+        const ownDate = String(own.date).slice(0,10);
+        if(Array.isArray(list[ownDate])){
+          list[ownDate] = list[ownDate].filter(b => !(b.start >= own.start && b.end <= own.end));
+        }
+        RS.busy = list;
+      })
+      .catch(()=>{ RS.busy = {}; });
+  }
+
+  async function openReschedule(booking){
+    pendingRescheduleId = booking.id;
+    pendingRescheduleTenant = booking.studioId || null;
+    pendingRescheduleHall = booking.hallId || null;
+    RS.booking = booking;
+    RS.tenant = booking.studioId || TENANT_ID;
+    rsClearSel();
     const hall = booking.hallName || hallName(booking.hallId);
     document.getElementById('reschedulePanelText').innerHTML =
       `<b>${esc(hall)}</b><br>сейчас: ${esc(dateLabelFromISO(booking.date))}, `+
       `${minutesToLabel(booking.start)}–${minutesToLabel(booking.end)}`;
-    document.getElementById('rsDate').value = String(booking.date).slice(0,10);
-    document.getElementById('rsFrom').value = minutesToLabel(booking.start);
-    document.getElementById('rsTo').value = minutesToLabel(booking.end);
-    document.getElementById('rsError').textContent='';
-    overlay.dataset.open='true';
-    reschedulePanel.dataset.open='true';
+    document.getElementById('rsError').textContent = '';
+    document.getElementById('rsSum').textContent = '';
+    document.getElementById('rsGrid').innerHTML = '<div class="rs-loading">Загружаем свободное время…</div>';
+    document.getElementById('rsMonthRow').innerHTML = '';
+    document.getElementById('rsDateRow').innerHTML = '';
+    document.getElementById('rsConfirmBtn').disabled = true;
+    overlay.dataset.open = 'true';
+    reschedulePanel.dataset.open = 'true';
+    try{
+      const cfg = await loadTenantConfig(RS.tenant);
+      RS.tz = cfg.timezone || 'Europe/Minsk';
+      RS.hours = normalizeWeekHours(cfg);
+      RS.minBookingMin = Number.isInteger(cfg.minBookingMin) ? cfg.minBookingMin : 60;
+      // Шаг ровно тот, что примет сервер при переносе (server.js: reschedule).
+      RS.step = RS.minBookingMin === 30 ? 30 : 60;
+      RS.hall = (cfg.halls || []).find(h => h.id === booking.hallId) || null;
+      RS.pkgSlots = booking.packageHours != null
+        ? Math.max(1, Math.round(booking.packageHours * 60 / RS.step)) : null;
+      // Окно дат — от сегодня (или от месяца брони, если она дальше).
+      const today = rsToday();
+      const own = new Date(String(booking.date).slice(0,10) + 'T00:00:00');
+      const anchor = (own > today && (own.getFullYear() !== today.getFullYear() || own.getMonth() !== today.getMonth()))
+        ? new Date(own.getFullYear(), own.getMonth(), 1) : today;
+      RS.dates = buildDatesForMonthWindow(anchor);
+      RS.date = (own >= today) ? dateKey(own) : dateKey(RS.dates[0]);
+      await rsLoadBusy();
+      rsRenderMonths(); rsRenderDates(); rsRenderGrid();
+      // Текущее время брони уже выделено — «перенести на час вперёд» это один тап.
+      if(RS.date === dateKey(own) && booking.start % RS.step === 0 && booking.end % RS.step === 0){
+        rsSetSel(booking.start / RS.step, booking.end / RS.step);
+        rsRenderGrid();
+      }
+    }catch(e){
+      document.getElementById('rsGrid').innerHTML = '';
+      document.getElementById('rsError').textContent = 'Не удалось загрузить свободное время. Попробуйте ещё раз.';
+    }
   }
   function closeReschedule(){
     overlay.dataset.open='false';
     reschedulePanel.dataset.open='false';
     pendingRescheduleId=null; pendingRescheduleTenant=null; pendingRescheduleHall=null;
+    RS.booking=null; rsClearSel();
   }
   document.getElementById('rsDismissBtn').addEventListener('click', closeReschedule);
   document.getElementById('rsConfirmBtn').addEventListener('click', async ()=>{
-    if(pendingRescheduleId===null) return;
-    const toMin = (v)=>{ const m=/^(\d{2}):(\d{2})$/.exec(v||''); return m ? (+m[1])*60+(+m[2]) : NaN; };
-    const date=document.getElementById('rsDate').value;
-    const start=toMin(document.getElementById('rsFrom').value);
-    const end=toMin(document.getElementById('rsTo').value);
+    if(pendingRescheduleId===null || !rsSelValid()) return;
+    const date = RS.date;
+    const start = RS.sel.start * RS.step;
+    const end = RS.sel.end * RS.step;
     const err=document.getElementById('rsError');
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ err.textContent='Укажите дату'; return; }
-    if(!Number.isInteger(start)||!Number.isInteger(end)||end<=start){ err.textContent='Начало должно быть раньше конца'; return; }
+    err.textContent='';
     const btn=document.getElementById('rsConfirmBtn');
     btn.disabled=true; btn.textContent='Переносим…';
     try{
@@ -3488,8 +3751,12 @@ body{
       refreshGrid();
     }catch(e){
       err.textContent = e.message || 'Не удалось перенести';
+      // Время могли занять, пока панель была открыта — перечитываем занятость.
+      await rsLoadBusy();
+      rsRenderGrid();
     }finally{
-      btn.disabled=false; btn.textContent='Перенести';
+      btn.textContent='Перенести';
+      btn.disabled = !rsSelValid();
     }
   });
 
