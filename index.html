@@ -890,6 +890,22 @@ body{
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+/* Выбор цели аренды: от неё зависят цена, минимум брони и вместимость,
+   поэтому переключатель стоит прямо над фактами, которые он и меняет. */
+.purpose-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-bottom:12px;}
+.purpose-row[hidden]{display:none;}
+.purpose-row::-webkit-scrollbar{display:none;}
+.purpose-btn{
+  flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--text-2);
+  border-radius:var(--r-pill);padding:8px 14px;cursor:pointer;
+  font-family:var(--f);font-weight:600;font-size:var(--fs-sm);
+}
+.purpose-btn[data-on="true"]{background:var(--text);border-color:var(--text);color:var(--surface);}
+.purpose-includes{margin-top:12px;}
+.purpose-includes[hidden]{display:none;}
+.purpose-includes ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;}
+.purpose-includes li{font-size:var(--fs-sm);color:var(--text-2);display:flex;gap:8px;align-items:baseline;}
+.purpose-includes li::before{content:'✓';color:var(--text-2);font-size:var(--fs-xs);}
 .hall-facts{display:flex;flex-wrap:wrap;gap:8px;}
 .hall-fact{
   background:var(--surface);
@@ -1532,7 +1548,9 @@ body{
         <div class="hall-info-title" id="hallInfoTitle"></div>
       </div>
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
+      <div class="purpose-row" id="hallPurposeRow" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
+      <div class="purpose-includes" id="hallPurposeIncludes" hidden></div>
       <div class="amenity-chips" id="hallChips" hidden></div>
       <div class="hall-about" id="hallAbout" hidden></div>
       <div class="hall-included" id="hallIncluded" hidden></div>
@@ -2189,6 +2207,39 @@ body{
   }
   function hallName(id){ return (allHallsById[id] || {}).name || id || ''; }
 
+  // ---------- Назначения зала (0042) ----------
+  // Одно помещение сдаётся под разные цели, у каждой свои ставка, сетка
+  // тарифов, минимум брони, вместимость и состав аренды. Зеркало
+  // lib/rules.js: пустое поле назначения = «как у зала», без выбора —
+  // первое. Сервер всё равно пересчитывает авторитетно.
+  var HALL_PURPOSE_RU = { photo:'Фотосъёмка', video:'Видеосъёмка', event:'Мероприятие',
+    meeting:'Встреча', class:'Занятие', rehearsal:'Репетиция' };
+  function hallPurposeList(h){ return Array.isArray(h && h.purposes) ? h.purposes : []; }
+  function purposeOf(hall, code){
+    var list = hallPurposeList(hall);
+    if(!list.length) return null;
+    if(code == null) return list[0];
+    return list.find(function(p){ return p.code === code; }) || null;
+  }
+  function purposeHall(hall, code){
+    var p = purposeOf(hall, code);
+    if(!p) return hall;
+    var out = Object.assign({}, hall);
+    if(typeof p.rate === 'number' && isFinite(p.rate)) out.rate = p.rate;
+    if(Array.isArray(p.priceRules)) out.priceRules = p.priceRules;
+    if(Number.isInteger(p.capacity)) out.capacity = p.capacity;
+    out.purposeMinBookingMin = Number.isInteger(p.minBookingMin) ? p.minBookingMin : null;
+    return out;
+  }
+  // Зал, по которому считаются цена, минимум и вместимость — уже с учётом
+  // выбранного назначения. Имя, фото и прочий показ берут обычный currentHall.
+  function pricingHall(){ return purposeHall(currentHall(), state.purpose); }
+  // Минимум брони с учётом назначения: у цели он может быть выше студийного.
+  function minBookingMinFor(hall){
+    var m = hall && hall.purposeMinBookingMin;
+    return Number.isInteger(m) ? m : STUDIO_MIN_BOOKING_MIN;
+  }
+
   // Ставка минуты с учётом правил цены зала (по времени суток / дню недели).
   // Зеркало server: lib/rules.js minuteRate — первое подходящее правило.
   function minuteRate(hall, rules, dow, minute){
@@ -2220,7 +2271,7 @@ body{
   }
   // Базовая (без скидки) аренда зала за выбранный интервал.
   function baseRoomPrice(){
-    const hall = currentHall();
+    const hall = pricingHall();
     if(state.packageHours != null){
       const pp = packagePriceOf(hall, state.packageHours);
       if(pp != null) return pp;
@@ -2248,8 +2299,11 @@ body{
   // Минимум брони для старта в slot этого столбца: правило окна (minMin) или
   // студийный минимум. Зеркало lib/rules.js minDurationFor. -> число слотов.
   function minSlotsAt(col, slot){
-    var minMin = STUDIO_MIN_BOOKING_MIN;
-    var rules = (col.hall && Array.isArray(col.hall.priceRules)) ? col.hall.priceRules : [];
+    // В обзоре студии столбцы — разные залы, назначение выбрано только у
+    // открытого; у остальных берётся их первое (как считает и сервер).
+    var ph = purposeHall(col.hall || {}, (col.hall && col.hall.id === state.hallId) ? state.purpose : null);
+    var minMin = minBookingMinFor(ph);
+    var rules = Array.isArray(ph.priceRules) ? ph.priceRules : [];
     if(rules.length){
       var dow = col.date.getDay(), sm = slot * SLOT_MIN;
       for(const r of rules){
@@ -2268,10 +2322,20 @@ body{
   }
   // Подпись ставки зала в каталоге: с правилами точной цифры нет — «от N».
   function hallRateLabel(h){
-    const rules = Array.isArray(h && h.priceRules) ? h.priceRules : [];
-    if(!rules.length) return h.rate + ' ' + CUR + '/ч';
-    const lo = Math.min(h.rate, ...rules.map(r => r.rate));
-    return 'от ' + lo + ' ' + CUR + '/ч';
+    // Цены всех назначений тоже участвуют: у зала «от» — это самая дешёвая
+    // цель аренды, а не базовая ставка, которой может не быть ни у одной.
+    var variants = hallPurposeList(h).length
+      ? hallPurposeList(h).map(function(p){ return purposeHall(h, p.code); })
+      : [h];
+    var rates = [];
+    variants.forEach(function(v){
+      rates.push(v.rate);
+      (Array.isArray(v.priceRules) ? v.priceRules : []).forEach(function(r){ rates.push(r.rate); });
+    });
+    rates = rates.filter(function(r){ return typeof r === 'number' && isFinite(r); });
+    if(!rates.length) return '';
+    var lo = Math.min.apply(null, rates), hi = Math.max.apply(null, rates);
+    return (hi > lo ? 'от ' : '') + lo + ' ' + CUR + '/ч';
   }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
   const GRID_DAYS = 7;               // столбцов в режиме одного зала
@@ -2331,6 +2395,7 @@ body{
     hallId: null,        // выбранный зал (id из cfg.halls)
     equipment: [],       // ВСЕГДА пусто: выбор оборудования убран из брони
     packageHours: null,  // выбранный пакет (фикс цена/длительность) или null
+    purpose: null,       // выбранная цель аренды (0042); null = первая у зала
   };
 
   function currentDate(){ return state.dates[state.dateIndex]; }
@@ -2430,7 +2495,7 @@ body{
   }
 
   function renderPeople(){
-    const cap = currentHall().capacity;
+    const cap = pricingHall().capacity;
     if(state.people > cap) state.people = cap;
     document.getElementById('peopleCount').textContent=state.people;
     document.getElementById('peopleMinus').disabled = state.people<=1;
@@ -2442,7 +2507,7 @@ body{
     if(state.people>1){ state.people--; haptic('light'); renderPeople(); renderSummary(); }
   });
   document.getElementById('peoplePlus').addEventListener('click', ()=>{
-    if(state.people<currentHall().capacity){ state.people++; haptic('light'); renderPeople(); renderSummary(); }
+    if(state.people<pricingHall().capacity){ state.people++; haptic('light'); renderPeople(); renderSummary(); }
   });
 
   // ---- Выбор зала и оборудования ----
@@ -2564,7 +2629,7 @@ body{
     if(state.packageHours != null && Math.abs(state.durationHours - state.packageHours) > 1e-9){
       state.packageHours = null;
     }
-    if(state.people > currentHall().capacity) state.people = currentHall().capacity;
+    if(state.people > pricingHall().capacity) state.people = pricingHall().capacity;
   }
 
   function selectionValid(){
@@ -2762,6 +2827,7 @@ body{
     const hall = gridHall();
     if(!openHallId || !hall) return;
     document.getElementById('hallInfoTitle').textContent = hall.name;
+    renderHallPurposes(hall);
     const g = document.getElementById('hallPhotos');
     const photos = Array.isArray(hall.photos) ? hall.photos : [];
     if(photos.length){
@@ -2769,10 +2835,19 @@ body{
       g.hidden = false;
       g.querySelectorAll('img').forEach((im, idx) => im.addEventListener('click', ()=>openLightbox(photos, idx)));
     } else { g.hidden = true; g.innerHTML = ''; }
+    // Вместимость, ставка и минимум — выбранного назначения: именно они
+    // меняются при переключении цели аренды.
+    const ph = purposeHall(hall, state.purpose);
+    const minMin = minBookingMinFor(ph);
     const facts = [
-      '<div class="hall-fact"><span>Вместимость</span><b>до '+esc(hall.capacity)+' чел.</b></div>',
-      '<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel(hall))+'</b></div>',
+      '<div class="hall-fact"><span>Вместимость</span><b>до '+esc(ph.capacity)+' чел.</b></div>',
+      '<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel({ rate:ph.rate, priceRules:ph.priceRules }))+'</b></div>',
     ];
+    // Минимум показываем, только когда цель поднимает его над студийным —
+    // «от 1 часа» у всех подряд было бы шумом.
+    if(minMin > STUDIO_MIN_BOOKING_MIN){
+      facts.push('<div class="hall-fact"><span>Минимум</span><b>'+esc(minLabel(minMin))+'</b></div>');
+    }
     if(HALL_PROPS.hallType && hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
     if(HALL_PROPS.areaM2 && hall.areaM2) facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
@@ -2795,6 +2870,54 @@ body{
     renderHallPackages(hall);
   }
   let _hallAboutRenderedId = null;   // для какого зала уже собраны блоки выше
+
+  // «2 ч», «1 ч 30 мин», «30 мин» — из минут.
+  function minLabel(mins){
+    var h = Math.floor(mins / 60), r = mins % 60;
+    return r ? (h ? h + ' ч ' + r + ' мин' : r + ' мин') : h + ' ч';
+  }
+
+  // Переключатель целей аренды и список «что входит» у выбранной. Один
+  // вариант переключателем не показываем — выбирать не из чего, но сам он
+  // всё равно применяется к цене и лимитам.
+  function renderHallPurposes(hall){
+    var row = document.getElementById('hallPurposeRow');
+    var box = document.getElementById('hallPurposeIncludes');
+    if(!row || !box) return;
+    var list = hallPurposeList(hall);
+    var cur = purposeOf(hall, state.purpose);
+    row.hidden = list.length < 2;
+    row.innerHTML = list.length < 2 ? '' : list.map(function(p){
+      return '<button class="purpose-btn" type="button" data-code="'+esc(p.code)+'" ' +
+        'data-on="'+(cur && cur.code === p.code ? 'true' : 'false')+'">' +
+        esc(HALL_PURPOSE_RU[p.code] || p.code) + '</button>';
+    }).join('');
+    row.querySelectorAll('.purpose-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){ haptic('light'); selectPurpose(btn.dataset.code); });
+    });
+    var lines = cur && typeof cur.includes === 'string'
+      ? cur.includes.split('\n').map(function(x){ return x.trim(); }).filter(Boolean) : [];
+    box.hidden = !lines.length;
+    box.innerHTML = lines.length
+      ? '<div class="section-label">Что входит в аренду</div><ul>' +
+        lines.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('') + '</ul>'
+      : '';
+  }
+
+  // Смена цели меняет цену, минимум брони и вместимость, поэтому выбор
+  // времени пересобираем: то же окно при новой цели может оказаться короче
+  // её минимума, а молча растянуть бронь за клиента — хуже, чем переспросить.
+  function selectPurpose(code){
+    if(state.purpose === code) return;
+    state.purpose = code;
+    var cap = pricingHall().capacity;
+    if(state.people > cap) state.people = cap;
+    state.packageHours = null;
+    clearSelection();
+    autoSelect();
+    renderAll();
+    refreshGrid();
+  }
 
   // Один пункт «есть/нет»: зачёркнутый серый = в зале такого нет.
   function featHtml(label, on){
@@ -3071,6 +3194,7 @@ body{
   function openHall(id){
     openHallId = id;
     state.packageHours = null;
+    state.purpose = null;   // у другого зала свой набор целей
     clearSelection();
     applyHallMode();
     renderAll();
@@ -3080,6 +3204,7 @@ body{
   function closeHall(){
     const rh=document.getElementById('repeatHint'); if(rh) rh.hidden=true;
     openHallId = null;
+    state.purpose = null;
     clearSelection();
     applyHallMode();
     renderAll();
@@ -3355,6 +3480,8 @@ body{
         phone: phoneInput.value.trim(),
         comment: noteInput.value.trim() || undefined,
         packageHours: state.packageHours != null ? state.packageHours : undefined,
+        // Цель аренды: от неё зависят цена и лимиты, сервер пересчитывает по ней же.
+        purpose: state.purpose || undefined,
         // Откуда пришёл клиент: 'catalog' — выбрал студию в каталоге платформы,
         // 'direct' — попал по прямой ссылке студии (deep link / ?tenant=).
         // Нужно для будущей комиссии; сервер значение перепроверяет.
