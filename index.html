@@ -905,6 +905,66 @@ body{
 .amenity-chips.ok .chip{background:rgba(60,160,80,.12);border-color:rgba(60,160,80,.35);color:#3ba05a;}
 .amenity-chips:empty{display:none;}
 .hall-soon{font-size:var(--fs-sm);color:var(--text-3);margin-top:12px;line-height:1.5;}
+
+/* ---------- Описание зала: текст, «включено в бронь», аккордеон ---------- */
+/* Свёрнутый текст описания — четыре строки с «Читать далее». line-clamp
+   вместо обрезки по символам: рвать текст на полуслове в вёрстке незачем,
+   а сколько влезет — знает сам браузер. */
+.hall-about{margin-top:14px;}
+.hall-about[hidden]{display:none;}
+.hall-about-text{
+  font-size:var(--fs-md);color:var(--text-2);line-height:1.5;white-space:pre-line;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden;
+}
+.hall-about[data-open="true"] .hall-about-text{-webkit-line-clamp:unset;overflow:visible;}
+.hall-about-more{
+  background:none;border:none;padding:4px 0 0;cursor:pointer;
+  font-family:inherit;font-size:var(--fs-sm);font-weight:600;color:var(--text);
+  text-decoration:underline;
+}
+.hall-about-more[hidden]{display:none;}
+
+.hall-included{margin-top:18px;}
+.hall-included[hidden]{display:none;}
+/* auto-fit, а не жёсткие две колонки: на узком экране длинная подпись
+   («Гримёрное зеркало») иначе переносится в три строки внутри своей ячейки. */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px 12px;margin-top:10px;}
+.feat{display:flex;align-items:baseline;gap:8px;font-size:var(--fs-sm);line-height:1.35;}
+/* без этого display:flex перебивает атрибут hidden и свёрнутые пункты
+   остаются видны — та же ловушка, что уже ловили на .time-search */
+.feat[hidden]{display:none;}
+.feat-mark{flex:0 0 auto;color:var(--text-2);font-size:var(--fs-xs);}
+/* Чего в зале нет — не прячем, а гасим и зачёркиваем: «нет звукоизоляции»
+   клиенту важно узнать до брони, а не на съёмке. */
+.feat[data-on="false"]{color:var(--text-3);}
+.feat[data-on="false"] .feat-label{text-decoration:line-through;}
+.feat-more{
+  background:none;border:none;padding:10px 0 0;cursor:pointer;
+  font-family:inherit;font-size:var(--fs-sm);font-weight:600;color:var(--text);
+  text-decoration:underline;
+}
+.feat-more[hidden]{display:none;}
+
+.hall-accordion{margin-top:18px;}
+.hall-accordion[hidden]{display:none;}
+.acc-item{border-top:1px solid var(--line);}
+.acc-item:last-child{border-bottom:1px solid var(--line);}
+.acc-head{
+  width:100%;display:flex;align-items:center;gap:12px;
+  padding:15px 2px;background:none;border:none;cursor:pointer;
+  color:var(--text);font-family:var(--f);font-weight:600;font-size:var(--fs-lg);text-align:left;
+}
+.acc-icon{flex:0 0 auto;width:22px;height:22px;color:var(--text-2);}
+.acc-title{flex:1 1 auto;min-width:0;}
+.acc-caret{flex:0 0 auto;color:var(--text-2);font-size:var(--fs-md);transition:transform .18s ease;}
+.acc-item[data-open="true"] .acc-caret{transform:rotate(180deg);}
+/* Отступ слева = ширина иконки + gap: раскрытый текст встаёт под заголовок,
+   а не под иконку. */
+.acc-body{padding:0 2px 16px 34px;}
+.acc-body[hidden]{display:none;}
+.acc-text{font-size:var(--fs-md);color:var(--text-2);line-height:1.5;white-space:pre-line;}
+.acc-text + .feat-grid{margin-top:12px;}
+.acc-fact{font-size:var(--fs-sm);color:var(--text-2);line-height:1.4;}
 .studio-map-addr{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:6px;}
 .studio-map{width:100%;aspect-ratio:1/1;border-radius:var(--r-md);overflow:hidden;background:var(--surface-2);border:1px solid var(--line);}
 .studio-map-actions{display:flex;gap:8px;margin-top:10px;}
@@ -1474,6 +1534,9 @@ body{
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
       <div class="amenity-chips" id="hallChips" hidden></div>
+      <div class="hall-about" id="hallAbout" hidden></div>
+      <div class="hall-included" id="hallIncluded" hidden></div>
+      <div class="hall-accordion" id="hallAccordion" hidden></div>
       <div class="hall-packages" id="hallPackages" hidden></div>
     </div>
 
@@ -1948,16 +2011,8 @@ body{
   let STUDIO_AMENITIES = {};   // удобства/правила студии из /config (миграция 0030)
   var HALL_STYLE_RU = { loft:'Лофт', scandi:'Скандинавский', classic:'Классический', minimal:'Минимализм',
     dark:'Тёмный', industrial:'Индустриальный', vintage:'Винтаж', provence:'Прованс' };
-  var HALL_AMENITY_LIST = [
-    {f:'daylight',label:'Естественный свет'},{f:'constantLight',label:'Постоянный свет'},
-    {f:'strobeLight',label:'Импульсный свет'},{f:'lightModifiers',label:'Модификаторы света'},
-    {f:'ceilingRail',label:'Потолочная система'},{f:'blackout',label:'Блэкаут'},
-    {f:'paperBackdrops',label:'Бумажные фоны'},{f:'chromakey',label:'Хромакей'},
-    {f:'fabricBackdrops',label:'Тканевые фоны'},{f:'panoramicWindows',label:'Большие окна'},
-    {f:'texturedWall',label:'Фактурная стена'},{f:'fireplace',label:'Камин'},
-    {f:'mezzanine',label:'Второй свет'},{f:'balcony',label:'Балкон / терраса'},
-    {f:'soundproofing',label:'Звукоизоляция'},{f:'airConditioning',label:'Кондиционер'},
-    {f:'bluetoothSpeaker',label:'Bluetooth-колонка'} ];
+  // Общий список удобств зала одной строкой больше не нужен: теперь они
+  // разложены по темам — HALL_INCLUDED_LIST и секции HALL_ACC_SECTIONS ниже.
   var STUDIO_AMENITY_LIST = [
     {f:'wifi',label:'Wi-Fi'},{f:'makeupRoom',label:'Гримёрная'},{f:'makeupMirror',label:'Гримёрное зеркало'},
     {f:'restroom',label:'Санузел'},{f:'shower',label:'Душ'},{f:'kitchen',label:'Кухня / чай-кофе'},
@@ -1969,6 +2024,55 @@ body{
     {f:'allowNsfw',label:'Можно ню / 18+'},{f:'allowVideo',label:'Можно видеосъёмку'},
     {f:'allowSmokeMachine',label:'Можно дым-машину'},{f:'allowCatering',label:'Можно кейтеринг'} ];
   var PARKING_RU = { yard:'Парковка во дворе', free:'Бесплатная парковка', paid:'Платная парковка рядом', none:'Парковки нет' };
+  // Блок «Включено в бронь» на странице зала: всё, что НЕ разобрано по темам
+  // аккордеона ниже (свет, звук, доступ, парковка, правила) — иначе одно и то
+  // же удобство попадалось бы на странице дважды.
+  var HALL_INCLUDED_LIST = [
+    {f:'paperBackdrops',label:'Бумажные фоны'},{f:'chromakey',label:'Хромакей'},
+    {f:'fabricBackdrops',label:'Тканевые фоны'},{f:'panoramicWindows',label:'Большие окна'},
+    {f:'texturedWall',label:'Фактурная стена'},{f:'fireplace',label:'Камин'},
+    {f:'mezzanine',label:'Второй свет'},{f:'balcony',label:'Балкон / терраса'},
+    {f:'airConditioning',label:'Кондиционер'} ];
+  var STUDIO_INCLUDED_LIST = [
+    {f:'wifi',label:'Wi-Fi'},{f:'makeupRoom',label:'Гримёрная'},{f:'makeupMirror',label:'Гримёрное зеркало'},
+    {f:'restroom',label:'Санузел'},{f:'shower',label:'Душ'},{f:'kitchen',label:'Кухня / чай-кофе'},
+    {f:'loungeArea',label:'Зона отдыха'},{f:'heating',label:'Отопление'},
+    {f:'onSiteManager',label:'Администратор'},{f:'garmentSteamer',label:'Отпариватель'} ];
+  var INCLUDED_COLLAPSED = 6;   // сколько пунктов видно до «Показать все»
+  // Иконки секций аккордеона — те же тонкие контуры, что на референсе.
+  var ACC_ICONS = {
+    parking:'<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9.5 17V7h3a3 3 0 0 1 0 6h-3"/>',
+    light:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    sound:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    door:'<path d="M3 21h18M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M14.5 12h.01"/>',
+    plug:'<path d="M9 2v6M15 2v6M6 8h12v2.5a6 6 0 0 1-12 0V8ZM12 16.5V22"/>',
+    rules:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+  };
+  // Секции аккордеона — набор и порядок как на референсе. У каждой: свободный
+  // текст владельца (ключ зала из миграции 0040) и, где есть что показать,
+  // структурные данные — галочки зала (hall), галочки студии (studio) и
+  // отдельные строки-факты (facts). Пустая секция не показывается вовсе.
+  var HALL_ACC_SECTIONS = [
+    { key:'aboutParking', title:'Парковка', icon:'parking',
+      facts:function(){
+        var p = (STUDIO_AMENITIES||{}).parking;
+        return p && PARKING_RU[p] ? [PARKING_RU[p]] : [];
+      } },
+    { key:'aboutLighting', title:'Свет', icon:'light', hall:[
+      {f:'daylight',label:'Естественный свет'},{f:'constantLight',label:'Постоянный свет'},
+      {f:'strobeLight',label:'Импульсный свет'},{f:'lightModifiers',label:'Модификаторы света'},
+      {f:'ceilingRail',label:'Потолочная система'},{f:'blackout',label:'Блэкаут'} ] },
+    { key:'aboutSound', title:'Звук', icon:'sound', hall:[
+      {f:'soundproofing',label:'Звукоизоляция'},{f:'bluetoothSpeaker',label:'Bluetooth-колонка'} ] },
+    { key:'aboutAccess', title:'Доступ в студию', icon:'door',
+      studio:[{f:'separateEntrance',label:'Отдельный вход'},{f:'elevator',label:'Лифт'}],
+      facts:function(hall){
+        if(!(HALL_PROPS.floor && Number.isInteger(hall.floor))) return [];
+        return ['Этаж: ' + (hall.floor <= 0 ? 'цокольный' : hall.floor)];
+      } },
+    { key:'aboutElectrical', title:'Электрика', icon:'plug' },
+    { key:'aboutRules', title:'Правила', icon:'rules', studio:POLICY_LIST },
+  ];
   // Строчка-блёрб в карточке быстрого просмотра студии (карта каталога) —
   // первые 2 выставленных удобства/политики из уже знакомых списков, больше
   // не нужно: карточка короткая, полный список — на странице самой студии.
@@ -2009,6 +2113,7 @@ body{
     };
     if(cfg.verticalUi && cfg.verticalUi.hallProps) HALL_PROPS = cfg.verticalUi.hallProps;
     STUDIO_AMENITIES = cfg.amenities || {};
+    _hallAboutRenderedId = null;   // новая студия — описания зала пересобрать
     renderStudioAmenities();
     STUDIO_LAT = Number.isFinite(cfg.lat) ? cfg.lat : null;
     STUDIO_LON = Number.isFinite(cfg.lon) ? cfg.lon : null;
@@ -2659,12 +2764,123 @@ body{
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
     if(HALL_PROPS.floor && Number.isInteger(hall.floor)) facts.push('<div class="hall-fact"><span>Этаж</span><b>'+(hall.floor<=0?'цоколь':esc(hall.floor))+'</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
-    // Стиль + удобства — чипами.
-    var chips = (Array.isArray(hall.styles)?hall.styles:[]).filter(function(s){return HALL_STYLE_RU[s];}).map(function(s){return HALL_STYLE_RU[s];})
-      .concat(HALL_AMENITY_LIST.filter(function(a){return HALL_PROPS[a.f] && hall[a.f];}).map(function(a){return a.label;}));
+    // Стиль интерьера — чипами. Удобства отсюда ушли в «Включено в бронь»
+    // и в аккордеон ниже: там у них есть и «нет такого», и пояснения.
+    var chips = (Array.isArray(hall.styles)?hall.styles:[]).filter(function(s){return HALL_STYLE_RU[s];}).map(function(s){return HALL_STYLE_RU[s];});
     var cw = document.getElementById('hallChips');
     if(cw){ cw.innerHTML = chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join(''); cw.hidden = !chips.length; }
+    // Описание, «включено» и аккордеон не зависят от выбора времени, а
+    // renderAll() дёргается на каждый тап по сетке — пересобирать их заново
+    // значило бы захлопывать раскрытую секцию под рукой у читающего.
+    if(_hallAboutRenderedId !== hall.id){
+      _hallAboutRenderedId = hall.id;
+      renderHallDescription(hall);
+      renderHallIncluded(hall);
+      renderHallAccordion(hall);
+    }
     renderHallPackages(hall);
+  }
+  let _hallAboutRenderedId = null;   // для какого зала уже собраны блоки выше
+
+  // Один пункт «есть/нет»: зачёркнутый серый = в зале такого нет.
+  function featHtml(label, on){
+    return '<div class="feat" data-on="'+(on?'true':'false')+'">' +
+      '<span class="feat-mark">'+(on?'✓':'✕')+'</span>' +
+      '<span class="feat-label">'+esc(label)+'</span></div>';
+  }
+
+  // Описание зала: четыре строки и «Читать далее». Кнопку показываем, только
+  // если текст реально не поместился — меряем по факту; когда секция ещё не
+  // на экране (нулевая высота), падаем на прикидку по длине текста.
+  function renderHallDescription(hall){
+    var box = document.getElementById('hallAbout');
+    if(!box) return;
+    var text = (hall.description || '').trim();
+    box.hidden = !text;
+    box.dataset.open = 'false';
+    if(!text){ box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="hall-about-text">'+esc(text)+'</div>' +
+      '<button class="hall-about-more" type="button" hidden>Читать далее</button>';
+    var t = box.querySelector('.hall-about-text');
+    var more = box.querySelector('.hall-about-more');
+    more.hidden = t.clientHeight ? (t.scrollHeight <= t.clientHeight + 2) : (text.length <= 200);
+    more.addEventListener('click', function(){
+      var open = box.dataset.open !== 'true';
+      box.dataset.open = open ? 'true' : 'false';
+      more.textContent = open ? 'Свернуть' : 'Читать далее';
+      haptic('light');
+    });
+  }
+
+  // «Включено в бронь»: сначала то, что есть, потом чего нет. Свёрнуто видно
+  // INCLUDED_COLLAPSED пунктов — в свёрнутом виде это ровно «что есть».
+  function renderHallIncluded(hall){
+    var box = document.getElementById('hallIncluded');
+    if(!box) return;
+    var a = STUDIO_AMENITIES || {};
+    var items = HALL_INCLUDED_LIST.filter(function(x){ return HALL_PROPS[x.f]; })
+      .map(function(x){ return { label:x.label, on:!!hall[x.f] }; })
+      .concat(STUDIO_INCLUDED_LIST.map(function(x){ return { label:x.label, on:!!a[x.f] }; }));
+    items.sort(function(p, q){ return (q.on ? 1 : 0) - (p.on ? 1 : 0); });
+    box.hidden = !items.length;
+    if(!items.length){ box.innerHTML = ''; return; }
+    var hidden = items.length - INCLUDED_COLLAPSED;
+    box.innerHTML = '<div class="section-label">Включено в бронь</div>' +
+      '<div class="feat-grid">' + items.map(function(it){ return featHtml(it.label, it.on); }).join('') + '</div>' +
+      (hidden > 0 ? '<button class="feat-more" type="button">Показать все</button>' : '');
+    var cells = box.querySelectorAll('.feat');
+    var more = box.querySelector('.feat-more');
+    function apply(open){
+      cells.forEach(function(el, i){ el.hidden = !open && i >= INCLUDED_COLLAPSED; });
+      if(more) more.textContent = open ? 'Свернуть' : 'Показать все';
+    }
+    if(more){
+      var open = false;
+      apply(false);
+      more.addEventListener('click', function(){ open = !open; apply(open); haptic('light'); });
+    }
+  }
+
+  // Аккордеон тем: открыта всегда не больше одной секции — на телефоне
+  // раскрытые разом шесть блоков превращают страницу в простыню.
+  function renderHallAccordion(hall){
+    var box = document.getElementById('hallAccordion');
+    if(!box) return;
+    var a = STUDIO_AMENITIES || {};
+    var html = HALL_ACC_SECTIONS.map(function(sec){
+      var text = (hall[sec.key] || '').trim();
+      var feats = (sec.hall || []).filter(function(x){ return HALL_PROPS[x.f]; })
+        .map(function(x){ return featHtml(x.label, !!hall[x.f]); })
+        .concat((sec.studio || []).map(function(x){ return featHtml(x.label, !!a[x.f]); }));
+      var facts = sec.facts ? sec.facts(hall) : [];
+      if(!text && !feats.length && !facts.length) return '';
+      return '<div class="acc-item" data-open="false">' +
+        '<button class="acc-head" type="button">' +
+          '<svg class="acc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+            'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ACC_ICONS[sec.icon]+'</svg>' +
+          '<span class="acc-title">'+esc(sec.title)+'</span>' +
+          '<span class="acc-caret" aria-hidden="true">▾</span>' +
+        '</button>' +
+        '<div class="acc-body" hidden>' +
+          facts.map(function(f){ return '<div class="acc-fact">'+esc(f)+'</div>'; }).join('') +
+          (text ? '<div class="acc-text">'+esc(text)+'</div>' : '') +
+          (feats.length ? '<div class="feat-grid">'+feats.join('')+'</div>' : '') +
+        '</div></div>';
+    }).join('');
+    box.hidden = !html;
+    box.innerHTML = html;
+    box.querySelectorAll('.acc-item').forEach(function(item){
+      item.querySelector('.acc-head').addEventListener('click', function(){
+        var open = item.dataset.open !== 'true';
+        box.querySelectorAll('.acc-item').forEach(function(other){
+          other.dataset.open = 'false';
+          other.querySelector('.acc-body').hidden = true;
+        });
+        item.dataset.open = open ? 'true' : 'false';
+        item.querySelector('.acc-body').hidden = !open;
+        haptic('light');
+      });
+    });
   }
 
   // Удобства/правила студии — секция под списком залов, из /config.amenities.
