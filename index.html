@@ -1179,9 +1179,20 @@ body{
 .sp-blurb{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:10px;line-height:1.4;}
 .sp-price-line{font-size:var(--fs-md);color:var(--text);}
 .sp-price-line b{font-size:var(--fs-xl);font-weight:700;color:var(--accent);}
-/* Резиновая ценовая булавка на карте (Yandex islands#blueStretchyIcon) —
-   собственных классов не заводит, только гасит родной balloon на клик,
-   см. drawCatalogMap. */
+/* Ценовая булавка на карте каталога — белая таблетка вместо штатного
+   Яндекс-флажка (см. catalogPinLayout/drawCatalogMap). Тень вместо рамки —
+   тот же приём, что у карточек в списке студий, различимо на любой подложке
+   карты, от воды до зелени. */
+.map-pin{
+  display:inline-flex;align-items:center;
+  padding:8px 14px;border-radius:999px;
+  background:var(--surface);color:var(--text);
+  font-family:var(--f);font-weight:700;font-size:var(--fs-sm);
+  white-space:nowrap;cursor:pointer;
+  box-shadow:0 2px 6px rgba(20,22,28,.18), 0 0 0 1px rgba(20,22,28,.06);
+  transition:box-shadow .12s ease;
+}
+.map-pin:hover{box-shadow:0 3px 10px rgba(20,22,28,.24), 0 0 0 1px rgba(20,22,28,.12);}
 
 .panel-title{
   font-family:var(--f);
@@ -4660,13 +4671,26 @@ body{
     if(on) drawCatalogMap();
   }
   // Булавка показывает цену «от» (или, если у студии нет ни одного активного
-  // зала, просто имя — ставить нечего) — «резиновая» готовая иконка Яндекс.
-  // Карт сама подгоняет ширину под текст, свой макет заводить не пришлось.
-  // openBalloonOnClick:false — открываем не штатный balloon Яндекса, а свою
-  // карточку быстрого просмотра (openStudioPreview), клик ловим сами.
+  // зала, просто имя — ставить нечего). openBalloonOnClick:false — открываем
+  // не штатный balloon Яндекса, а свою карточку быстрого просмотра
+  // (openStudioPreview), клик ловим сами.
   function catalogPinLabel(s){
     const cur = s.currency || CUR || 'BYN';
     return Number.isFinite(s.price) ? ('от ' + s.price + ' ' + cur) : (s.name || '');
+  }
+  // Свой макет булавки (белая таблетка с текстом, без штатного «флажка»
+  // Яндекса) вместо preset islands#blueStretchyIcon — тот был явно
+  // Яндекс-брендированным пятном на карте, а нужна была нейтральная плашка
+  // в духе карточки снизу. Класс макета создаём заново на каждую булавку —
+  // текст уже подставлен в шаблон обычной JS-конкатенацией (esc() тот же,
+  // каким студийные данные экранируются везде в этом файле), поэтому не
+  // нужно разбираться в собственном шаблонизаторе Яндекса ($[...]/{% %}) —
+  // задача только на вставку готовой HTML-строки, размер и позиционирование
+  // под неё templateLayoutFactory считает сам по фактическому DOM-узлу.
+  function catalogPinLayout(ymaps, label){
+    return ymaps.templateLayoutFactory.createClass(
+      '<div class="map-pin">' + esc(label) + '</div>'
+    );
   }
   function drawCatalogMap(){
     const pts = studiosWithGeo();
@@ -4680,8 +4704,8 @@ body{
       const coll = new ymaps.GeoObjectCollection();
       pts.forEach(s => {
         const pm = new ymaps.Placemark([s.lat, s.lon],
-          { hintContent: esc(s.name), iconContent: esc(catalogPinLabel(s)) },
-          { preset: 'islands#blueStretchyIcon', openBalloonOnClick: false });
+          { hintContent: esc(s.name) },
+          { iconLayout: catalogPinLayout(ymaps, catalogPinLabel(s)), openBalloonOnClick: false });
         pm.events.add('click', () => { haptic('medium'); openStudioPreview(s); });
         coll.add(pm);
       });
