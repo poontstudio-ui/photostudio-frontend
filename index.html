@@ -1154,6 +1154,35 @@ body{
 }
 .panel[data-open="true"]{transform:translate(-50%, 0);}
 
+/* ---------- Быстрый просмотр студии (карта каталога) ---------- */
+/* Панель без своего padding — фото-карусель должна доходить до самых краёв
+   и до верхнего скругления, как на карточке; текст и кнопка ниже возвращают
+   отступ уже в sp-body. */
+.studio-preview-panel{padding:0;overflow:hidden;}
+.sp-media{position:relative;background:var(--surface-2);line-height:0;}
+.sp-carousel{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;}
+.sp-carousel::-webkit-scrollbar{display:none;}
+.sp-carousel img{flex:0 0 100%;width:100%;height:220px;object-fit:cover;scroll-snap-align:start;}
+.sp-dots{position:absolute;left:0;right:0;bottom:12px;display:flex;justify-content:center;gap:6px;pointer-events:none;}
+.sp-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.55);}
+.sp-dot[data-active="true"]{background:#fff;}
+.sp-icon-btn{position:absolute;top:12px;width:36px;height:36px;border-radius:50%;
+  border:none;background:rgba(20,22,28,.55);color:#fff;font-size:17px;line-height:1;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.sp-fav{right:56px;}
+.sp-fav[data-on="true"]{color:var(--red);}
+.sp-close{right:12px;}
+.sp-body{padding:16px 16px calc(18px + env(safe-area-inset-bottom));}
+.sp-name{font-family:var(--f);font-weight:700;font-size:var(--fs-lg);margin-bottom:6px;}
+.sp-capacity{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:4px;}
+.sp-capacity[hidden],.sp-blurb[hidden],.sp-price-line[hidden]{display:none;}
+.sp-blurb{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:10px;line-height:1.4;}
+.sp-price-line{font-size:var(--fs-md);color:var(--text);}
+.sp-price-line b{font-size:var(--fs-xl);font-weight:700;color:var(--accent);}
+/* Резиновая ценовая булавка на карте (Yandex islands#blueStretchyIcon) —
+   собственных классов не заводит, только гасит родной balloon на клик,
+   см. drawCatalogMap. */
+
 .panel-title{
   font-family:var(--f);
   font-weight:700;
@@ -1658,6 +1687,28 @@ body{
   <button class="btn-ghost" id="clearHistoryDismissBtn">Отмена</button>
 </div>
 
+<!-- Быстрый просмотр студии по клику на цену на карте каталога — тот же
+     механизм окна (.panel/.overlay), что и везде в приложении, просто без
+     верхнего отступа под фото-карусель (sp-media гасит padding панели
+     отрицательным отступом). Не модалка деталей зала — только то, что нужно
+     решить «стоит заходить или нет»: фото, вместимость, пара удобств, цена
+     «от». Полный переход в студию — уже кнопкой внизу. -->
+<div class="panel studio-preview-panel" id="studioPreviewPanel">
+  <div class="sp-media">
+    <div class="sp-carousel" id="spCarousel"></div>
+    <div class="sp-dots" id="spDots"></div>
+    <button class="sp-icon-btn sp-fav" id="spFavBtn" type="button" data-on="false" aria-label="В избранное">♡</button>
+    <button class="sp-icon-btn sp-close" id="spCloseBtn" type="button" aria-label="Закрыть">✕</button>
+  </div>
+  <div class="sp-body">
+    <div class="sp-name" id="spName"></div>
+    <div class="sp-capacity" id="spCapacity"></div>
+    <div class="sp-blurb" id="spBlurb"></div>
+    <div class="sp-price-line" id="spPriceLine"></div>
+    <button class="btn-primary" id="spViewBtn" style="width:100%;margin-top:14px">Смотреть студию</button>
+  </div>
+</div>
+
 <script>
 (function(){
   const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -1863,6 +1914,16 @@ body{
     {f:'allowNsfw',label:'Можно ню / 18+'},{f:'allowVideo',label:'Можно видеосъёмку'},
     {f:'allowSmokeMachine',label:'Можно дым-машину'},{f:'allowCatering',label:'Можно кейтеринг'} ];
   var PARKING_RU = { yard:'Парковка во дворе', free:'Бесплатная парковка', paid:'Платная парковка рядом', none:'Парковки нет' };
+  // Строчка-блёрб в карточке быстрого просмотра студии (карта каталога) —
+  // первые 2 выставленных удобства/политики из уже знакомых списков, больше
+  // не нужно: карточка короткая, полный список — на странице самой студии.
+  function catalogAmenityBlurb(s){
+    var on = STUDIO_AMENITY_LIST.concat(POLICY_LIST)
+      .filter(function(x){ return s[x.f]; })
+      .slice(0, 2)
+      .map(function(x){ return x.label; });
+    return on.join(' · ');
+  }
   let STUDIO_LAT = null, STUDIO_LON = null, STUDIO_ADDRESS = '';  // координаты студии для карты
   let STUDIO_GO_REF = '';                                         // партнёрский ref для ссылок Яндекс Go
   let _studioMapDrawn = false;                                    // карта студии уже отрисована
@@ -4598,6 +4659,15 @@ body{
     btn.dataset.on = on ? 'true' : 'false';
     if(on) drawCatalogMap();
   }
+  // Булавка показывает цену «от» (или, если у студии нет ни одного активного
+  // зала, просто имя — ставить нечего) — «резиновая» готовая иконка Яндекс.
+  // Карт сама подгоняет ширину под текст, свой макет заводить не пришлось.
+  // openBalloonOnClick:false — открываем не штатный balloon Яндекса, а свою
+  // карточку быстрого просмотра (openStudioPreview), клик ловим сами.
+  function catalogPinLabel(s){
+    const cur = s.currency || CUR || 'BYN';
+    return Number.isFinite(s.price) ? ('от ' + s.price + ' ' + cur) : (s.name || '');
+  }
   function drawCatalogMap(){
     const pts = studiosWithGeo();
     if(!pts.length) return;
@@ -4610,10 +4680,9 @@ body{
       const coll = new ymaps.GeoObjectCollection();
       pts.forEach(s => {
         const pm = new ymaps.Placemark([s.lat, s.lon],
-          { balloonContentHeader: esc(s.name), balloonContentBody: esc(s.address || ''),
-            hintContent: esc(s.name) },
-          { preset: 'islands#redIcon' });
-        pm.events.add('click', () => { haptic('medium'); chooseStudio(s.id); });
+          { hintContent: esc(s.name), iconContent: esc(catalogPinLabel(s)) },
+          { preset: 'islands#blueStretchyIcon', openBalloonOnClick: false });
+        pm.events.add('click', () => { haptic('medium'); openStudioPreview(s); });
         coll.add(pm);
       });
       _catMap.geoObjects.add(coll);
@@ -4623,6 +4692,67 @@ body{
       hideMapOpenPromo(el);
     }).catch(() => setCatalogMap(false));
   }
+
+  // ---------- Быстрый просмотр студии по клику на цену ----------
+  // Та же механика окна, что и везде (overlay/.panel), карточка — не полный
+  // переход в студию: фото, вместимость, пара удобств, цена «от» и кнопка
+  // «Смотреть студию» — только она уже грузит студию целиком (chooseStudio).
+  let _previewStudio = null;
+  function spSyncDots(){
+    const car = document.getElementById('spCarousel');
+    const w = car.clientWidth || 1;
+    const idx = Math.round(car.scrollLeft / w);
+    document.querySelectorAll('#spDots .sp-dot').forEach((d, i) => {
+      d.dataset.active = (i === idx) ? 'true' : 'false';
+    });
+  }
+  document.getElementById('spCarousel').addEventListener('scroll', spSyncDots, { passive: true });
+  function openStudioPreview(s){
+    _previewStudio = s;
+    document.getElementById('spName').textContent = s.name || '';
+    const photos = Array.isArray(s.photos) ? s.photos.filter(Boolean) : [];
+    const car = document.getElementById('spCarousel');
+    car.innerHTML = photos.map(u => `<img src="${esc(u)}" alt="" loading="lazy">`).join('');
+    car.scrollLeft = 0;
+    document.getElementById('spDots').innerHTML = photos.length > 1
+      ? photos.map((_, i) => `<span class="sp-dot" data-i="${i}" data-active="${i===0}"></span>`).join('')
+      : '';
+    const capEl = document.getElementById('spCapacity');
+    capEl.hidden = !Number.isFinite(s.capacity);
+    capEl.textContent = capEl.hidden ? '' : ('до ' + s.capacity + ' чел.');
+    const blurb = catalogAmenityBlurb(s);
+    const blurbEl = document.getElementById('spBlurb');
+    blurbEl.hidden = !blurb;
+    blurbEl.textContent = blurb;
+    const priceEl = document.getElementById('spPriceLine');
+    priceEl.hidden = !Number.isFinite(s.price);
+    if(!priceEl.hidden){
+      const cur = s.currency || CUR || 'BYN';
+      priceEl.innerHTML = 'От <b>' + esc(s.price) + ' ' + esc(cur) + '</b>/ч';
+    }
+    // Декоративное «избранное» — своего сохранения пока нет, только визуал.
+    const favBtn = document.getElementById('spFavBtn');
+    favBtn.dataset.on = 'false';
+    favBtn.textContent = '♡';
+    overlay.dataset.open = 'true';
+    document.getElementById('studioPreviewPanel').dataset.open = 'true';
+  }
+  function closeStudioPreview(){
+    overlay.dataset.open = 'false';
+    document.getElementById('studioPreviewPanel').dataset.open = 'false';
+  }
+  document.getElementById('spCloseBtn').addEventListener('click', (e) => { e.stopPropagation(); closeStudioPreview(); });
+  document.getElementById('spFavBtn').addEventListener('click', function(e){
+    e.stopPropagation();
+    const on = this.dataset.on !== 'true';
+    this.dataset.on = on ? 'true' : 'false';
+    this.textContent = on ? '♥' : '♡';
+    haptic('light');
+  });
+  document.getElementById('spViewBtn').addEventListener('click', () => {
+    if(_previewStudio) chooseStudio(_previewStudio.id);
+  });
+  overlay.addEventListener('click', closeStudioPreview);
 
   // true, если в текущую студию пришли через каталог (а не по deep-link /
   // ?tenant=). От этого зависит, показывать ли «назад к списку» в шапке студии.
