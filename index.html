@@ -911,7 +911,20 @@ body{
 .map-action{flex:1;padding:11px 8px;border-radius:var(--r-md);border:1px solid var(--line-strong);
   background:var(--surface);color:var(--text);font-family:var(--f);font-size:var(--fs-sm);font-weight:600;cursor:pointer;}
 .map-action:active{background:var(--surface-2);}
-.catalog-map{width:100%;height:calc(100vh - 220px);min-height:320px;border-radius:var(--r-md);overflow:hidden;background:var(--surface-2);border:1px solid var(--line);margin:14px 20px 0;}
+/* Полноэкранная карта — фиксированный слой поверх всего каталога, а не
+   блок в потоке страницы: раньше карта была врезана в поток с отступами
+   и расчётной высотой calc(100vh-220px), из-за чего реально не занимала
+   весь экран и обрезалась снизу. 100dvh поверх 100vh — учитывает то, что
+   в мобильном браузере адресная строка может сворачиваться/разворачиваться.
+   left:50%+max-width — тот же приём, что у .panel/.summary-bar: fixed
+   считается от всего окна браузера, а не от .app-shell, иначе на широком
+   экране карта растянулась бы за пределы мобильной рамки приложения. */
+.catalog-map{
+  position:fixed;left:50%;top:0;transform:translateX(-50%);
+  width:100%;max-width:430px;
+  height:100vh;height:100dvh;
+  background:var(--surface-2);z-index:15;
+}
 .catalog-map[hidden]{display:none;}
 .hall-packages{margin-top:12px;}
 .hall-packages:not([hidden]){display:block;}
@@ -4758,7 +4771,9 @@ body{
     const btn = document.getElementById('catalogMapBtn');
     btn.textContent = on ? 'Закрыть карту' : 'Показать на карте';
     btn.dataset.on = on ? 'true' : 'false';
-    if(on) drawCatalogMap();
+    // Карта теперь на весь экран (position:fixed) — без блокировки скролла
+    // страница за ней ещё могла прокручиваться под фиксированным слоем.
+    if(on){ lockScroll(); drawCatalogMap(); } else { unlockScroll(); }
   }
   // Булавка показывает цену «от» (или, если у студии нет ни одного активного
   // зала, просто имя — ставить нечего). openBalloonOnClick:false — открываем
@@ -4876,6 +4891,10 @@ body{
     haptic('light');
   });
   document.getElementById('spViewBtn').addEventListener('click', () => {
+    // Иначе модалка оставалась открытой поверх экрана студии: chooseStudio
+    // прячет catalogView, но overlay/panel — отдельный слой, сам по себе
+    // не закрывается при переходе.
+    closeStudioPreview();
     if(_previewStudio) chooseStudio(_previewStudio.id);
   });
   overlay.addEventListener('click', closeStudioPreview);
