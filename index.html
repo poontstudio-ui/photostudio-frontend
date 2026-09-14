@@ -2023,7 +2023,19 @@ body{
     {f:'allowPets',label:'Можно с животными'},{f:'allowKids',label:'Можно с детьми'},
     {f:'allowNsfw',label:'Можно ню / 18+'},{f:'allowVideo',label:'Можно видеосъёмку'},
     {f:'allowSmokeMachine',label:'Можно дым-машину'},{f:'allowCatering',label:'Можно кейтеринг'} ];
-  var PARKING_RU = { yard:'Парковка во дворе', free:'Бесплатная парковка', paid:'Платная парковка рядом', none:'Парковки нет' };
+  // Варианты парковки (0041) — их может быть несколько сразу, поэтому список,
+  // а не словарь одного значения. «Парковки нет» — это parkingAvailable:false.
+  var PARKING_LIST = [
+    {f:'parkingFreeOnsite',label:'Бесплатная парковка на территории'},
+    {f:'parkingPaidOnsite',label:'Платная парковка на территории'},
+    {f:'parkingFreeStreet',label:'Бесплатная парковка на улице'},
+    {f:'parkingMeteredStreet',label:'Платная уличная парковка'},
+    {f:'parkingValet',label:'Валет-паркинг'},
+    {f:'parkingLotNearby',label:'Парковка рядом'},
+  ];
+  function parkingLabels(a){
+    return PARKING_LIST.filter(function(x){ return a && a[x.f]; }).map(function(x){ return x.label; });
+  }
   // Блок «Включено в бронь» на странице зала: всё, что НЕ разобрано по темам
   // аккордеона ниже (свет, звук, доступ, парковка, правила) — иначе одно и то
   // же удобство попадалось бы на странице дважды.
@@ -2053,10 +2065,12 @@ body{
   // структурные данные — галочки зала (hall), галочки студии (studio) и
   // отдельные строки-факты (facts). Пустая секция не показывается вовсе.
   var HALL_ACC_SECTIONS = [
-    { key:'aboutParking', title:'Парковка', icon:'parking',
+    // Парковка — уровня студии целиком: и варианты, и текст (0041).
+    { key:'aboutParking', studioText:true, title:'Парковка', icon:'parking',
       facts:function(){
-        var p = (STUDIO_AMENITIES||{}).parking;
-        return p && PARKING_RU[p] ? [PARKING_RU[p]] : [];
+        var a = STUDIO_AMENITIES || {};
+        if(a.parkingAvailable === false) return ['Парковки нет'];
+        return parkingLabels(a);
       } },
     { key:'aboutLighting', title:'Свет', icon:'light', hall:[
       {f:'daylight',label:'Естественный свет'},{f:'constantLight',label:'Постоянный свет'},
@@ -2848,7 +2862,9 @@ body{
     if(!box) return;
     var a = STUDIO_AMENITIES || {};
     var html = HALL_ACC_SECTIONS.map(function(sec){
-      var text = (hall[sec.key] || '').trim();
+      // studioText — тема уровня студии (парковка): её текст один на адрес,
+      // а не свой у каждого зала.
+      var text = ((sec.studioText ? a[sec.key] : hall[sec.key]) || '').trim();
       var feats = (sec.hall || []).filter(function(x){ return HALL_PROPS[x.f]; })
         .map(function(x){ return featHtml(x.label, !!hall[x.f]); })
         .concat((sec.studio || []).map(function(x){ return featHtml(x.label, !!a[x.f]); }));
@@ -2889,7 +2905,9 @@ body{
     if(!sec) return;
     var a = STUDIO_AMENITIES || {};
     var am = STUDIO_AMENITY_LIST.filter(function(x){ return a[x.f]; }).map(function(x){ return x.label; });
-    if(a.parking && PARKING_RU[a.parking]) am.push(PARKING_RU[a.parking]);
+    // Ответ «парковки нет» перекрывает варианты: владелец мог сначала
+    // отметить их, а потом переключить ответ — показывать их было бы враньём.
+    if(a.parkingAvailable !== false) am.push.apply(am, parkingLabels(a));
     var pol = POLICY_LIST.filter(function(x){ return a[x.f]; }).map(function(x){ return x.label; });
     document.getElementById('studioAmenityChips').innerHTML = am.map(function(c){ return '<span class="chip">'+esc(c)+'</span>'; }).join('');
     document.getElementById('studioPolicyChips').innerHTML = pol.map(function(c){ return '<span class="chip">'+esc(c)+'</span>'; }).join('');
@@ -4918,7 +4936,7 @@ body{
       if(r.airConditioning) props.push('кондиционер');
       if(r.bluetoothSpeaker) props.push('Bluetooth-колонка');
       if(r.wifi) props.push('Wi-Fi');
-      if(r.parking && PARKING_RU[r.parking] && r.parking !== 'none') props.push(PARKING_RU[r.parking]);
+      if(r.hasParking) props.push('Парковка');   // разбор по вариантам — на странице студии
       if(r.areaM2) props.push(r.areaM2 + ' м²');
       if(r.ceilingCm) props.push('потолок ' + (r.ceilingCm/100).toFixed(1).replace('.0','') + ' м');
       if(Number.isInteger(r.floor)) props.push(r.floor<=0 ? 'цокольный этаж' : r.floor + '-й этаж');
