@@ -621,17 +621,46 @@ body{
 .city-opt:hover,.city-opt[data-active="true"]{background:var(--accent-dim);}
 .city-opt-count{font-family:var(--f-mono);font-size:var(--fs-xs);color:var(--text-2);flex:0 0 auto;}
 .city-opt-empty{padding:12px 11px;color:var(--text-2);font-size:var(--fs-sm);}
-.catalog-list{padding:14px 20px 0;display:flex;flex-direction:column;gap:10px;}
-.catalog-row{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);
-  padding:14px;cursor:pointer;
-}
-.catalog-row-name{font-family:var(--f);font-weight:600;font-size:var(--fs-lg);}
-.catalog-row-sub{font-size:var(--fs-xs);color:var(--text-2);margin-top:3px;line-height:1.4;}
-.catalog-row-chevron{color:var(--text-2);flex:0 0 auto;font-size:var(--fs-xl);}
+/* нижний паддинг — место под плавающую кнопку карты (.catalog-map-fab),
+   иначе последняя карточка списка оказывается у неё под низом */
+.catalog-list{padding:14px 20px calc(86px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px;}
 .catalog-empty{color:var(--text-2);font-size:var(--fs-sm);padding:30px 4px;}
 .catalog-mode-toggle{margin-top:10px;background:none;border:none;color:var(--accent);font-family:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;padding:2px 0;}
+
+/* ---------- Карточка студии в списке каталога ---------- */
+/* Карусель фото прямо в списке, а не только в карточке быстрого просмотра
+   с карты — тот же набор данных (вместимость, пара удобств, цена «от»),
+   что и в .sp-*, только сразу видно при пролистывании списка. */
+.cat-card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
+  overflow:hidden;cursor:pointer;
+}
+.cat-media{position:relative;background:var(--surface-2);aspect-ratio:4/3;}
+.cat-media img{width:100%;height:100%;object-fit:cover;display:block;}
+.cat-dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:6px;pointer-events:none;}
+.cat-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.55);}
+.cat-dot[data-active="true"]{background:#fff;}
+.cat-fav{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;
+  border:none;background:rgba(20,22,28,.55);color:#fff;font-size:17px;line-height:1;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.cat-fav[data-on="true"]{color:var(--red);}
+.cat-body{padding:14px;}
+.cat-name{font-family:var(--f);font-weight:700;font-size:var(--fs-lg);}
+.cat-sub{font-size:var(--fs-xs);color:var(--text-2);margin-top:3px;line-height:1.4;}
+.cat-capacity{font-size:var(--fs-sm);color:var(--text-2);margin-top:6px;}
+.cat-blurb{font-size:var(--fs-sm);color:var(--text-2);margin-top:2px;}
+.cat-price{font-size:var(--fs-md);margin-top:8px;}
+.cat-price b{color:var(--accent);}
+
+/* ---------- Плавающая кнопка "Показать на карте" / "Закрыть карту" ---------- */
+.catalog-map-fab{
+  position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));
+  transform:translateX(-50%);
+  background:var(--text);color:var(--surface);border:none;border-radius:999px;
+  padding:13px 24px;font-family:var(--f);font-weight:700;font-size:var(--fs-sm);
+  box-shadow:0 4px 16px rgba(20,22,28,.28);cursor:pointer;z-index:20;
+}
+.catalog-map-fab[hidden]{display:none;}
 .time-search{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:14px;display:flex;flex-direction:column;gap:10px;}
 /* .time-search{display:flex} без этого перекрывает атрибут hidden — панель
    поиска была видна ВСЕГДА, независимо от переключателя «Найти по времени».
@@ -884,7 +913,6 @@ body{
 .map-action:active{background:var(--surface-2);}
 .catalog-map{width:100%;height:calc(100vh - 220px);min-height:320px;border-radius:var(--r-md);overflow:hidden;background:var(--surface-2);border:1px solid var(--line);margin:14px 20px 0;}
 .catalog-map[hidden]{display:none;}
-.catalog-map-toggle{margin-left:8px;}
 .hall-packages{margin-top:12px;}
 .hall-packages:not([hidden]){display:block;}
 .hall-packages .pkg-title{font-size:var(--fs-xs);color:var(--text-2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
@@ -1374,7 +1402,6 @@ body{
       </div>
       <input type="text" id="studioSearch" class="catalog-search" placeholder="Поиск студии по названию" autocomplete="off" spellcheck="false">
       <button class="catalog-mode-toggle" id="searchModeToggle" type="button">Найти по времени →</button>
-      <button class="catalog-mode-toggle catalog-map-toggle" id="catalogMapBtn" type="button" hidden>На карте</button>
       <div class="time-search" id="timeSearch" hidden>
         <div class="month-row" id="tsMonthRow"></div>
         <div class="date-row" id="tsDateRow"></div>
@@ -1391,6 +1418,10 @@ body{
     </div>
     <div class="catalog-list" id="catalogList"></div>
     <div class="catalog-map" id="catalogMap" hidden></div>
+    <!-- Липкая кнопка показать/скрыть карту — фиксированная поверх списка
+         и карты (как на Peerspace), а не ссылка в шапке: остаётся под рукой
+         при любой прокрутке длинного списка карточек. -->
+    <button class="catalog-map-fab" id="catalogMapBtn" type="button" hidden>Показать на карте</button>
   </div>
 
   <div class="main-view" id="mainView">
@@ -4405,17 +4436,76 @@ body{
     renderStudios(city);
   }
 
-  // Одна карточка студии в списке каталога. showCity — писать город в подписи
-  // (нужно в результатах поиска, где студии из разных городов).
+  // Бесконечно листаемая карусель фото в карточке списка — тот же приём,
+  // что в openLightbox (одна <img>, индекс по модулю без границ, порог
+  // свайпа 45px), а не scroll-snap: не нужна прокруточная анимация, только
+  // быстрая смена кадра. Свайп внутри .cat-media не должен провалиться в
+  // клик по карточке (переход в студию) — гасим синтетический click, который
+  // браузер всё равно шлёт после touchend, если свайп реально сдвинул кадр.
+  function wireCardCarousel(media, photos){
+    const img = media.querySelector('img');
+    const dots = media.querySelector('.cat-dots');
+    let i = 0;
+    function preload(n){ const x = new Image(); x.src = photos[((n % photos.length) + photos.length) % photos.length]; }
+    function show(){
+      img.src = photos[i];
+      if(dots) dots.querySelectorAll('.cat-dot').forEach((d, idx) => { d.dataset.active = (idx === i) ? 'true' : 'false'; });
+      preload(i + 1); preload(i - 1);
+    }
+    function go(delta){ i = ((i + delta) % photos.length + photos.length) % photos.length; show(); }
+    let x0 = null, y0 = null, swiped = false;
+    media.addEventListener('touchstart', e => { const t = e.changedTouches[0]; x0 = t.clientX; y0 = t.clientY; swiped = false; }, { passive: true });
+    media.addEventListener('touchmove', e => {
+      if(x0 === null) return;
+      if(Math.abs(e.changedTouches[0].clientX - x0) > 10) swiped = true;
+    }, { passive: true });
+    media.addEventListener('touchend', e => {
+      if(x0 === null) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - x0, dy = t.clientY - y0;
+      if(Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)){ go(dx < 0 ? 1 : -1); swiped = true; }
+      x0 = y0 = null;
+    }, { passive: true });
+    media.addEventListener('click', e => { if(swiped){ e.stopPropagation(); swiped = false; } });
+    show();
+  }
+
+  // Одна карточка студии в списке каталога: карусель фото, вместимость,
+  // пара удобств и цена «от» — тот же набор данных, что в карточке быстрого
+  // просмотра с карты (openStudioPreview), только сразу видна в списке.
+  // showCity — писать город в подписи (нужно в результатах поиска, где
+  // студии из разных городов).
   function studioRow(s, showCity){
     const row = document.createElement('div');
-    row.className = 'catalog-row';
+    row.className = 'cat-card';
+    const photos = Array.isArray(s.photos) ? s.photos.filter(Boolean) : [];
     const sub = [showCity ? s.city : null, s.address, showCity ? null : s.subtitle]
       .filter(Boolean).join(' · ');
+    const blurb = catalogAmenityBlurb(s);
+    const cur = s.currency || CUR || 'BYN';
     row.innerHTML =
-      '<div><div class="catalog-row-name">'+esc(s.name)+'</div>'+
-      (sub ? '<div class="catalog-row-sub">'+esc(sub)+'</div>' : '')+'</div>'+
-      '<div class="catalog-row-chevron">›</div>';
+      '<div class="cat-media">' +
+        (photos.length > 1 ? '<img alt="" loading="lazy">'
+          : photos.length === 1 ? '<img src="'+esc(photos[0])+'" alt="" loading="lazy">' : '') +
+        (photos.length > 1 ? '<div class="cat-dots">' +
+          photos.map((_, i) => '<span class="cat-dot" data-active="'+(i===0)+'"></span>').join('') + '</div>' : '') +
+        '<button class="cat-fav" type="button" data-on="false" aria-label="В избранное">♡</button>' +
+      '</div>' +
+      '<div class="cat-body">' +
+        '<div class="cat-name">'+esc(s.name)+'</div>' +
+        (sub ? '<div class="cat-sub">'+esc(sub)+'</div>' : '') +
+        (Number.isFinite(s.capacity) ? '<div class="cat-capacity">до '+esc(s.capacity)+' чел.</div>' : '') +
+        (blurb ? '<div class="cat-blurb">'+esc(blurb)+'</div>' : '') +
+        (Number.isFinite(s.price) ? '<div class="cat-price">От <b>'+esc(s.price)+' '+esc(cur)+'</b>/ч</div>' : '') +
+      '</div>';
+    if(photos.length > 1) wireCardCarousel(row.querySelector('.cat-media'), photos);
+    row.querySelector('.cat-fav').addEventListener('click', function(e){
+      e.stopPropagation();
+      const on = this.dataset.on !== 'true';
+      this.dataset.on = on ? 'true' : 'false';
+      this.textContent = on ? '♥' : '♡';
+      haptic('light');
+    });
     row.addEventListener('click', ()=>{ haptic('medium'); chooseStudio(s.id); });
     return row;
   }
@@ -4666,7 +4756,7 @@ body{
     document.getElementById('catalogMap').hidden = !on;
     catalogList.style.display = on ? 'none' : '';
     const btn = document.getElementById('catalogMapBtn');
-    btn.textContent = on ? 'Списком' : 'На карте';
+    btn.textContent = on ? 'Закрыть карту' : 'Показать на карте';
     btn.dataset.on = on ? 'true' : 'false';
     if(on) drawCatalogMap();
   }
