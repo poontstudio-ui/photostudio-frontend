@@ -4685,12 +4685,23 @@ body{
   // текст уже подставлен в шаблон обычной JS-конкатенацией (esc() тот же,
   // каким студийные данные экранируются везде в этом файле), поэтому не
   // нужно разбираться в собственном шаблонизаторе Яндекса ($[...]/{% %}) —
-  // задача только на вставку готовой HTML-строки, размер и позиционирование
-  // под неё templateLayoutFactory считает сам по фактическому DOM-узлу.
+  // задача только на вставку готовой HTML-строки.
   function catalogPinLayout(ymaps, label){
     return ymaps.templateLayoutFactory.createClass(
       '<div class="map-pin">' + esc(label) + '</div>'
     );
+  }
+  // iconShape ОБЯЗАТЕЛЕН для своего макета — в отличие от presets (те несут
+  // готовую форму клика внутри себя), у templateLayoutFactory без явного
+  // iconShape кликабельная область вырождается в точку: булавка рисуется,
+  // но не нажимается (ровно так и оказалось после перехода на свою плашку).
+  // Точный размер по факту отрисованного узла тут не посчитать заранее —
+  // вместо этого грубая, чуть щедрая оценка по длине текста: под-, а тем
+  // более непопадание на короткую цену раздражало бы сильнее, чем на
+  // пиксель лишнего клика по соседству с длинным именем студии.
+  function catalogPinShape(label){
+    const w = Math.max(50, label.length * 8 + 30);
+    return { type: 'Rectangle', coordinates: [[0, 0], [w, 34]] };
   }
   function drawCatalogMap(){
     const pts = studiosWithGeo();
@@ -4703,9 +4714,10 @@ body{
         { suppressMapOpenBlock: true });
       const coll = new ymaps.GeoObjectCollection();
       pts.forEach(s => {
+        const label = catalogPinLabel(s);
         const pm = new ymaps.Placemark([s.lat, s.lon],
           { hintContent: esc(s.name) },
-          { iconLayout: catalogPinLayout(ymaps, catalogPinLabel(s)), openBalloonOnClick: false });
+          { iconLayout: catalogPinLayout(ymaps, label), iconShape: catalogPinShape(label), openBalloonOnClick: false });
         pm.events.add('click', () => { haptic('medium'); openStudioPreview(s); });
         coll.add(pm);
       });
