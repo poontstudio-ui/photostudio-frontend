@@ -2862,20 +2862,29 @@ body{
       g.querySelectorAll('img').forEach((im, idx) => im.addEventListener('click', ()=>openLightbox(photos, idx)));
     } else { g.hidden = true; g.innerHTML = ''; }
     // Вместимость, ставка и минимум — выбранного назначения: именно они
-    // меняются при переключении цели аренды.
+    // меняются при переключении цели аренды. Набор фактов под вместимостью
+    // тоже свой на каждую цель, как в референсе: площадь у большинства,
+    // а у праздника — сколько мест стоя/сидя вместо неё.
     const ph = purposeHall(hall, state.purpose);
     const minMin = minBookingMinFor(ph);
-    const facts = [
-      '<div class="hall-fact"><span>Вместимость</span><b>до '+esc(ph.capacity)+' чел.</b></div>',
-      '<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel({ rate:ph.rate, priceRules:ph.priceRules }))+'</b></div>',
-    ];
-    // Минимум показываем, только когда цель поднимает его над студийным —
-    // «от 1 часа» у всех подряд было бы шумом.
-    if(minMin > STUDIO_MIN_BOOKING_MIN){
+    const cur = purposeOf(hall, state.purpose);
+    const facts = [];
+    // Минимум — первым, как в референсе. У зала без назначений показываем,
+    // только когда он выше студийного («от 1 часа» у всех подряд было бы
+    // шумом); с выбранным назначением минимум есть всегда — это одна из
+    // вещей, которые оно как раз и определяет.
+    if(cur || minMin > STUDIO_MIN_BOOKING_MIN){
       facts.push('<div class="hall-fact"><span>Минимум</span><b>'+esc(minLabel(minMin))+'</b></div>');
     }
+    facts.push('<div class="hall-fact"><span>Вместимость</span><b>до '+esc(ph.capacity)+' чел.</b></div>');
+    if(cur && cur.code === 'event' && (Number.isInteger(cur.standingCapacity) || Number.isInteger(cur.seatedCapacity))){
+      if(Number.isInteger(cur.standingCapacity)) facts.push('<div class="hall-fact"><span>Стоя</span><b>до '+esc(cur.standingCapacity)+' чел.</b></div>');
+      if(Number.isInteger(cur.seatedCapacity)) facts.push('<div class="hall-fact"><span>Сидя</span><b>до '+esc(cur.seatedCapacity)+' чел.</b></div>');
+    } else if(HALL_PROPS.areaM2 && hall.areaM2){
+      facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
+    }
+    facts.push('<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel({ rate:ph.rate, priceRules:ph.priceRules }))+'</b></div>');
     if(HALL_PROPS.hallType && hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
-    if(HALL_PROPS.areaM2 && hall.areaM2) facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
     if(HALL_PROPS.floor && Number.isInteger(hall.floor)) facts.push('<div class="hall-fact"><span>Этаж</span><b>'+(hall.floor<=0?'цоколь':esc(hall.floor))+'</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
