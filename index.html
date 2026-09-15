@@ -2241,6 +2241,22 @@ body{
   // lib/rules.js: пустое поле назначения = «как у зала», без выбора —
   // первое. Сервер всё равно пересчитывает авторитетно.
   var HALL_PURPOSE_RU = { photo:'Съёмка', event:'Праздник', leisure:'Отдых', meeting:'Встреча' };
+  // Подписи оборудования/мебели назначения — зеркало HALL_EQUIPMENT_GROUPS
+  // в кабинете (плоским списком: тут только для вывода готового ✓-списка).
+  var HALL_EQUIPMENT_RU = {
+    tables:'Столы', chairs:'Стулья', whiteboard:'Маркерная доска', chalkboard:'Меловая доска',
+    flipCharts:'Флипчарт', wardrobeRack:'Стойка для одежды', sandbags:'Мешки с песком',
+    wifi:'Wi-Fi', projector:'Проектор', screen:'Экран', monitor:'Монитор',
+    conferencePhone:'Конференц-связь', lightingEquipment:'Осветительное оборудование',
+    videoEquipment:'Видеооборудование', steamer:'Отпариватель',
+    kitchen:'Кухня / чай-кофе', restroom:'Санузел', sink:'Раковина', dressingRoom:'Гримёрная',
+    loungeArea:'Зона отдыха', rooftop:'Крыша / терраса', outdoorArea:'Открытая площадка',
+    naturalLight:'Естественный свет', blackoutBlinds:'Блэкаут-шторы', skylights:'Мансардные окна',
+    whiteBackdrop:'Белый фон', chromakey:'Хромакей', soundproof:'Звукоизоляция',
+    parking:'Парковка', publicTransport:'Общественный транспорт рядом',
+    wheelchairAccessible:'Доступ для колясок', freightElevator:'Грузовой лифт',
+    streetLevelAccess:'Вход с улицы',
+  };
   // Порядок словаря для переключателя — зеркало HALL_PURPOSES в lib/rules.js.
   var HALL_PURPOSE_ORDER = ['photo', 'event', 'leisure', 'meeting'];
   // Иконки переключателя целей — тот же формат, что ACC_ICONS у аккордеона:
@@ -2270,10 +2286,15 @@ body{
       '<span class="fact-value">'+valueHtml+'</span></span></div>';
   }
   function hallPurposeList(h){ return Array.isArray(h && h.purposes) ? h.purposes : []; }
+  // Зеркало lib/rules.js purposeOf: без кода — первое АКТИВНОЕ (деактивиро-
+  // ванное не может быть выбором по умолчанию), по коду — как есть.
   function purposeOf(hall, code){
     var list = hallPurposeList(hall);
     if(!list.length) return null;
-    if(code == null) return list[0];
+    if(code == null){
+      for(var k=0;k<list.length;k++){ if(list[k].active !== false) return list[k]; }
+      return list[0];
+    }
     return list.find(function(p){ return p.code === code; }) || null;
   }
   function purposeHall(hall, code){
@@ -2960,7 +2981,9 @@ body{
     var cur = purposeOf(hall, state.purpose);
     row.hidden = !list.length;
     row.innerHTML = !list.length ? '' : HALL_PURPOSE_ORDER.map(function(code){
-      var configured = list.some(function(p){ return p.code === code; });
+      // Деактивированное владельцем назначение — тот же disabled, что и
+      // никогда не заводившееся: клиенту нет разницы, почему нельзя выбрать.
+      var configured = list.some(function(p){ return p.code === code && p.active !== false; });
       var icon = HALL_PURPOSE_ICONS[code];
       return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" ' +
         'data-on="'+(cur && cur.code === code ? 'true' : 'false')+'"' +
@@ -2972,8 +2995,14 @@ body{
     row.querySelectorAll('.purpose-btn:not(:disabled)').forEach(function(btn){
       btn.addEventListener('click', function(){ haptic('light'); selectPurpose(btn.dataset.code); });
     });
-    var lines = cur && typeof cur.includes === 'string'
+    // Оборудование из фиксированного словаря (галочки в кабинете) + свои
+    // строки владельца — один и тот же ✓-список, порядок значения не имеет:
+    // выбранное оборудование сначала, свои пункты следом.
+    var equipLines = Array.isArray(cur && cur.equipment)
+      ? cur.equipment.map(function(code){ return HALL_EQUIPMENT_RU[code] || code; }) : [];
+    var ownLines = cur && typeof cur.includes === 'string'
       ? cur.includes.split('\n').map(function(x){ return x.trim(); }).filter(Boolean) : [];
+    var lines = equipLines.concat(ownLines);
     box.hidden = !lines.length;
     box.innerHTML = lines.length
       ? '<div class="section-label">Что входит в аренду</div><ul>' +
