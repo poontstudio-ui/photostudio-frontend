@@ -915,6 +915,9 @@ body{
   background:var(--surface);color:var(--text);
   box-shadow:0 1px 3px rgba(20,22,28,.14);
 }
+/* Незаведённое владельцем назначение видно (весь словарь на виду — как в
+   референсе), но не выбирается: серым и без курсора-руки, как «Play» там же. */
+.purpose-btn:disabled{opacity:.4;cursor:not-allowed;}
 .purpose-includes{margin-top:12px;}
 .purpose-includes[hidden]{display:none;}
 .purpose-includes ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;}
@@ -2228,6 +2231,8 @@ body{
   // первое. Сервер всё равно пересчитывает авторитетно.
   var HALL_PURPOSE_RU = { photo:'Фотосъёмка', video:'Видеосъёмка', event:'Мероприятие',
     meeting:'Встреча', class:'Занятие', rehearsal:'Репетиция' };
+  // Порядок словаря для переключателя — зеркало HALL_PURPOSES в lib/rules.js.
+  var HALL_PURPOSE_ORDER = ['photo', 'video', 'event', 'meeting', 'class', 'rehearsal'];
   // Иконки переключателя целей — тот же формат, что ACC_ICONS у аккордеона:
   // готовый набор <path>/<circle> внутрь общей обёртки <svg>.
   var HALL_PURPOSE_ICONS = {
@@ -2901,25 +2906,31 @@ body{
     return r ? (h ? h + ' ч ' + r + ' мин' : r + ' мин') : h + ' ч';
   }
 
-  // Переключатель целей аренды и список «что входит» у выбранной. Один
-  // вариант переключателем не показываем — выбирать не из чего, но сам он
-  // всё равно применяется к цене и лимитам.
+  // Переключатель целей аренды и список «что входит» у выбранной. Пока у
+  // зала нет вообще ни одного назначения, переключатель не показываем —
+  // иначе на странице каждого из сотен залов, где владелец эту функцию не
+  // трогал, навсегда висела бы мёртвая плашка на шесть иконок. Стоит одному
+  // назначению появиться — показываем ВЕСЬ словарь сразу (как в референсе):
+  // то, что владелец не завёл, видно серым и недоступно для выбора, а не
+  // молча пропадает из списка — так клиенту сразу ясно, чего у зала нет.
   function renderHallPurposes(hall){
     var row = document.getElementById('hallPurposeRow');
     var box = document.getElementById('hallPurposeIncludes');
     if(!row || !box) return;
     var list = hallPurposeList(hall);
     var cur = purposeOf(hall, state.purpose);
-    row.hidden = list.length < 2;
-    row.innerHTML = list.length < 2 ? '' : list.map(function(p){
-      var icon = HALL_PURPOSE_ICONS[p.code];
-      return '<button class="purpose-btn" type="button" data-code="'+esc(p.code)+'" ' +
-        'data-on="'+(cur && cur.code === p.code ? 'true' : 'false')+'">' +
+    row.hidden = !list.length;
+    row.innerHTML = !list.length ? '' : HALL_PURPOSE_ORDER.map(function(code){
+      var configured = list.some(function(p){ return p.code === code; });
+      var icon = HALL_PURPOSE_ICONS[code];
+      return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" ' +
+        'data-on="'+(cur && cur.code === code ? 'true' : 'false')+'"' +
+        (configured ? '' : ' disabled') + '>' +
         (icon ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
           'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg>' : '') +
-        '<span>'+esc(HALL_PURPOSE_RU[p.code] || p.code)+'</span></button>';
+        '<span>'+esc(HALL_PURPOSE_RU[code] || code)+'</span></button>';
     }).join('');
-    row.querySelectorAll('.purpose-btn').forEach(function(btn){
+    row.querySelectorAll('.purpose-btn:not(:disabled)').forEach(function(btn){
       btn.addEventListener('click', function(){ haptic('light'); selectPurpose(btn.dataset.code); });
     });
     var lines = cur && typeof cur.includes === 'string'
