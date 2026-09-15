@@ -923,15 +923,25 @@ body{
 .purpose-includes ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;}
 .purpose-includes li{font-size:var(--fs-sm);color:var(--text-2);display:flex;gap:8px;align-items:baseline;}
 .purpose-includes li::before{content:'✓';color:var(--text-2);font-size:var(--fs-xs);}
-.hall-facts{display:flex;flex-wrap:wrap;gap:8px;}
-.hall-fact{
-  background:var(--surface);
-  border:1px solid var(--line);
-  border-radius:var(--r-sm);
-  padding:9px 12px;
+/* Факты зала — иконка/мелкая подпись/крупное значение, по референсу.
+   2 колонки: 3-й факт (площадь, либо только «стоя» без «сидя») просто
+   встаёт в левую ячейку следующей строки, правая остаётся пустой — так же,
+   как в референсе. */
+.hall-facts{display:grid;grid-template-columns:1fr 1fr;gap:16px 14px;margin:4px 0 2px;}
+.fact-card{display:flex;align-items:flex-start;gap:10px;min-width:0;}
+.fact-icon{
+  flex:0 0 auto;width:38px;height:38px;border-radius:50%;
+  border:1.5px solid var(--line-strong);color:var(--text-2);
+  display:flex;align-items:center;justify-content:center;
 }
-.hall-fact span{display:block;font-size:var(--fs-xs);color:var(--text-2);text-transform:uppercase;letter-spacing:0.06em;}
-.hall-fact b{font-family:var(--f-mono);font-weight:500;font-size:var(--fs-md);}
+.fact-icon svg{width:18px;height:18px;}
+.fact-text{min-width:0;}
+.fact-label{display:block;font-size:var(--fs-xs);color:var(--text-2);}
+.fact-value{display:block;font-family:var(--f);font-weight:700;font-size:var(--fs-lg);color:var(--text);line-height:1.25;margin-top:1px;}
+/* Остальное (ставка, тип, потолок, этаж) — не то, что клиент сравнивает
+   между целями аренды, поэтому просто справочная строка без иконок. */
+.hall-facts-extra{font-size:var(--fs-xs);color:var(--text-2);margin-bottom:4px;}
+.hall-facts-extra:empty{display:none;}
 .amenity-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
 .amenity-chips .chip{font-size:var(--fs-sm);line-height:1;padding:6px 10px;border-radius:var(--r-pill);
   background:var(--surface);border:1px solid var(--line);color:var(--text);}
@@ -1567,6 +1577,7 @@ body{
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="purpose-row" id="hallPurposeRow" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
+      <div class="hall-facts-extra" id="hallFactsExtra"></div>
       <div class="purpose-includes" id="hallPurposeIncludes" hidden></div>
       <div class="amenity-chips" id="hallChips" hidden></div>
       <div class="hall-about" id="hallAbout" hidden></div>
@@ -2240,6 +2251,24 @@ body{
     leisure:'<path d="M12 3C7.5 3 4 7.6 4 12h16c0-4.4-3.5-9-8-9Z"/><path d="M12 12v7.5a1.5 1.5 0 0 1-1.5 1.5"/>',
     meeting:'<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9.5" r="2.3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M14.6 14.3c2.8.5 5.4 2.7 5.4 5.7"/>',
   };
+  // Иконки фактов зала (карточки «иконка/мелкий текст/крупный текст» по
+  // референсу) — тот же формат обёртки, что у HALL_PURPOSE_ICONS. «people»
+  // — тот же глиф, что у назначения «Встреча»: один и тот же значок «люди»
+  // во всём приложении, а не два похожих, но разных.
+  var FACT_ICONS = {
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3.5 2"/>',
+    people:'<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9.5" r="2.3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M14.6 14.3c2.8.5 5.4 2.7 5.4 5.7"/>',
+    area:'<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+    chair:'<path d="M7 4v8a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4"/><path d="M7 20v-3M17 20v-3"/>',
+  };
+  function factCard(icon, label, valueHtml){
+    var d = FACT_ICONS[icon];
+    return '<div class="fact-card"><span class="fact-icon">' +
+      (d ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>' : '') +
+      '</span><span class="fact-text"><span class="fact-label">'+esc(label)+'</span>' +
+      '<span class="fact-value">'+valueHtml+'</span></span></div>';
+  }
   function hallPurposeList(h){ return Array.isArray(h && h.purposes) ? h.purposes : []; }
   function purposeOf(hall, code){
     var list = hallPurposeList(hall);
@@ -2861,10 +2890,10 @@ body{
       g.hidden = false;
       g.querySelectorAll('img').forEach((im, idx) => im.addEventListener('click', ()=>openLightbox(photos, idx)));
     } else { g.hidden = true; g.innerHTML = ''; }
-    // Вместимость, ставка и минимум — выбранного назначения: именно они
-    // меняются при переключении цели аренды. Набор фактов под вместимостью
-    // тоже свой на каждую цель, как в референсе: площадь у большинства,
-    // а у праздника — сколько мест стоя/сидя вместо неё.
+    // Вместимость и минимум — выбранного назначения: именно они меняются
+    // при переключении цели аренды. Набор фактов под вместимостью тоже свой
+    // на каждую цель, как в референсе: площадь у большинства, а у праздника
+    // — сколько мест стоя/сидя вместо неё.
     const ph = purposeHall(hall, state.purpose);
     const minMin = minBookingMinFor(ph);
     const cur = purposeOf(hall, state.purpose);
@@ -2874,20 +2903,24 @@ body{
     // шумом); с выбранным назначением минимум есть всегда — это одна из
     // вещей, которые оно как раз и определяет.
     if(cur || minMin > STUDIO_MIN_BOOKING_MIN){
-      facts.push('<div class="hall-fact"><span>Минимум</span><b>'+esc(minLabel(minMin))+'</b></div>');
+      facts.push(factCard('clock', 'Минимальная бронь', esc(minLabel(minMin))));
     }
-    facts.push('<div class="hall-fact"><span>Вместимость</span><b>до '+esc(ph.capacity)+' чел.</b></div>');
+    facts.push(factCard('people', 'Вместимость', 'до '+esc(ph.capacity)+' чел.'));
     if(cur && cur.code === 'event' && (Number.isInteger(cur.standingCapacity) || Number.isInteger(cur.seatedCapacity))){
-      if(Number.isInteger(cur.standingCapacity)) facts.push('<div class="hall-fact"><span>Стоя</span><b>до '+esc(cur.standingCapacity)+' чел.</b></div>');
-      if(Number.isInteger(cur.seatedCapacity)) facts.push('<div class="hall-fact"><span>Сидя</span><b>до '+esc(cur.seatedCapacity)+' чел.</b></div>');
+      if(Number.isInteger(cur.standingCapacity)) facts.push(factCard('people', 'Стоя', 'до '+esc(cur.standingCapacity)+' чел.'));
+      if(Number.isInteger(cur.seatedCapacity)) facts.push(factCard('chair', 'Сидя', 'до '+esc(cur.seatedCapacity)+' чел.'));
     } else if(HALL_PROPS.areaM2 && hall.areaM2){
-      facts.push('<div class="hall-fact"><span>Площадь</span><b>'+esc(hall.areaM2)+' м²</b></div>');
+      facts.push(factCard('area', 'Площадь', esc(hall.areaM2)+' м²'));
     }
-    facts.push('<div class="hall-fact"><span>Ставка</span><b>'+esc(hallRateLabel({ rate:ph.rate, priceRules:ph.priceRules }))+'</b></div>');
-    if(HALL_PROPS.hallType && hall.hallType && HALL_TYPE_RU[hall.hallType]) facts.push('<div class="hall-fact"><span>Тип</span><b>'+esc(HALL_TYPE_RU[hall.hallType])+'</b></div>');
-    if(HALL_PROPS.ceilingCm && hall.ceilingCm) facts.push('<div class="hall-fact"><span>Потолок</span><b>'+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м</b></div>');
-    if(HALL_PROPS.floor && Number.isInteger(hall.floor)) facts.push('<div class="hall-fact"><span>Этаж</span><b>'+(hall.floor<=0?'цоколь':esc(hall.floor))+'</b></div>');
     document.getElementById('hallFacts').innerHTML = facts.join('');
+    // Остальное — ставка, тип, потолок, этаж — не то, что клиент сравнивает
+    // между целями аренды, а справочные детали зала; простая строка без
+    // иконок, отдельно от карточек фактов выше.
+    const extra = [hallRateLabel({ rate:ph.rate, priceRules:ph.priceRules })];
+    if(HALL_PROPS.hallType && hall.hallType && HALL_TYPE_RU[hall.hallType]) extra.push(HALL_TYPE_RU[hall.hallType]);
+    if(HALL_PROPS.ceilingCm && hall.ceilingCm) extra.push('потолок '+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м');
+    if(HALL_PROPS.floor && Number.isInteger(hall.floor)) extra.push(hall.floor<=0 ? 'цокольный этаж' : hall.floor+'-й этаж');
+    document.getElementById('hallFactsExtra').textContent = extra.join(' · ');
     // Стиль интерьера — чипами. Удобства отсюда ушли в «Включено в бронь»
     // и в аккордеон ниже: там у них есть и «нет такого», и пояснения.
     var chips = (Array.isArray(hall.styles)?hall.styles:[]).filter(function(s){return HALL_STYLE_RU[s];}).map(function(s){return HALL_STYLE_RU[s];});
