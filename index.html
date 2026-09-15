@@ -880,7 +880,7 @@ body{
   color:var(--accent);
   margin-top:8px;
 }
-.hall-info-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.hall-info-head{display:flex;align-items:center;gap:12px;margin-bottom:4px;}
 .hall-info-title{
   font-family:var(--f);
   font-weight:700;
@@ -890,11 +890,20 @@ body{
   text-overflow:ellipsis;
   white-space:nowrap;
 }
-/* Выбор цели аренды: сегментированный переключатель (иконка над подписью,
-   активный сегмент — своя плашка с тенью на общей дорожке) — тот же приём,
-   что у вкладок Create/Celebrate/Play/Meet в референсе, только в светлой
-   палитре приложения вместо тёмной карточки оригинала. Стоит прямо над
-   фактами, которые он и меняет. */
+/* Название выбранной цели — раньше подписью в каждой кнопке-иконке
+   переключателя, теперь одной строкой под заголовком: кнопки стали чисто
+   иконками (уже своей рамкой в data-on="true" понятно, что выбрано), а
+   текст не дублируется шесть раз подряд на одной дорожке. */
+.hall-purpose-subtitle{
+  font-size:var(--fs-md);font-weight:600;color:var(--text-2);
+  margin:0 0 12px;padding-left:calc(34px + 12px);   /* вровень с hall-info-title, за кнопкой «назад» */
+}
+.hall-purpose-subtitle[hidden]{display:none;}
+/* Выбор цели аренды: сегментированный переключатель (иконки на общей
+   дорожке, активный сегмент — своя плашка с тенью) — тот же приём, что у
+   вкладок Create/Celebrate/Play/Meet в референсе, только в светлой палитре
+   приложения вместо тёмной карточки оригинала. Стоит прямо над фактами,
+   которые он и меняет. */
 .purpose-row{
   display:flex;gap:2px;padding:4px;overflow-x:auto;scrollbar-width:none;
   background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md);
@@ -903,14 +912,13 @@ body{
 .purpose-row[hidden]{display:none;}
 .purpose-row::-webkit-scrollbar{display:none;}
 .purpose-btn{
-  flex:1 1 0;min-width:72px;
-  display:flex;flex-direction:column;align-items:center;gap:3px;
+  flex:1 1 0;min-width:52px;
+  display:flex;align-items:center;justify-content:center;
   border:none;background:none;border-radius:var(--r-sm);
-  padding:9px 6px;cursor:pointer;color:var(--text-3);
+  padding:12px 6px;cursor:pointer;color:var(--text-3);
   font-family:var(--f);transition:background .12s,color .12s;
 }
-.purpose-btn svg{width:19px;height:19px;flex:0 0 auto;}
-.purpose-btn span{font-size:var(--fs-xs);font-weight:600;white-space:nowrap;}
+.purpose-btn svg{width:20px;height:20px;flex:0 0 auto;}
 .purpose-btn[data-on="true"]{
   background:var(--surface);color:var(--text);
   box-shadow:0 1px 3px rgba(20,22,28,.14);
@@ -1574,6 +1582,7 @@ body{
         <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем залам">←</button>
         <div class="hall-info-title" id="hallInfoTitle"></div>
       </div>
+      <div class="hall-purpose-subtitle" id="hallPurposeSubtitle" hidden></div>
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="purpose-row" id="hallPurposeRow" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
@@ -2976,6 +2985,7 @@ body{
   function renderHallPurposes(hall){
     var row = document.getElementById('hallPurposeRow');
     var box = document.getElementById('hallPurposeIncludes');
+    var sub = document.getElementById('hallPurposeSubtitle');
     if(!row || !box) return;
     var list = hallPurposeList(hall);
     var cur = purposeOf(hall, state.purpose);
@@ -2985,16 +2995,24 @@ body{
       // никогда не заводившееся: клиенту нет разницы, почему нельзя выбрать.
       var configured = list.some(function(p){ return p.code === code && p.active !== false; });
       var icon = HALL_PURPOSE_ICONS[code];
+      var label = HALL_PURPOSE_RU[code] || code;
+      // Подпись убрана из самой кнопки (шесть подряд одинаковых слов на
+      // одной дорожке — шум) и живёт одной строкой под заголовком зала —
+      // aria-label сохраняет кнопку доступной для скринридера.
       return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" ' +
-        'data-on="'+(cur && cur.code === code ? 'true' : 'false')+'"' +
+        'data-on="'+(cur && cur.code === code ? 'true' : 'false')+'" aria-label="'+esc(label)+'"' +
         (configured ? '' : ' disabled') + '>' +
         (icon ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
           'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg>' : '') +
-        '<span>'+esc(HALL_PURPOSE_RU[code] || code)+'</span></button>';
+        '</button>';
     }).join('');
     row.querySelectorAll('.purpose-btn:not(:disabled)').forEach(function(btn){
       btn.addEventListener('click', function(){ haptic('light'); selectPurpose(btn.dataset.code); });
     });
+    if(sub){
+      sub.hidden = !list.length || !cur;
+      sub.textContent = cur ? (HALL_PURPOSE_RU[cur.code] || cur.code) : '';
+    }
     // Оборудование из фиксированного словаря (галочки в кабинете) + свои
     // строки владельца — один и тот же ✓-список, порядок значения не имеет:
     // выбранное оборудование сначала, свои пункты следом.
