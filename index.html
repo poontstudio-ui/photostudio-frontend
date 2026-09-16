@@ -2913,13 +2913,6 @@ body{
     if(!openHallId || !hall) return;
     document.getElementById('hallInfoTitle').textContent = hall.name;
     renderHallPurposes(hall);
-    const g = document.getElementById('hallPhotos');
-    const photos = Array.isArray(hall.photos) ? hall.photos : [];
-    if(photos.length){
-      g.innerHTML = photos.map(u => '<img src="'+esc(u)+'" alt="" loading="lazy">').join('');
-      g.hidden = false;
-      g.querySelectorAll('img').forEach((im, idx) => im.addEventListener('click', ()=>openLightbox(photos, idx)));
-    } else { g.hidden = true; g.innerHTML = ''; }
     // Вместимость и минимум — выбранного назначения: именно они меняются
     // при переключении цели аренды. Набор фактов под вместимостью тоже свой
     // на каждую цель, как в референсе: площадь у большинства, а у праздника
@@ -2956,18 +2949,26 @@ body{
     var chips = (Array.isArray(hall.styles)?hall.styles:[]).filter(function(s){return HALL_STYLE_RU[s];}).map(function(s){return HALL_STYLE_RU[s];});
     var cw = document.getElementById('hallChips');
     if(cw){ cw.innerHTML = chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join(''); cw.hidden = !chips.length; }
-    // Описание, «включено» и аккордеон не зависят от выбора времени, а
-    // renderAll() дёргается на каждый тап по сетке — пересобирать их заново
-    // значило бы захлопывать раскрытую секцию под рукой у читающего.
+    // Фото, описание, «включено» и аккордеон не зависят от выбора цели, а
+    // renderAll() дёргается на каждое переключение назначения — пересобирать
+    // их заново значило бы мигать галереей фото (img-теги уничтожаются и
+    // создаются заново) и захлопывать раскрытую секцию под рукой у читающего.
     if(_hallAboutRenderedId !== hall.id){
       _hallAboutRenderedId = hall.id;
+      const g = document.getElementById('hallPhotos');
+      const photos = Array.isArray(hall.photos) ? hall.photos : [];
+      if(photos.length){
+        g.innerHTML = photos.map(u => '<img src="'+esc(u)+'" alt="" loading="lazy">').join('');
+        g.hidden = false;
+        g.querySelectorAll('img').forEach((im, idx) => im.addEventListener('click', ()=>openLightbox(photos, idx)));
+      } else { g.hidden = true; g.innerHTML = ''; }
       renderHallDescription(hall);
       renderHallIncluded(hall);
       renderHallAccordion(hall);
     }
     renderHallPackages(hall);
   }
-  let _hallAboutRenderedId = null;   // для какого зала уже собраны блоки выше
+  let _hallAboutRenderedId = null;   // для какого зала уже собраны блоки выше (фото/описание/аккордеон)
 
   // «2 ч», «1 ч 30 мин», «30 мин» — из минут.
   function minLabel(mins){
