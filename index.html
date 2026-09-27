@@ -1013,10 +1013,17 @@ body{
 .acc-title{flex:1 1 auto;min-width:0;}
 .acc-caret{flex:0 0 auto;color:var(--text-2);font-size:var(--fs-md);transition:transform .18s ease;}
 .acc-item[data-open="true"] .acc-caret{transform:rotate(180deg);}
-/* Отступ слева = ширина иконки + gap: раскрытый текст встаёт под заголовок,
-   а не под иконку. */
-.acc-body{padding:0 2px 16px 34px;}
-.acc-body[hidden]{display:none;}
+/* Плавное раскрытие без вычисления пикселей в JS: .acc-body — грид-строка
+   0fr↔1fr (сама подстраивается под любую высоту контента), .acc-body-inner
+   стрижёт содержимое, пока строка сжата. Паддинг — на отдельном
+   .acc-body-content, а не на .acc-body-inner: паддинг всегда часть
+   собственного размера бокса, даже у overflow:hidden с нулевой высотой —
+   если повесить его прямо на .acc-body-inner, строка не сожмётся в ноль
+   (останется щель = паддингу). */
+.acc-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .25s ease;}
+.acc-item[data-open="true"] .acc-body{grid-template-rows:1fr;}
+.acc-body-inner{overflow:hidden;min-height:0;}
+.acc-body-content{padding:0 2px 16px 34px;}
 .acc-text{font-size:var(--fs-md);color:var(--text-2);line-height:1.5;white-space:pre-line;}
 .acc-text + .feat-grid{margin-top:12px;}
 .acc-fact{font-size:var(--fs-sm);color:var(--text-2);line-height:1.4;}
@@ -3129,23 +3136,19 @@ body{
           '<span class="acc-title">'+esc(sec.title)+'</span>' +
           '<span class="acc-caret" aria-hidden="true">▾</span>' +
         '</button>' +
-        '<div class="acc-body" hidden>' +
+        '<div class="acc-body"><div class="acc-body-inner"><div class="acc-body-content">' +
           facts.map(function(f){ return '<div class="acc-fact">'+esc(f)+'</div>'; }).join('') +
           (text ? '<div class="acc-text">'+esc(text)+'</div>' : '') +
           (feats.length ? '<div class="feat-grid">'+feats.join('')+'</div>' : '') +
-        '</div></div>';
+        '</div></div></div></div>';
     }).join('');
     box.hidden = !html;
     box.innerHTML = html;
     box.querySelectorAll('.acc-item').forEach(function(item){
       item.querySelector('.acc-head').addEventListener('click', function(){
         var open = item.dataset.open !== 'true';
-        box.querySelectorAll('.acc-item').forEach(function(other){
-          other.dataset.open = 'false';
-          other.querySelector('.acc-body').hidden = true;
-        });
+        box.querySelectorAll('.acc-item').forEach(function(other){ other.dataset.open = 'false'; });
         item.dataset.open = open ? 'true' : 'false';
-        item.querySelector('.acc-body').hidden = !open;
         haptic('light');
       });
     });
