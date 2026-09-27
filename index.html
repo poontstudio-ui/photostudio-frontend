@@ -635,8 +635,12 @@ body{
   background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);
   overflow:hidden;cursor:pointer;
 }
-.cat-media{position:relative;background:var(--surface-2);aspect-ratio:4/3;}
+.cat-media{position:relative;background:var(--surface-2);aspect-ratio:4/3;overflow:hidden;}
 .cat-media img{width:100%;height:100%;object-fit:cover;display:block;}
+/* touch-action:pan-y — вертикальный скролл ленты браузер ведёт сам, а
+   горизонтальный свайп отдаёт JS (wireCardCarousel), без preventDefault. */
+.cat-track{display:flex;width:100%;height:100%;touch-action:pan-y;}
+.cat-track img{flex:0 0 100%;}
 .cat-dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:6px;pointer-events:none;}
 .cat-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.55);}
 .cat-dot[data-active="true"]{background:#fff;}
@@ -4935,35 +4939,77 @@ body{
     renderStudios(city);
   }
 
-  // Бесконечно листаемая карусель фото в карточке списка — тот же приём,
-  // что в openLightbox (одна <img>, индекс по модулю без границ, порог
-  // свайпа 45px), а не scroll-snap: не нужна прокруточная анимация, только
-  // быстрая смена кадра. Свайп внутри .cat-media не должен провалиться в
-  // клик по карточке (переход в студию) — гасим синтетический click, который
-  // браузер всё равно шлёт после touchend, если свайп реально сдвинул кадр.
+  // Бесконечно листаемая карусель фото в карточке списка — фото едет вместе
+  // с пальцем (не просто «долистали — сменился кадр»). Base-кадр — одна
+  // <img>, чтобы в состоянии покоя на весь список студий не висело по 3
+  // картинки на карточку; соседние кадры (prevImg/nextImg) создаются только
+  // на время самого перетаскивания и убираются сразу после. touch-action:
+  // pan-y на .cat-track (CSS) отдаёт вертикальный скролл ленты браузеру, а
+  // горизонтальный свайп — нам, без ручного preventDefault.
+  // Свайп внутри .cat-media не должен провалиться в клик по карточке
+  // (переход в студию) — гасим синтетический click, который браузер всё
+  // равно шлёт после touchend, если палец реально сдвинул кадр.
   function wireCardCarousel(media, photos){
-    const img = media.querySelector('img');
+    const track = media.querySelector('.cat-track');
+    const img = track.querySelector('img');
     const dots = media.querySelector('.cat-dots');
     let i = 0;
-    function preload(n){ const x = new Image(); x.src = photos[((n % photos.length) + photos.length) % photos.length]; }
+    function photoAt(n){ return photos[((n % photos.length) + photos.length) % photos.length]; }
+    function preload(n){ const x = new Image(); x.src = photoAt(n); }
     function show(){
-      img.src = photos[i];
+      img.src = photoAt(i);
       if(dots) dots.querySelectorAll('.cat-dot').forEach((d, idx) => { d.dataset.active = (idx === i) ? 'true' : 'false'; });
       preload(i + 1); preload(i - 1);
     }
-    function go(delta){ i = ((i + delta) % photos.length + photos.length) % photos.length; show(); }
-    let x0 = null, y0 = null, swiped = false;
-    media.addEventListener('touchstart', e => { const t = e.changedTouches[0]; x0 = t.clientX; y0 = t.clientY; swiped = false; }, { passive: true });
+
+    let x0 = null, dx = 0, dragging = false, swiped = false, w = 0;
+    let prevImg = null, nextImg = null;
+
+    function beginDrag(){
+      dragging = true;
+      w = media.clientWidth || 1;
+      prevImg = document.createElement('img'); prevImg.alt = ''; prevImg.src = photoAt(i - 1);
+      nextImg = document.createElement('img'); nextImg.alt = ''; nextImg.src = photoAt(i + 1);
+      track.insertBefore(prevImg, img);
+      track.appendChild(nextImg);
+      track.style.transition = 'none';
+      track.style.transform = 'translate3d(-' + w + 'px,0,0)';
+    }
+    function endDrag(){
+      const threshold = Math.min(70, w * 0.2);
+      let delta = 0;
+      if(dx <= -threshold) delta = 1;
+      else if(dx >= threshold) delta = -1;
+      const finalX = delta === 1 ? -2 * w : delta === -1 ? 0 : -w;
+      track.style.transition = 'transform .22s cubic-bezier(.22,.61,.36,1)';
+      track.style.transform = 'translate3d(' + finalX + 'px,0,0)';
+      track.addEventListener('transitionend', function onEnd(){
+        if(delta !== 0) i = ((i + delta) % photos.length + photos.length) % photos.length;
+        if(prevImg){ prevImg.remove(); prevImg = null; }
+        if(nextImg){ nextImg.remove(); nextImg = null; }
+        track.style.transition = 'none';
+        track.style.transform = '';
+        show();
+      }, { once: true });
+    }
+
+    media.addEventListener('touchstart', e => {
+      const t = e.changedTouches[0];
+      x0 = t.clientX; dx = 0; dragging = false; swiped = false;
+    }, { passive: true });
     media.addEventListener('touchmove', e => {
       if(x0 === null) return;
-      if(Math.abs(e.changedTouches[0].clientX - x0) > 10) swiped = true;
+      dx = e.changedTouches[0].clientX - x0;
+      if(!dragging){
+        if(Math.abs(dx) < 6) return;
+        beginDrag(); swiped = true;
+      }
+      track.style.transform = 'translate3d(' + (-w + dx) + 'px,0,0)';
     }, { passive: true });
-    media.addEventListener('touchend', e => {
+    media.addEventListener('touchend', () => {
       if(x0 === null) return;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - x0, dy = t.clientY - y0;
-      if(Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)){ go(dx < 0 ? 1 : -1); swiped = true; }
-      x0 = y0 = null;
+      if(dragging) endDrag();
+      x0 = null;
     }, { passive: true });
     media.addEventListener('click', e => { if(swiped){ e.stopPropagation(); swiped = false; } });
     show();
@@ -4984,7 +5030,7 @@ body{
     const cur = s.currency || CUR || 'BYN';
     row.innerHTML =
       '<div class="cat-media">' +
-        (photos.length > 1 ? '<img alt="" loading="lazy">'
+        (photos.length > 1 ? '<div class="cat-track"><img alt="" loading="lazy"></div>'
           : photos.length === 1 ? '<img src="'+esc(photos[0])+'" alt="" loading="lazy">' : '') +
         (photos.length > 1 ? '<div class="cat-dots">' +
           photos.map((_, i) => '<span class="cat-dot" data-active="'+(i===0)+'"></span>').join('') + '</div>' : '') +
