@@ -481,6 +481,12 @@ body{
   text-align:center;
   margin-top:8px;
 }
+.or-line{
+  font-size:var(--fs-sm);
+  color:var(--text-3);
+  text-align:center;
+  margin:14px 0 10px;
+}
 
 .hours-week-row{
   display:flex;
@@ -1829,16 +1835,30 @@ body{
   <button class="btn-ghost" id="verifyBackBtn">Назад</button>
 </div>
 
+<!-- Вход через бота платформы: кнопка открывает t.me-ссылку, страница сама
+     опрашивает /api/auth/bot/check; «Готово» — проверить сразу, не дожидаясь
+     очередного опроса. Как у Foodpicasso, только бот один на все студии. -->
+<div class="panel" id="botLoginPanel">
+  <div class="panel-title">Вход через Telegram</div>
+  <div class="save-note" id="botLoginHint" style="color:var(--text-2)"></div>
+  <button class="btn-primary" id="botLoginOpenBtn" disabled>Открыть Telegram</button>
+  <button class="btn-ghost" id="botLoginDoneBtn" disabled>Готово</button>
+  <div class="save-note" id="botLoginError" style="color:var(--red)"></div>
+  <button class="btn-ghost" id="botLoginBackBtn">Назад</button>
+</div>
+
 <!-- Вход/выход вне брони — кнопка в шапке (см. authBtn/catalogAuthBtn).
      Тот же код подтверждения (verifyPanel), просто источник номера — это
      поле, а не форма брони. -->
 <div class="panel" id="loginPanel">
-  <div class="panel-title">Вход по номеру телефона</div>
+  <div class="panel-title">Вход</div>
+  <button class="btn-primary" id="loginTgBtn">Войти через Telegram</button>
+  <div class="or-line">или по номеру телефона</div>
   <div class="field">
     <label for="loginPhoneInput">Телефон</label>
     <input id="loginPhoneInput" type="tel" inputmode="numeric" placeholder="+375 (29) 123-45-67" value="+375 ">
   </div>
-  <button class="btn-primary" id="loginSendBtn" disabled>Получить код</button>
+  <button class="btn-ghost" id="loginSendBtn" disabled>Получить код</button>
   <div class="save-note" id="loginError" style="color:var(--red)"></div>
   <button class="btn-ghost" id="loginCancelBtn">Отмена</button>
 </div>
@@ -3788,8 +3808,7 @@ body{
   verifyBackBtn.addEventListener('click', ()=>{
     haptic('light');
     hideVerifyStep();
-    if(verifyPurpose === 'booking') panel.dataset.open='true';
-    else loginPanel.dataset.open='true'; // самостоятельный вход — назад к вводу номера
+    loginPanel.dataset.open='true';   // назад к выбору способа (Telegram / код на номер)
   });
 
   verifySubmitBtn.addEventListener('click', async ()=>{
@@ -3822,6 +3841,130 @@ body{
     }
   });
 
+  // ---- Вход через бота платформы (0047) ----
+  // Кнопка -> /api/auth/bot/start даёт t.me-ссылку и секрет, который знает
+  // только эта вкладка -> человек жмёт Start в боте и делится номером -> мы
+  // опрашиваем /check раз в пару секунд (или по «Готово») и забираем сессию.
+  // После успеха — та же развилка, что у кода из SMS: verifyPurpose решает,
+  // продолжить бронь или просто закрыть панель.
+  const botLoginPanel = document.getElementById('botLoginPanel');
+  const botLoginHint = document.getElementById('botLoginHint');
+  const botLoginOpenBtn = document.getElementById('botLoginOpenBtn');
+  const botLoginDoneBtn = document.getElementById('botLoginDoneBtn');
+  const botLoginError = document.getElementById('botLoginError');
+  let botLogin = null;   // { token, secret, url, timer, checking }
+
+  function stopBotLoginPolling(){
+    if(botLogin && botLogin.timer){ clearInterval(botLogin.timer); botLogin.timer = null; }
+  }
+  function hideBotLogin(){
+    stopBotLoginPolling();
+    botLogin = null;
+    botLoginPanel.dataset.open = 'false';
+  }
+  // Ошибка, после которой ждать бессмысленно (вход истёк/отклонён): опрос
+  // останавливаем, кнопки гасим — остаётся «Назад» и начать заново.
+  function failBotLogin(message){
+    stopBotLoginPolling();
+    botLoginError.textContent = message;
+    botLoginOpenBtn.disabled = true;
+    botLoginDoneBtn.disabled = true;
+  }
+
+  async function checkBotLogin(manual){
+    const cur = botLogin;
+    if(!cur || cur.checking) return;
+    cur.checking = true;
+    try{
+      const res = await fetch(API_BASE + '/api/auth/bot/check', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ token: cur.token, secret: cur.secret }),
+      });
+      const data = await res.json().catch(()=>null);
+      if(botLogin !== cur) return;   // пока ждали ответ, панель закрыли
+      const status = data && data.status;
+      if(status === 'ok'){
+        stopBotLoginPolling();
+        setPhoneToken(data.token);
+        updateAuthUI();
+        haptic('medium');
+        hideBotLogin();
+        hideVerifyStep();
+        if(verifyPurpose === 'booking'){
+          panel.dataset.open = 'true';
+          await submitBooking();
+        } else {
+          overlay.dataset.open = 'false';
+        }
+        return;
+      }
+      if(status === 'error') return failBotLogin((data && data.error) || 'Не удалось войти');
+      if(res.status === 404 || status === 'expired' || status === 'consumed'){
+        return failBotLogin('Вход истёк — нажмите «Назад» и начните заново.');
+      }
+      if(manual){
+        botLoginError.textContent = status === 'awaiting_contact'
+          ? 'Бот ждёт ваш номер: нажмите в нём кнопку «Пройти авторизацию».'
+          : 'Пока не видим вход. Откройте Telegram кнопкой выше и нажмите Start.';
+      }
+    }catch(e){
+      if(manual) botLoginError.textContent = 'Нет связи — попробуйте ещё раз.';
+    }finally{
+      cur.checking = false;
+    }
+  }
+
+  async function startBotLogin(purpose){
+    verifyPurpose = purpose;
+    // Вкладку под Telegram открываем СРАЗУ, в жесте пользователя: после await
+    // браузер заблокирует window.open. Если заблокировал — есть кнопка «Открыть».
+    const popup = window.open('about:blank', '_blank');
+    hideBotLogin();
+    overlay.dataset.open = 'true';
+    panel.dataset.open = 'false';
+    loginPanel.dataset.open = 'false';
+    verifyPanel.dataset.open = 'false';
+    botLoginError.textContent = '';
+    botLoginHint.textContent = 'Готовим вход…';
+    botLoginOpenBtn.disabled = true;
+    botLoginDoneBtn.disabled = true;
+    botLoginPanel.dataset.open = 'true';
+    try{
+      const res = await fetch(API_BASE + '/api/auth/bot/start', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(TENANT_ID ? { studioId: TENANT_ID } : {}),
+      });
+      const data = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((data && data.error) || 'Не удалось начать вход');
+      botLogin = { token: data.token, secret: data.secret, url: data.url, timer: null, checking: false };
+      botLogin.timer = setInterval(()=>checkBotLogin(false), 2500);
+      botLoginHint.textContent = 'Откройте бота, нажмите «Пройти авторизацию» и поделитесь номером телефона. Затем вернитесь сюда — вход завершится сам, или нажмите «Готово».';
+      botLoginOpenBtn.disabled = false;
+      botLoginDoneBtn.disabled = false;
+      if(popup) popup.location.href = data.url;
+    }catch(e){
+      if(popup) popup.close();
+      botLoginHint.textContent = '';
+      botLoginError.textContent = e.message;
+    }
+  }
+
+  botLoginOpenBtn.addEventListener('click', ()=>{
+    haptic('light');
+    if(botLogin) window.open(botLogin.url, '_blank');
+  });
+  botLoginDoneBtn.addEventListener('click', ()=>{
+    haptic('light');
+    botLoginError.textContent = '';
+    checkBotLogin(true);
+  });
+  document.getElementById('botLoginBackBtn').addEventListener('click', ()=>{
+    haptic('light');
+    hideBotLogin();
+    loginPanel.dataset.open = 'true';
+  });
+  document.getElementById('loginTgBtn').addEventListener('click', ()=>{ haptic('medium'); startBotLogin(verifyPurpose); });   // повод задал openLoginPanel / showLoginChoice
+
   confirmBtn.addEventListener('click', async ()=>{
     if(confirmBtn.disabled) return;
     haptic('heavy');
@@ -3830,7 +3973,7 @@ body{
     // отправляем уже из verifySubmitBtn выше. Иначе (в Telegram, или уже
     // подтверждали номер на этом устройстве) — сразу как раньше.
     if(!(tg && tg.initData) && !getPhoneToken()){
-      showVerifyStep('booking', digitsAfterPrefix(phoneInput.value));
+      showLoginChoice(digitsAfterPrefix(phoneInput.value));
       return;
     }
     await submitBooking();
@@ -3870,7 +4013,21 @@ body{
   });
 
   function openLoginPanel(){
+    verifyPurpose = 'login';
     overlay.dataset.open='true';
+    loginError.textContent='';
+    validateLoginPhone();
+    loginPanel.dataset.open='true';
+  }
+  // Бронь без сессии: тот же экран входа, но повод — 'booking' (после входа
+  // отправим бронь), а телефон подставлен из формы брони. Код на номер уходит
+  // только если человек сам выберет этот способ — не «на всякий случай».
+  function showLoginChoice(phoneDigits){
+    verifyPurpose = 'booking';
+    overlay.dataset.open='true';
+    panel.dataset.open='false';
+    verifyPanel.dataset.open='false';
+    loginPhoneInput.value = formatByPhone('+375' + phoneDigits);
     loginError.textContent='';
     validateLoginPhone();
     loginPanel.dataset.open='true';
@@ -3879,12 +4036,16 @@ body{
     loginPanel.dataset.open='false';
     overlay.dataset.open='false';
   }
-  loginCancelBtn.addEventListener('click', ()=>{ haptic('light'); closeLoginPanel(); });
+  loginCancelBtn.addEventListener('click', ()=>{
+    haptic('light');
+    if(verifyPurpose === 'booking'){ loginPanel.dataset.open='false'; panel.dataset.open='true'; }   // назад в форму брони
+    else closeLoginPanel();
+  });
   loginSendBtn.addEventListener('click', ()=>{
     if(loginSendBtn.disabled) return;
     haptic('medium');
     loginError.textContent='';
-    showVerifyStep('login', digitsAfterPrefix(loginPhoneInput.value));
+    showVerifyStep(verifyPurpose, digitsAfterPrefix(loginPhoneInput.value));
   });
 
   function handleAuthClick(){
@@ -3898,7 +4059,7 @@ body{
   }
   authBtn.addEventListener('click', handleAuthClick);
   catalogAuthBtn.addEventListener('click', handleAuthClick);
-  overlay.addEventListener('click', ()=>{ hideVerifyStep(); closeLoginPanel(); });
+  overlay.addEventListener('click', ()=>{ hideVerifyStep(); hideBotLogin(); closeLoginPanel(); });
 
   // «Привязать Telegram» (Ф2): дёргаем /api/link-telegram/start своей же
   // телефонной Bearer-сессией (authHeaders её уже подставит), получаем
