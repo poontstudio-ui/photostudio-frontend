@@ -1323,6 +1323,18 @@ body{
 }
 .panel[data-open="true"]{transform:translate(-50%, 0);}
 
+/* «Ручка» шторки: показывает, что её можно утянуть вниз. Зона захвата шире
+   самой полоски — на всю ширину и от верхнего края шторки (отрицательные
+   отступы съедают padding панели). touch-action:none — браузер не пытается
+   скроллить, пока палец ведёт шторку (см. enableSheetDrag). */
+.sheet-grip{
+  display:flex;justify-content:center;
+  margin:-20px -16px 6px;padding:12px 0 14px;
+  touch-action:none;cursor:grab;
+}
+.sheet-grip span{width:40px;height:5px;border-radius:3px;background:var(--text-3);opacity:.4;}
+#panel .panel-title{touch-action:none;}
+
 /* ---------- Быстрый просмотр студии (карта каталога) ---------- */
 /* Панель без своего padding — фото-карусель должна доходить до самых краёв
    и до верхнего скругления, как на карточке; текст и кнопка ниже возвращают
@@ -1781,6 +1793,7 @@ body{
 
 <div class="overlay" id="overlay"></div>
 <div class="panel" id="panel">
+  <div class="sheet-grip" id="panelGrip" aria-hidden="true"><span></span></div>
   <div class="panel-title">Подтверждение брони</div>
   <div class="panel-summary">
     <div class="panel-summary-row"><span class="ps-label">Зал</span><span class="ps-value" id="psHall"></span></div>
@@ -3536,6 +3549,62 @@ body{
   overlay.addEventListener('click', closePanel);
   document.getElementById('cancelBtn').addEventListener('click', closePanel);
 
+  // Шторка утягивается вниз за «ручку» и за заголовок: следует за пальцем
+  // (или мышью), на отпускании либо уезжает и закрывается, либо возвращается.
+  // Закрываем по расстоянию (>110px) ИЛИ по быстрому броску вниз — как
+  // системные шторки. Pointer Events вместо touch: одно и то же для пальца и
+  // мыши. Закрытие — через переданный close(), тот же путь, что у «Назад».
+  function enableSheetDrag(sheet, handles, close){
+    let startY = null, dy = 0, lastY = 0, lastT = 0, vel = 0, pid = null;
+    function reset(){
+      sheet.style.transition = ''; sheet.style.transform = '';
+      overlay.style.transition = ''; overlay.style.opacity = '';
+    }
+    function onDown(e){
+      if(sheet.dataset.open !== 'true') return;
+      if(e.pointerType === 'mouse' && e.button !== 0) return;
+      startY = e.clientY; lastY = startY; lastT = e.timeStamp; dy = 0; vel = 0; pid = e.pointerId;
+      try{ e.currentTarget.setPointerCapture(pid); }catch(err){}
+      sheet.style.transition = 'none';
+      overlay.style.transition = 'none';
+    }
+    function onMove(e){
+      if(startY === null || e.pointerId !== pid) return;
+      dy = Math.max(0, e.clientY - startY);
+      const dt = e.timeStamp - lastT;
+      if(dt > 0) vel = (e.clientY - lastY) / dt;   // px/мс, вниз — плюс
+      lastY = e.clientY; lastT = e.timeStamp;
+      sheet.style.transform = 'translate(-50%, ' + dy + 'px)';
+      overlay.style.opacity = String(Math.max(0, 1 - dy / (sheet.offsetHeight || 1)));
+    }
+    function onUp(e){
+      if(startY === null || e.pointerId !== pid) return;
+      startY = null;
+      const dismiss = dy > 110 || (vel > 0.6 && dy > 24);
+      sheet.style.transition = 'transform .22s ease';
+      overlay.style.transition = 'opacity .22s ease';
+      if(dismiss){
+        sheet.style.transform = 'translate(-50%, 100%)';
+        overlay.style.opacity = '0';
+        haptic('light');
+        // Конечное положение инлайна совпадает с закрытым состоянием CSS,
+        // поэтому снятие инлайна и data-open=false в один тик мигания не даёт.
+        setTimeout(()=>{ reset(); close(); }, 240);
+      } else {
+        sheet.style.transform = 'translate(-50%, 0)';
+        overlay.style.opacity = '';
+        setTimeout(reset, 240);
+      }
+    }
+    handles.forEach(h=>{
+      h.addEventListener('pointerdown', onDown);
+      h.addEventListener('pointermove', onMove);
+      h.addEventListener('pointerup', onUp);
+      h.addEventListener('pointercancel', onUp);
+    });
+  }
+  enableSheetDrag(panel, [document.getElementById('panelGrip'), panel.querySelector('.panel-title')], closePanel);
+
   // b.end — минуты от полуночи, не часы. Здесь раньше стояло setHours(b.end),
   // то есть 18:00 превращалось в «через 45 дней», и прошедших броней для
   // интерфейса не существовало вовсе. Сравниваем по времени точки, как сервер.
@@ -3648,6 +3717,7 @@ body{
     phoneInput.setSelectionRange(newPos, newPos);
     validateForm();
     saveDraftField(CLOUD_KEY_PHONE, phoneInput.value);
+    writeLocalDraft({ phone: phoneInput.value });
   });
 
   function validateForm(){
@@ -3656,7 +3726,38 @@ body{
   nameInput.addEventListener('input', ()=>{
     validateForm();
     saveDraftField(CLOUD_KEY_NAME, nameInput.value.trim());
+    writeLocalDraft({ name: nameInput.value.trim() });
   });
+
+  // ---- Черновик формы брони на устройстве ----
+  // Форма живёт в DOM, поэтому пока страница открыта, «Назад»/свайп вниз ничего
+  // не стирают. Этот черновик — чтобы имя, телефон и комментарий переживали ещё
+  // и перезагрузку страницы (в Telegram имя/телефон уже держит CloudStorage,
+  // вне Telegram и комментарий — нигде). Время/зал сюда не входят: они каждый
+  // раз берутся из текущего выбора на сетке. Комментарий сбрасывается после
+  // созданной брони (bookAnotherBtn), имя и телефон остаются; при выходе из
+  // аккаунта стирается всё (clearBookingDraft) — устройство может быть чужим.
+  const LOCAL_DRAFT_KEY = 'ps_booking_draft';
+  function readLocalDraft(){
+    try{ return JSON.parse(localStorage.getItem(LOCAL_DRAFT_KEY) || '{}') || {}; }catch(e){ return {}; }
+  }
+  function writeLocalDraft(patch){
+    try{ localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(Object.assign(readLocalDraft(), patch))); }catch(e){}
+  }
+  function restoreLocalDraft(){
+    const d = readLocalDraft();
+    if(d.name && !nameInput.value.trim()) nameInput.value = d.name;
+    if(d.phone && phoneIsBlank()) phoneInput.value = formatByPhone(d.phone);
+    if(d.note && !noteInput.value) noteInput.value = d.note;
+    validateForm();
+  }
+  function clearBookingDraft(){
+    try{ localStorage.removeItem(LOCAL_DRAFT_KEY); }catch(e){}
+    nameInput.value = ''; phoneInput.value = '+375 '; noteInput.value = '';
+    validateForm();
+  }
+  noteInput.addEventListener('input', ()=>{ writeLocalDraft({ note: noteInput.value }); });
+  restoreLocalDraft();
 
   const confirmErrorNote=document.getElementById('confirmError');
 
@@ -4052,6 +4153,7 @@ body{
     haptic('light');
     if(getPhoneToken()){
       clearPhoneToken();
+      clearBookingDraft();
       updateAuthUI();
     } else {
       openLoginPanel();
@@ -4088,6 +4190,7 @@ body{
     state.people=1;
     clearSelection();
     noteInput.value='';
+    writeLocalDraft({ note: '' });   // комментарий — к конкретной брони, следующая начинается без него
     validateForm();
     document.getElementById('successView').dataset.visible='false';
     document.getElementById('mainView').dataset.hidden='false';
