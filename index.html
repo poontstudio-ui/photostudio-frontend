@@ -481,11 +481,27 @@ body{
   text-align:center;
   margin-top:8px;
 }
-.or-line{
-  font-size:var(--fs-sm);
-  color:var(--text-3);
+.auth-title{text-align:center;}
+.auth-sub{
   text-align:center;
-  margin:14px 0 10px;
+  font-size:var(--fs-md);
+  color:var(--text-2);
+  line-height:1.4;
+  margin:6px 0 22px;
+}
+/* Второй способ входа — текстовая ссылка под главной кнопкой, не вторая кнопка. */
+.auth-link{
+  display:block;
+  width:100%;
+  margin-top:8px;
+  padding:12px;
+  background:none;
+  border:none;
+  color:var(--text-2);
+  font-family:var(--f);
+  font-size:var(--fs-md);
+  text-align:center;
+  cursor:pointer;
 }
 
 .hours-week-row{
@@ -1868,14 +1884,21 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
      Тот же код подтверждения (verifyPanel), просто источник номера — это
      поле, а не форма брони. -->
 <div class="panel" id="loginPanel">
-  <div class="panel-title">Вход</div>
-  <a class="btn-primary" id="loginTgBtn" href="#" aria-disabled="true" rel="noopener">Войти через Telegram</a>
-  <div class="or-line">или по номеру телефона</div>
-  <div class="field">
-    <label for="loginPhoneInput">Телефон</label>
-    <input id="loginPhoneInput" type="tel" inputmode="numeric" placeholder="+375 (29) 123-45-67" value="+375 ">
+  <div class="panel-title auth-title">Авторизация</div>
+  <div class="auth-sub">Выберите удобный способ,<br>чтобы войти в профиль</div>
+  <div id="loginChoice">
+    <a class="btn-primary" id="loginTgBtn" href="#" aria-disabled="true" rel="noopener">Войти через Telegram</a>
+    <button class="auth-link" id="loginPhoneLink" type="button">Войти по номеру телефона</button>
   </div>
-  <button class="btn-ghost" id="loginSendBtn" disabled>Получить код</button>
+  <!-- Номер спрашиваем только после тапа по «Войти по номеру телефона» -->
+  <div id="loginPhoneStep" hidden>
+    <div class="field">
+      <label for="loginPhoneInput">Телефон</label>
+      <input id="loginPhoneInput" type="tel" inputmode="numeric" placeholder="+375 (29) 123-45-67" value="+375 ">
+    </div>
+    <button class="btn-primary" id="loginSendBtn" disabled>Получить код</button>
+    <button class="auth-link" id="loginPhoneBackLink" type="button">Другой способ входа</button>
+  </div>
   <div class="save-note" id="loginError" style="color:var(--red)"></div>
   <button class="btn-ghost" id="loginCancelBtn">Отмена</button>
 </div>
@@ -3913,6 +3936,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   verifyBackBtn.addEventListener('click', ()=>{
     haptic('light');
     hideVerifyStep();
+    showLoginChoiceView();
     loginPanel.dataset.open='true';   // назад к выбору способа (Telegram / код на номер)
     if(!botPrepared) prepareBotLogin();
   });
@@ -4120,6 +4144,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   document.getElementById('botLoginBackBtn').addEventListener('click', ()=>{
     haptic('light');
     hideBotLogin();
+    showLoginChoiceView();
     loginPanel.dataset.open = 'true';
     prepareBotLogin();
   });
@@ -4191,11 +4216,25 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     validateLoginPhone();
   });
 
+  // Экран входа: сначала выбор (Telegram / по номеру), поле номера — по ссылке.
+  const loginChoiceBox = document.getElementById('loginChoice');
+  const loginPhoneStep = document.getElementById('loginPhoneStep');
+  function showLoginChoiceView(){
+    loginChoiceBox.hidden = false;
+    loginPhoneStep.hidden = true;
+  }
+  function showLoginPhoneStep(){
+    loginChoiceBox.hidden = true;
+    loginPhoneStep.hidden = false;
+    loginError.textContent = '';
+    validateLoginPhone();
+    loginPhoneInput.focus();
+  }
   function openLoginPanel(){
     verifyPurpose = 'login';
     overlay.dataset.open='true';
     loginError.textContent='';
-    validateLoginPhone();
+    showLoginChoiceView();
     loginPanel.dataset.open='true';
     prepareBotLogin();   // ссылка на бота должна быть готова к моменту тапа
   }
@@ -4209,10 +4248,22 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     verifyPanel.dataset.open='false';
     loginPhoneInput.value = formatByPhone('+375' + phoneDigits);
     loginError.textContent='';
-    validateLoginPhone();
+    showLoginChoiceView();
     loginPanel.dataset.open='true';
     prepareBotLogin();
   }
+  // «Войти по номеру телефона»: в брони номер уже введён в форму — сразу шлём
+  // код на него, второй раз номер не спрашиваем. В самостоятельном входе (из
+  // шапки) номера ещё нет — показываем поле.
+  document.getElementById('loginPhoneBackLink').addEventListener('click', ()=>{ haptic('light'); loginError.textContent=''; showLoginChoiceView(); });
+  document.getElementById('loginPhoneLink').addEventListener('click', ()=>{
+    haptic('light');
+    if(verifyPurpose === 'booking' && digitsAfterPrefix(phoneInput.value).length === 9){
+      showVerifyStep('booking', digitsAfterPrefix(phoneInput.value));
+    } else {
+      showLoginPhoneStep();
+    }
+  });
   function closeLoginPanel(){
     loginPanel.dataset.open='false';
     overlay.dataset.open='false';
