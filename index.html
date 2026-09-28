@@ -1462,6 +1462,10 @@ body{
   cursor:pointer;
 }
 .btn-primary:disabled{opacity:0.4;cursor:not-allowed;}
+/* Ссылки в роли главной кнопки (вход через бота — настоящий <a href>, см.
+   блок «Вход через бота платформы»). */
+a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decoration:none;}
+.btn-primary[aria-disabled="true"]{opacity:0.4;pointer-events:none;}
 .btn-ghost{
   width:100%;
   padding:12px;
@@ -1854,7 +1858,7 @@ body{
 <div class="panel" id="botLoginPanel">
   <div class="panel-title">Вход через Telegram</div>
   <div class="save-note" id="botLoginHint" style="color:var(--text-2)"></div>
-  <button class="btn-primary" id="botLoginOpenBtn" disabled>Открыть Telegram</button>
+  <a class="btn-primary" id="botLoginOpenBtn" href="#" aria-disabled="true" rel="noopener">Открыть Telegram</a>
   <button class="btn-ghost" id="botLoginDoneBtn" disabled>Готово</button>
   <div class="save-note" id="botLoginError" style="color:var(--red)"></div>
   <button class="btn-ghost" id="botLoginBackBtn">Назад</button>
@@ -1865,7 +1869,7 @@ body{
      поле, а не форма брони. -->
 <div class="panel" id="loginPanel">
   <div class="panel-title">Вход</div>
-  <button class="btn-primary" id="loginTgBtn">Войти через Telegram</button>
+  <a class="btn-primary" id="loginTgBtn" href="#" aria-disabled="true" rel="noopener">Войти через Telegram</a>
   <div class="or-line">или по номеру телефона</div>
   <div class="field">
     <label for="loginPhoneInput">Телефон</label>
@@ -3910,6 +3914,7 @@ body{
     haptic('light');
     hideVerifyStep();
     loginPanel.dataset.open='true';   // назад к выбору способа (Telegram / код на номер)
+    if(!botPrepared) prepareBotLogin();
   });
 
   verifySubmitBtn.addEventListener('click', async ()=>{
@@ -3943,23 +3948,62 @@ body{
   });
 
   // ---- Вход через бота платформы (0047) ----
-  // Кнопка -> /api/auth/bot/start даёт t.me-ссылку и секрет, который знает
-  // только эта вкладка -> человек жмёт Start в боте и делится номером -> мы
-  // опрашиваем /check раз в пару секунд (или по «Готово») и забираем сессию.
+  // Сайт заготавливает вход (/api/auth/bot/start) ЗАРАНЕЕ — как только открыта
+  // панель входа, — чтобы кнопка «Войти через Telegram» была настоящей ссылкой
+  // <a href="https://t.me/...">, по которой человек тапает сам. Так задумано
+  // ради iOS/Android: универсальная ссылка от реального тапа открывает
+  // приложение Telegram сразу, а наша вкладка остаётся на месте. Раньше мы
+  // открывали пустую вкладку через window.open и уже потом вели её на t.me —
+  // и после возврата из Telegram человек видел эту техническую страницу t.me
+  // вместо нашей. На телефоне ссылка идёт в ЭТОЙ ЖЕ вкладке (_self), на
+  // десктопе — в новой (_blank): там t.me только показывает «открыть
+  // Telegram», и уводить с сайта единственную вкладку незачем.
+  // Пока человек в Telegram, страница опрашивает /api/auth/bot/check и сверх
+  // того проверяет вход в момент возврата во вкладку (visibilitychange /
+  // pageshow) — таймеры в фоновой вкладке iOS замирает. Ожидающий вход лежит
+  // в localStorage: если Safari выгрузил вкладку из памяти, после возврата
+  // страница подхватит его и доведёт вход до конца.
   // После успеха — та же развилка, что у кода из SMS: verifyPurpose решает,
   // продолжить бронь или просто закрыть панель.
   const botLoginPanel = document.getElementById('botLoginPanel');
   const botLoginHint = document.getElementById('botLoginHint');
-  const botLoginOpenBtn = document.getElementById('botLoginOpenBtn');
   const botLoginDoneBtn = document.getElementById('botLoginDoneBtn');
   const botLoginError = document.getElementById('botLoginError');
-  let botLogin = null;   // { token, secret, url, timer, checking }
+  const loginTgLink = document.getElementById('loginTgBtn');
+  const botLoginOpenLink = document.getElementById('botLoginOpenBtn');
+  const BOT_LOGIN_STORE = 'ps_bot_login';
+  const BOT_LOGIN_MAX_AGE = 9 * 60 * 1000;   // сервер держит вход 10 минут
+  let botPrepared = null;   // { token, secret, url, at } — заготовлен, ждёт тапа
+  let botLogin = null;      // { token, secret, url, at, timer, checking } — идёт ожидание
+  let botPrepareSeq = 0;
+
+  function isMobileBrowser(){
+    const ua = navigator.userAgent || '';
+    return /iPhone|iPad|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  }
+  function setTgLink(a, url){
+    if(url){
+      a.href = url;
+      a.target = isMobileBrowser() ? '_self' : '_blank';
+      a.setAttribute('aria-disabled', 'false');
+    } else {
+      a.href = '#';
+      a.removeAttribute('target');
+      a.setAttribute('aria-disabled', 'true');
+    }
+  }
+  function persistBotLogin(){
+    if(!botLogin) return;
+    try{ localStorage.setItem(BOT_LOGIN_STORE, JSON.stringify({ token: botLogin.token, secret: botLogin.secret, url: botLogin.url, at: botLogin.at })); }catch(e){}
+  }
+  function clearPersistedBotLogin(){ try{ localStorage.removeItem(BOT_LOGIN_STORE); }catch(e){} }
 
   function stopBotLoginPolling(){
     if(botLogin && botLogin.timer){ clearInterval(botLogin.timer); botLogin.timer = null; }
   }
   function hideBotLogin(){
     stopBotLoginPolling();
+    clearPersistedBotLogin();
     botLogin = null;
     botLoginPanel.dataset.open = 'false';
   }
@@ -3967,9 +4011,47 @@ body{
   // останавливаем, кнопки гасим — остаётся «Назад» и начать заново.
   function failBotLogin(message){
     stopBotLoginPolling();
+    clearPersistedBotLogin();
     botLoginError.textContent = message;
-    botLoginOpenBtn.disabled = true;
+    setTgLink(botLoginOpenLink, null);
     botLoginDoneBtn.disabled = true;
+  }
+
+  async function prepareBotLogin(){
+    botPrepared = null;
+    setTgLink(loginTgLink, null);
+    const mine = ++botPrepareSeq;   // панель могли закрыть и открыть снова, пока шёл запрос
+    try{
+      const res = await fetch(API_BASE + '/api/auth/bot/start', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(TENANT_ID ? { studioId: TENANT_ID } : {}),
+      });
+      const data = await res.json().catch(()=>null);
+      if(!res.ok) throw new Error((data && data.error) || 'не удалось подготовить вход');
+      if(mine !== botPrepareSeq) return;
+      botPrepared = { token: data.token, secret: data.secret, url: data.url, at: Date.now() };
+      setTgLink(loginTgLink, data.url);
+    }catch(e){
+      if(mine === botPrepareSeq) loginError.textContent = 'Вход через Telegram недоступен: ' + e.message;
+    }
+  }
+
+  // Экран ожидания. Навигация по ссылке идёт своим ходом (нативный тап по <a>),
+  // мы только переключаем панель и запускаем опрос.
+  function beginBotWaiting(p){
+    stopBotLoginPolling();
+    botLogin = { token: p.token, secret: p.secret, url: p.url, at: p.at, timer: null, checking: false };
+    persistBotLogin();
+    botLogin.timer = setInterval(()=>checkBotLogin(false), 2500);
+    overlay.dataset.open = 'true';
+    panel.dataset.open = 'false';
+    loginPanel.dataset.open = 'false';
+    verifyPanel.dataset.open = 'false';
+    botLoginError.textContent = '';
+    botLoginHint.textContent = 'Откройте бота, нажмите «Пройти авторизацию» и поделитесь номером телефона. Затем вернитесь сюда — вход завершится сам.';
+    setTgLink(botLoginOpenLink, p.url);
+    botLoginDoneBtn.disabled = false;
+    botLoginPanel.dataset.open = 'true';
   }
 
   async function checkBotLogin(manual){
@@ -3986,6 +4068,7 @@ body{
       const status = data && data.status;
       if(status === 'ok'){
         stopBotLoginPolling();
+        clearPersistedBotLogin();
         setPhoneToken(data.token);
         updateAuthUI();
         haptic('medium');
@@ -4015,44 +4098,19 @@ body{
     }
   }
 
-  async function startBotLogin(purpose){
-    verifyPurpose = purpose;
-    // Вкладку под Telegram открываем СРАЗУ, в жесте пользователя: после await
-    // браузер заблокирует window.open. Если заблокировал — есть кнопка «Открыть».
-    const popup = window.open('about:blank', '_blank');
-    hideBotLogin();
-    overlay.dataset.open = 'true';
-    panel.dataset.open = 'false';
-    loginPanel.dataset.open = 'false';
-    verifyPanel.dataset.open = 'false';
-    botLoginError.textContent = '';
-    botLoginHint.textContent = 'Готовим вход…';
-    botLoginOpenBtn.disabled = true;
-    botLoginDoneBtn.disabled = true;
-    botLoginPanel.dataset.open = 'true';
-    try{
-      const res = await fetch(API_BASE + '/api/auth/bot/start', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(TENANT_ID ? { studioId: TENANT_ID } : {}),
-      });
-      const data = await res.json().catch(()=>null);
-      if(!res.ok) throw new Error((data && data.error) || 'Не удалось начать вход');
-      botLogin = { token: data.token, secret: data.secret, url: data.url, timer: null, checking: false };
-      botLogin.timer = setInterval(()=>checkBotLogin(false), 2500);
-      botLoginHint.textContent = 'Откройте бота, нажмите «Пройти авторизацию» и поделитесь номером телефона. Затем вернитесь сюда — вход завершится сам, или нажмите «Готово».';
-      botLoginOpenBtn.disabled = false;
-      botLoginDoneBtn.disabled = false;
-      if(popup) popup.location.href = data.url;
-    }catch(e){
-      if(popup) popup.close();
-      botLoginHint.textContent = '';
-      botLoginError.textContent = e.message;
-    }
-  }
-
-  botLoginOpenBtn.addEventListener('click', ()=>{
+  loginTgLink.addEventListener('click', e=>{
+    if(loginTgLink.getAttribute('aria-disabled') === 'true' || !botPrepared){ e.preventDefault(); return; }
+    // Заготовка залежалась (панель простояла открытой) — старая ссылка уже не
+    // сработает: готовим новую, и тап придётся повторить.
+    if(Date.now() - botPrepared.at > BOT_LOGIN_MAX_AGE){ e.preventDefault(); prepareBotLogin(); return; }
+    haptic('medium');
+    const p = botPrepared;
+    botPrepared = null;
+    beginBotWaiting(p);
+  });
+  botLoginOpenLink.addEventListener('click', e=>{
+    if(botLoginOpenLink.getAttribute('aria-disabled') === 'true'){ e.preventDefault(); return; }
     haptic('light');
-    if(botLogin) window.open(botLogin.url, '_blank');
   });
   botLoginDoneBtn.addEventListener('click', ()=>{
     haptic('light');
@@ -4063,8 +4121,28 @@ body{
     haptic('light');
     hideBotLogin();
     loginPanel.dataset.open = 'true';
+    prepareBotLogin();
   });
-  document.getElementById('loginTgBtn').addEventListener('click', ()=>{ haptic('medium'); startBotLogin(verifyPurpose); });   // повод задал openLoginPanel / showLoginChoice
+  // Вернулись во вкладку из Telegram — проверяем сразу, не дожидаясь таймера.
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible' && botLogin) checkBotLogin(false);
+  });
+  window.addEventListener('pageshow', ()=>{ if(botLogin) checkBotLogin(false); });
+
+  // Вкладку могли выгрузить, пока человек был в Telegram: подхватываем
+  // ожидающий вход. Как повод берём 'login' — выбранное на сетке время после
+  // перезагрузки уже потеряно, отправлять бронь нечем.
+  function resumeBotLogin(){
+    let saved = null;
+    try{ saved = JSON.parse(localStorage.getItem(BOT_LOGIN_STORE) || 'null'); }catch(e){}
+    if(!saved || !saved.token || !saved.secret || Date.now() - saved.at > BOT_LOGIN_MAX_AGE || getPhoneToken() || (tg && tg.initData)){
+      clearPersistedBotLogin();
+      return;
+    }
+    verifyPurpose = 'login';
+    beginBotWaiting(saved);
+    checkBotLogin(false);
+  }
 
   confirmBtn.addEventListener('click', async ()=>{
     if(confirmBtn.disabled) return;
@@ -4119,6 +4197,7 @@ body{
     loginError.textContent='';
     validateLoginPhone();
     loginPanel.dataset.open='true';
+    prepareBotLogin();   // ссылка на бота должна быть готова к моменту тапа
   }
   // Бронь без сессии: тот же экран входа, но повод — 'booking' (после входа
   // отправим бронь), а телефон подставлен из формы брони. Код на номер уходит
@@ -4132,6 +4211,7 @@ body{
     loginError.textContent='';
     validateLoginPhone();
     loginPanel.dataset.open='true';
+    prepareBotLogin();
   }
   function closeLoginPanel(){
     loginPanel.dataset.open='false';
@@ -4185,6 +4265,7 @@ body{
   });
 
   updateAuthUI();
+  resumeBotLogin();
 
   document.getElementById('bookAnotherBtn').addEventListener('click', ()=>{
     state.people=1;
