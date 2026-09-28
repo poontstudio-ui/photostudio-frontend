@@ -2209,7 +2209,9 @@ body{
     state.dates = buildDatesForMonthWindow(businessToday());
     state.dateIndex = 0;
     state.packageHours = null;
-    openHallId = null;
+    // Один зал — сразу открываем его страницу: список из одной карточки
+    // только заставлял делать лишний тап. Два и больше — обзор студии.
+    openHallId = HALLS.length === 1 ? HALLS[0].id : null;
     clearSelection();
     document.title = cfg.name + ' — Бронирование';
     document.querySelector('.brand-name').textContent = cfg.name;
@@ -2434,7 +2436,7 @@ body{
     return (hi > lo ? 'от ' : '') + lo + ' ' + CUR + '/ч';
   }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
-  const GRID_DAYS = 7;               // столбцов в режиме одного зала
+  const GRID_DAYS = 7;               // дней, помещающихся в экран без прокрутки (режим одного зала)
   const DURATION_MAX_MIN = 8 * 60;   // максимум брони
   function maxSlots(){ return DURATION_MAX_MIN / SLOT_MIN; }
   // Длительность выделения человекочитаемо: «1 ч», «1 ч 30 мин», «30 мин».
@@ -2582,6 +2584,7 @@ body{
         haptic('light');
         state.dates = buildDatesForMonthWindow(i===0 ? today : m);
         state.dateIndex = 0;
+        gridScrollEl.scrollLeft = 0;   // новый месяц — сетка снова с первого дня
         clearSelection();
         renderAll();
         refreshGrid();
@@ -2609,7 +2612,7 @@ body{
   // ---- Выбор зала и оборудования ----
   // ================= Сетка занятости =================
   // Столбцы: если залов несколько — залы на выбранную дату; если зал один —
-  // 7 дней. Строки — целые часы. Клетка = 1 час.
+  // дни (до конца месяца). Строки — целые часы. Клетка = 1 час.
   const gridEl = document.getElementById('grid');
 
   // Открытая страница зала: null — обзор студии, иначе сетка только этого зала.
@@ -2617,7 +2620,8 @@ body{
   function gridHall(){
     return (openHallId && HALLS.find(h => h.id === openHallId)) || HALLS[0] || null;
   }
-  // 'halls' — столбцы залы на одну дату; 'days' — 7 дней одного зала.
+  // 'halls' — столбцы залы на одну дату; 'days' — дни одного зала до конца
+  // месяца (окно state.dates), на экране 7, остальные — горизонтальной прокруткой.
   function gridMode(){
     if(openHallId) return 'days';
     return HALLS.length > 1 ? 'halls' : 'days';
@@ -2639,7 +2643,7 @@ body{
     // прыжке слайдером месяцев на будущий месяц первый столбец — 1 число,
     // не сегодня (было i===0, ломалось именно на этом сценарии).
     const todayKey = dateKey(businessToday());
-    return state.dates.slice(0, GRID_DAYS).map((d) => ({
+    return state.dates.map((d) => ({
       key:dateKey(d), hall, date:d,
       label:DAY_NAMES[d.getDay()], sub:String(d.getDate()), today:dateKey(d)===todayKey,
     }));
@@ -2669,7 +2673,7 @@ body{
     const url = gridMode()==='halls'
       ? base + '?date=' + dateKey(currentDate())
       : base + '?hallId=' + encodeURIComponent(gridHall().id) +
-        '&from=' + dateKey(state.dates[0]) + '&days=' + GRID_DAYS;
+        '&from=' + dateKey(state.dates[0]) + '&days=' + state.dates.length;
     try{
       const res = await fetch(url);
       const data = res.ok ? await res.json() : null;
@@ -2791,6 +2795,16 @@ body{
       const w = gridEl.getBoundingClientRect().width;
       if(w) gridHeadEl.style.width = w + 'px';
     }).observe(gridEl);
+    // Ширину столбца-дня считает renderGrid от ширины скроллера — при её
+    // смене (поворот экрана, вьюпорт Telegram, первый показ экрана студии,
+    // до которого он был скрыт) пересобираем, иначе «7 на экране» съедет.
+    let lastScrollerW = 0;
+    new ResizeObserver(()=>{
+      const w = gridScrollEl.clientWidth;
+      if(!w || w === lastScrollerW) return;
+      lastScrollerW = w;
+      if(HALLS.length && gridMode()==='days') renderGrid();
+    }).observe(gridScrollEl);
   }
 
   function renderGrid(){
@@ -2810,12 +2824,21 @@ body{
       return;
     }
     gridHeadWrap.style.display = '';
-    // Дни (их всегда 7 и подписи короткие) вписываем в ширину; залы — с
-    // минимальной шириной под название и горизонтальной прокруткой.
-    const fit = gridMode()==='days';
-    const tpl = `40px repeat(${cols.length}, minmax(${fit ? '0' : '76px'}, 1fr))`;
+    // Обе сетки (залы и дни) прокручиваются по горизонтали. Залы — с
+    // минимальной шириной под название; дни — ширина подобрана так, чтобы
+    // ровно GRID_DAYS столбцов помещались в экран, а остальные дни месяца
+    // уезжали вправо. Зазор — 4px между всеми столбцами, включая колонку часов.
+    const days = gridMode()==='days';
+    let colW = '76px';
+    if(days){
+      const avail = gridScrollEl.clientWidth;
+      colW = (avail ? Math.max(36, Math.floor((avail - 40 - GRID_DAYS*4) / GRID_DAYS)) : 44) + 'px';
+    }
+    const tpl = days
+      ? `40px repeat(${cols.length}, ${colW})`
+      : `40px repeat(${cols.length}, minmax(${colW}, 1fr))`;
     for(const el of [gridEl, gridHeadEl]){
-      el.dataset.fit = fit ? 'true' : 'false';
+      el.dataset.fit = 'false';
       el.style.gridTemplateColumns = tpl;
     }
 
@@ -2863,7 +2886,7 @@ body{
     // Шапка и тело — разные гриды, и max-content считает их по-разному
     // (в шапке есть текст, в клетках — нет). Приводим шапку к ширине тела,
     // тогда колонки совпадают пиксель в пиксель.
-    gridHeadEl.style.width = fit ? '' : gridEl.getBoundingClientRect().width + 'px';
+    gridHeadEl.style.width = gridEl.getBoundingClientRect().width + 'px';
     gridHeadWrap.scrollLeft = gridScrollEl.scrollLeft;
   }
 
@@ -2877,10 +2900,21 @@ body{
     }
   });
 
+  // Сетка длиннее экрана: автовыбор берёт первую свободную клетку по всему
+  // месяцу, и она может оказаться правее видимой части — подводим её в кадр.
+  function scrollGridToSelection(){
+    const el = gridEl.querySelector('.grid-cell[data-sel-first="true"]');
+    if(!el) return;
+    const x = el.getBoundingClientRect().left - gridEl.getBoundingClientRect().left;
+    const w = el.offsetWidth, view = gridScrollEl.scrollLeft, vw = gridScrollEl.clientWidth;
+    if(x < view + 44 || x + w > view + vw) gridScrollEl.scrollLeft = Math.max(0, x - 44);
+  }
+
   async function refreshGrid(){
     await fetchBusy();
     if(!selectionValid()) autoSelect();
     renderGrid();
+    scrollGridToSelection();
     renderPeople();
     renderSummary();
   }
@@ -3316,9 +3350,18 @@ body{
     const on = !!openHallId;
     document.getElementById('hallCardsSection').style.display = on ? 'none' : '';
     document.getElementById('hallInfoSection').style.display = on ? '' : 'none';
+    // Единственный зал открыт сразу, «обзора студии» с карточками у него нет —
+    // возвращаться некуда (стрелка скрыта), а удобства студии остаются на
+    // странице, но под описанием зала: над фото им не место.
+    const single = HALLS.length === 1;
+    document.getElementById('hallBackBtn').style.display = single ? 'none' : '';
     // Удобства студии — контекст «обзора студии», при входе в зал прячем.
     var sa = document.getElementById('studioAmenitiesSection');
-    if(sa) sa.style.display = on ? 'none' : '';
+    if(sa){
+      sa.style.display = (on && !single) ? 'none' : '';
+      const anchor = document.getElementById(single ? 'hallInfoSection' : 'hallCardsSection');
+      if(anchor.nextElementSibling !== sa) anchor.after(sa);
+    }
     document.getElementById('gridLabel').textContent = on ? 'Время брони' : 'Занятость залов';
     if(HALLS.length <= 1) document.getElementById('gridLabel').textContent = 'Время брони';
   }
@@ -3327,6 +3370,7 @@ body{
     openHallId = id;
     state.packageHours = null;
     state.purpose = null;   // у другого зала свой набор целей
+    gridScrollEl.scrollLeft = 0;
     clearSelection();
     applyHallMode();
     renderAll();
@@ -3337,6 +3381,7 @@ body{
     const rh=document.getElementById('repeatHint'); if(rh) rh.hidden=true;
     openHallId = null;
     state.purpose = null;
+    gridScrollEl.scrollLeft = 0;
     clearSelection();
     applyHallMode();
     renderAll();
@@ -4074,12 +4119,11 @@ body{
       state.people = Math.min(ps.people, hall.capacity);
     }
     // openHall() ниже переводит сетку в режим 'days' ВСЕГДА (свой/чужой зал —
-    // не важно), а тот показывает только ПЕРВЫЕ GRID_DAYS дат из state.dates,
-    // а не всё окно. Дата из поиска могла формально присутствовать в массиве
-    // (окно строится на весь месяц), но за пределами этих первых 7 — setSel
-    // ниже её всё равно не находил и тихо съезжал на autoSelect() (другая
-    // дата того же зала) — баг, пойманный при ревью. Пересобираем окно ТОЧНО
-    // на дату брони: тогда она — самый первый день, и попадает в любую сетку.
+    // не важно), а на экране без прокрутки в нём только первые GRID_DAYS
+    // столбцов; openHall к тому же сбрасывает прокрутку сетки в начало. Если
+    // дата из поиска дальше этих первых 7 — выделенная клетка осталась бы за
+    // краем экрана. Пересобираем окно ТОЧНО на дату брони: тогда она —
+    // самый первый день и видна сразу, без пролистывания.
     if(state.dates.slice(0, GRID_DAYS).findIndex(d => dateKey(d) === ps.date) < 0){
       state.dates = buildDatesForMonthWindow(new Date(ps.date + 'T00:00:00'));
     }
@@ -5458,7 +5502,7 @@ body{
 
   document.getElementById('studioBackBtn').addEventListener('click', ()=>{
     haptic('light');
-    if(openHallId) closeHall(); else backToCatalog();
+    if(openHallId && HALLS.length > 1) closeHall(); else backToCatalog();
   });
 
   // ---- Загрузка выбранной студии ----
