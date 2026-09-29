@@ -78,7 +78,7 @@ body{
   flex-direction:column;
   background:var(--bg);
   position:relative;
-  padding-bottom:210px;
+  padding-bottom:260px;
 }
 
 /* ---------- Header ---------- */
@@ -828,7 +828,7 @@ body{
 
 /* ---------- Cancel confirm panel ---------- */
 /* Перенос брони — та же сетка выбора времени, что и на главном экране:
-   лента месяцев, лента дат и один столбец (зал у брони уже известен). */
+   лента месяцев, лента дат и один столбец (пространство у брони уже известен). */
 .rs-picker{margin:10px 0 4px;}
 /* Сетка прокручивается внутри себя: иначе на 13 строк кнопка «Перенести»
    уезжает за нижний край панели и её приходится искать прокруткой. */
@@ -1243,9 +1243,12 @@ body{
   gap:14px;
   z-index:20;
 }
-.people-field{display:flex;align-items:center;gap:14px;}
-.people-cap{font-size:var(--fs-sm);color:var(--text-2);}
-.people-rule{font-size:var(--fs-sm);color:var(--text-2);margin-top:6px;}
+.sb-people{display:flex;align-items:center;gap:12px;}
+.sb-people-l{font-size:var(--fs-sm);color:var(--text-2);}
+.sb-people .stepper{gap:10px;}
+.sb-people .stepper button{width:30px;height:30px;}
+.people-cap{font-size:var(--fs-sm);color:var(--text-3);}
+.people-rule{font-size:var(--fs-xs);color:var(--text-2);margin-top:-8px;line-height:1.35;}
 .sb-bottom{
   display:flex;
   align-items:center;
@@ -1586,7 +1589,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         </div>
         <div class="ts-chips" id="tsTypeChips"></div>
         <label class="ts-check"><input type="checkbox" id="tsDaylight"> только с дневным светом</label>
-        <button class="btn-primary" id="tsGo" style="width:100%;margin-top:4px">Найти свободные залы</button>
+        <button class="btn-primary" id="tsGo" style="width:100%;margin-top:4px">Найти свободные пространства</button>
         <div class="ts-note" id="tsNote"></div>
       </div>
     </div>
@@ -1617,7 +1620,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     </div>
 
     <div class="section" id="hallCardsSection">
-      <div class="section-label">Залы</div>
+      <div class="section-label">Пространства</div>
       <div class="hall-cards" id="hallCards"></div>
     </div>
 
@@ -1629,7 +1632,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
     <div class="section" id="hallInfoSection" style="display:none">
       <div class="hall-info-head">
-        <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем залам">←</button>
+        <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем пространствам">←</button>
         <div class="hall-info-title" id="hallInfoTitle"></div>
       </div>
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
@@ -1747,10 +1750,10 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     </div>
 
     <div class="section">
-      <div class="section-label">Залы</div>
+      <div class="section-label">Пространства</div>
       <div class="price-editor" id="hallsEditor"></div>
-      <button class="tier-add-btn" id="addHallBtn" type="button">+ Добавить зал</button>
-      <button class="btn-primary" id="saveHallsBtn" style="margin-top:12px">Сохранить залы</button>
+      <button class="tier-add-btn" id="addHallBtn" type="button">+ Добавить пространство</button>
+      <button class="btn-primary" id="saveHallsBtn" style="margin-top:12px">Сохранить пространства</button>
       <div class="save-note" id="hallsSaveNote"></div>
     </div>
 
@@ -1801,6 +1804,18 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   </div>
 
   <div class="summary-bar" id="summaryBar">
+    <!-- Число людей — здесь, рядом с ценой: сумма зависит от него (0054) и
+         пересчитывается сразу, до открытия окна подтверждения. -->
+    <div class="sb-people">
+      <span class="sb-people-l">Человек</span>
+      <div class="stepper">
+        <button id="peopleMinus" type="button" aria-label="Меньше людей">−</button>
+        <span class="stepper-count" id="peopleCount">1</span>
+        <button id="peoplePlus" type="button" aria-label="Больше людей">+</button>
+      </div>
+      <span class="people-cap" id="peopleCap"></span>
+    </div>
+    <div class="people-rule" id="peopleRule" hidden></div>
     <div class="sb-bottom">
       <div class="summary-info">
         <div class="summary-row" id="summaryRow">Выберите время</div>
@@ -1817,24 +1832,13 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   <div class="sheet-grip" id="panelGrip" aria-hidden="true"><span></span></div>
   <div class="panel-title">Подтверждение брони</div>
   <div class="panel-summary">
-    <div class="panel-summary-row"><span class="ps-label">Зал</span><span class="ps-value" id="psHall"></span></div>
+    <div class="panel-summary-row"><span class="ps-label">Пространство</span><span class="ps-value" id="psHall"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Дата</span><span class="ps-value" id="psDate"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Время</span><span class="ps-value" id="psTime"></span></div>
+    <div class="panel-summary-row"><span class="ps-label">Человек</span><span class="ps-value" id="psPeople"></span></div>
     <div class="panel-summary-hint" id="psShoot" hidden></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
     <div class="panel-summary-hint" id="psBreak" hidden></div>
-  </div>
-  <div class="field">
-    <label>Человек</label>
-    <div class="people-field">
-      <div class="stepper">
-        <button id="peopleMinus" type="button">−</button>
-        <span class="stepper-count" id="peopleCount">1</span>
-        <button id="peoplePlus" type="button">+</button>
-      </div>
-      <span class="people-cap" id="peopleCap"></span>
-    </div>
-    <div class="people-rule" id="peopleRule" hidden></div>
   </div>
   <div class="field">
     <label for="nameInput">Имя</label>
@@ -1937,7 +1941,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 <!-- Быстрый просмотр студии по клику на цену на карте каталога — тот же
      механизм окна (.panel/.overlay), что и везде в приложении, просто без
      верхнего отступа под фото-карусель (sp-media гасит padding панели
-     отрицательным отступом). Не модалка деталей зала — только то, что нужно
+     отрицательным отступом). Не модалка деталей пространства — только то, что нужно
      решить «стоит заходить или нет»: фото, вместимость, пара удобств, цена
      «от». Полный переход в студию — уже кнопкой внизу. -->
 <div class="panel studio-preview-panel" id="studioPreviewPanel">
@@ -2138,7 +2142,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     panoramicWindows:true, texturedWall:true, fireplace:true, mezzanine:true, balcony:true, soundproofing:true,
     airConditioning:true, bluetoothSpeaker:true,
     whiteBackdrop:true, sink:true, outdoorArea:true, skylights:true,
-    wheelchairAccessible:true, freightElevator:true, streetLevelAccess:true, publicTransport:true }; // свойства зала по вертикали (П4-1)
+    wheelchairAccessible:true, freightElevator:true, streetLevelAccess:true, publicTransport:true }; // свойства пространства по вертикали (П4-1)
   let STUDIO_AMENITIES = {};   // удобства/правила студии из /config (миграция 0030)
   var HALL_STYLE_RU = { loft:'Лофт', scandi:'Скандинавский', classic:'Классический', minimal:'Минимализм',
     dark:'Тёмный', industrial:'Индустриальный', vintage:'Винтаж', provence:'Прованс' };
@@ -2238,7 +2242,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   let STUDIO_GO_REF = '';                                         // партнёрский ref для ссылок Яндекс Go
   let _studioMapDrawn = false;                                    // карта студии уже отрисована
   let _mapBtnsWired = false;
-  const allHallsById = {};   // id -> зал, для подписи прошлых броней
+  const allHallsById = {};   // id -> пространство, для подписи прошлых броней
 
   function applyTenantConfig(cfg){
     HALLS = (cfg.halls || []).slice();
@@ -2264,7 +2268,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     };
     if(cfg.verticalUi && cfg.verticalUi.hallProps) HALL_PROPS = cfg.verticalUi.hallProps;
     STUDIO_AMENITIES = cfg.amenities || {};
-    _hallAboutRenderedId = null;   // новая студия — описания зала пересобрать
+    _hallAboutRenderedId = null;   // новая студия — описания пространства пересобрать
     renderStudioAmenities();
     STUDIO_LAT = Number.isFinite(cfg.lat) ? cfg.lat : null;
     STUDIO_LON = Number.isFinite(cfg.lon) ? cfg.lon : null;
@@ -2291,6 +2295,14 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
   // Часы работы по дням недели: массив из 7 {start,end} (целые часы),
   // индекс = Date.getDay() (0 = Вс). Старый конфиг без cfg.hours — одна пара на все дни.
+  // Часы пространства с учётом конфига студии (для переноса брони, где WEEK_HOURS ещё не тот тенант).
+  function hallHoursOf(cfg, hall){
+    const h = hall && hall.hours;
+    if(Array.isArray(h) && h.length === 7 && h.every(d => d && Number.isInteger(d.start) && Number.isInteger(d.end))){
+      return h.map(d => ({ start:d.start, end:d.end }));
+    }
+    return normalizeWeekHours(cfg);
+  }
   function normalizeWeekHours(cfg){
     const h = cfg.hours;
     if(Array.isArray(h) && h.length===7 && h.every(d=>d && Number.isInteger(d.start) && Number.isInteger(d.end))){
@@ -2299,7 +2311,13 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     return Array.from({length:7}, ()=>({start:cfg.hoursStart, end:cfg.hoursEnd}));
   }
 
-  function dayWindow(date){ return WEEK_HOURS[date.getDay()]; }
+  // Свои часы пространства (hall.hours, 7 пар), если заданы; иначе часы студии.
+  function hallHours(hall){
+    const h = hall && hall.hours;
+    if(Array.isArray(h) && h.length === 7 && h.every(d => d && Number.isInteger(d.start) && Number.isInteger(d.end))) return h;
+    return WEEK_HOURS;
+  }
+  function dayWindow(date, hall){ return hallHours(hall)[date.getDay()]; }
 
   // «Сейчас» считаем в ТАЙМЗОНЕ СТУДИИ (STUDIO_TZ), а не по tz устройства и без
   // захардкоженного UTC+3. Стенные часы студии: { date:'YYYY-MM-DD', minutes }.
@@ -2550,7 +2568,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     return (hi > lo ? 'от ' : '') + lo + ' ' + CUR + '/ч';
   }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
-  const GRID_DAYS = 7;               // дней, помещающихся в экран без прокрутки (режим одного зала)
+  const GRID_DAYS = 7;               // дней, помещающихся в экран без прокрутки (режим одного пространства)
   const DURATION_MAX_MIN = 8 * 60;   // максимум брони
   function maxSlots(){ return DURATION_MAX_MIN / SLOT_MIN; }
   // Длительность выделения человекочитаемо: «1 ч», «1 ч 30 мин», «30 мин».
@@ -2604,10 +2622,10 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     startMinutes: 12*60, // по умолчанию 12:00
     durationHours: 1,
     people: 1,
-    hallId: null,        // выбранный зал (id из cfg.halls)
+    hallId: null,        // выбранное пространство (id из cfg.halls)
     equipment: [],       // ВСЕГДА пусто: выбор оборудования убран из брони
     packageHours: null,  // выбранный пакет (фикс цена/длительность) или null
-    purpose: null,       // выбранная цель аренды (0042); null = первая у зала
+    purpose: null,       // выбранная цель аренды (0042); null = первая у пространства
   };
 
   function currentDate(){ return state.dates[state.dateIndex]; }
@@ -2713,7 +2731,8 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     document.getElementById('peopleCount').textContent=state.people;
     document.getElementById('peopleMinus').disabled = state.people<=1;
     document.getElementById('peoplePlus').disabled = state.people>=cap;
-    document.getElementById('peopleCap').textContent = 'до ' + cap + ' в этом зале';
+    document.getElementById('peopleCap').textContent = 'до ' + cap;
+    const psP = document.getElementById('psPeople'); if(psP) psP.textContent = state.people;
     // Цена зависит от числа людей (0054): правило словами + пересчёт суммы.
     const g = pricingHall().guestPricing;
     const rule = document.getElementById('peopleRule');
@@ -2789,7 +2808,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function gridHourRange(){
     const cols = gridColumns();
     let a = 24, b = 0;
-    for(const c of cols){ const w = dayWindow(c.date); a = Math.min(a, w.start); b = Math.max(b, w.end); }
+    for(const c of cols){ const w = dayWindow(c.date, c.hall); a = Math.min(a, w.start); b = Math.max(b, w.end); }
     return b > a ? {start:a, end:b} : {start:0, end:0};
   }
   // То же окно, но в индексах слотов по SLOT_MIN.
@@ -2818,7 +2837,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
   // free | busy | past | closed. slot — индекс по SLOT_MIN от полуночи.
   function cellState(col, slot){
-    const w = dayWindow(col.date);
+    const w = dayWindow(col.date, col.hall);
     const s0 = slot * SLOT_MIN, e0 = s0 + SLOT_MIN;
     if(s0 < w.start * 60 || e0 > w.end * 60) return 'closed';
     const now = studioWallClock();
@@ -3148,7 +3167,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     }
     renderHallPackages(hall);
   }
-  let _hallAboutRenderedId = null;   // для какого зала уже собраны блоки выше (фото/описание/аккордеон)
+  let _hallAboutRenderedId = null;   // для какого пространства уже собраны блоки выше (фото/описание/аккордеон)
 
   // «2 ч», «1 ч 30 мин», «30 мин» — из минут.
   function minLabel(mins){
@@ -3340,28 +3359,44 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
   // Карта студии — отдельная секция под сеткой времени, метка по координатам
   // из /config. Уровень студии, не зала: показывается и в списке залов.
+  // Точка на карте и для кнопок «Как добраться / Вызвать такси»: у открытого
+  // пространства с собственным адресом (свой пин) — она, иначе адрес студии.
+  // Единственное пространство студии считается открытым всегда.
+  function mapTarget(){
+    const h = openHallId ? HALLS.find(x => x.id === openHallId) : (HALLS.length === 1 ? HALLS[0] : null);
+    if(h && Number.isFinite(h.lat) && Number.isFinite(h.lon)){
+      const addr = [h.city, h.address].filter(Boolean).join(', ');
+      return { lat:h.lat, lon:h.lon, address: addr || STUDIO_ADDRESS };
+    }
+    return { lat:STUDIO_LAT, lon:STUDIO_LON, address:STUDIO_ADDRESS };
+  }
+  let _mapKey = '';
   function renderStudioMap(){
     const wrap = document.getElementById('studioMapWrap');
     if(!wrap) return;
-    const hasGeo = Number.isFinite(STUDIO_LAT) && Number.isFinite(STUDIO_LON);
+    const T = mapTarget();
+    const hasGeo = Number.isFinite(T.lat) && Number.isFinite(T.lon);
     if(!hasGeo){ wrap.hidden = true; return; }   // без координат — ни карты, ни кнопок
     wrap.hidden = false;
-    document.getElementById('studioMapAddr').textContent = STUDIO_ADDRESS || '';
+    document.getElementById('studioMapAddr').textContent = T.address || '';
     wireMapButtons();
 
     const mapEl = document.getElementById('studioMap');
     if(!mapsAvailable()){ mapEl.style.display = 'none'; return; }  // нет ключа карт — только адрес + кнопки
     mapEl.style.display = '';
+    // Пин сменился (открыли пространство в другом здании) — рисуем карту заново.
+    const key = T.lat + ',' + T.lon;
+    if(key !== _mapKey){ _studioMapDrawn = false; _mapKey = key; }
     if(_studioMapDrawn) return;
     _studioMapDrawn = true;
     loadYmaps().then(ymaps => {
       mapEl.innerHTML = '';
       const map = new ymaps.Map(mapEl, {
-        center: [STUDIO_LAT, STUDIO_LON], zoom: 16, controls: ['zoomControl'],
+        center: [T.lat, T.lon], zoom: 16, controls: ['zoomControl'],
       }, { suppressMapOpenBlock: true });
       map.behaviors.disable('scrollZoom');
-      map.geoObjects.add(new ymaps.Placemark([STUDIO_LAT, STUDIO_LON],
-        { balloonContent: esc(STUDIO_ADDRESS || '') }, { preset: 'islands#redDotIcon' }));
+      map.geoObjects.add(new ymaps.Placemark([T.lat, T.lon],
+        { balloonContent: esc(T.address || '') }, { preset: 'islands#redDotIcon' }));
       // Контейнер квадратный (aspect-ratio); на момент создания карты его
       // размер иногда ещё не устоялся — пересчитываем на следующий тик.
       setTimeout(() => map.container.fitToViewport(), 0);
@@ -3379,16 +3414,20 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function wireMapButtons(){
     if(_mapBtnsWired) return;
     _mapBtnsWired = true;
+    // Точка читается в момент клика (mapTarget), а не при подписке: пространство
+    // могло смениться уже после того, как кнопки были навешены.
     document.getElementById('btnRoute').addEventListener('click', () => {
-      if(!Number.isFinite(STUDIO_LAT)) return;
+      const T = mapTarget();
+      if(!Number.isFinite(T.lat) || !Number.isFinite(T.lon)) return;
       haptic('light');
-      openExternal('https://yandex.ru/maps/?rtext=~' + STUDIO_LAT + ',' + STUDIO_LON + '&rtt=auto&z=16');
+      openExternal('https://yandex.ru/maps/?rtext=~' + T.lat + ',' + T.lon + '&rtt=auto&z=16');
     });
     document.getElementById('btnTaxi').addEventListener('click', () => {
-      if(!Number.isFinite(STUDIO_LAT)) return;
+      const T = mapTarget();
+      if(!Number.isFinite(T.lat) || !Number.isFinite(T.lon)) return;
       haptic('light');
-      let u = 'https://3.redirect.appmetrica.yandex.com/route?end-lat=' + STUDIO_LAT
-            + '&end-lon=' + STUDIO_LON + '&level=50&lang=ru&appmetrica_tracking_id=1178268795219780156';
+      let u = 'https://3.redirect.appmetrica.yandex.com/route?end-lat=' + T.lat
+            + '&end-lon=' + T.lon + '&level=50&lang=ru&appmetrica_tracking_id=1178268795219780156';
       if(STUDIO_GO_REF) u += '&ref=' + encodeURIComponent(STUDIO_GO_REF);
       openExternal(u);
     });
@@ -3500,14 +3539,14 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       const anchor = document.getElementById(single ? 'hallInfoSection' : 'hallCardsSection');
       if(anchor.nextElementSibling !== sa) anchor.after(sa);
     }
-    document.getElementById('gridLabel').textContent = on ? 'Время брони' : 'Занятость залов';
+    document.getElementById('gridLabel').textContent = on ? 'Время брони' : 'Занятость пространств';
     if(HALLS.length <= 1) document.getElementById('gridLabel').textContent = 'Время брони';
   }
 
   function openHall(id){
     openHallId = id;
     state.packageHours = null;
-    state.purpose = null;   // у другого зала свой набор целей
+    state.purpose = null;   // у другого пространства свой набор целей
     gridScrollEl.scrollLeft = 0;
     clearSelection();
     applyHallMode();
@@ -3534,7 +3573,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     const rec=document.getElementById('recBtn');
 
     if(!selectionValid()){
-      bar.textContent = !HALLS.length ? 'Нет доступных залов'
+      bar.textContent = !HALLS.length ? 'Нет доступных пространств'
         : selectionPending() ? 'Отметьте вторую точку промежутка'
         : 'Выберите время на сетке';
       total.textContent = '—';
@@ -3620,7 +3659,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     const el = document.getElementById('psShoot');
     if(!el) return;
     if(STUDIO_BUFFER_MIN > 0){
-      el.textContent = `Съёмка до ${minutesToLabel(endMinutes - STUDIO_BUFFER_MIN)} · ${STUDIO_BUFFER_MIN} мин в конце — на сборы`;
+      el.textContent = `Аренда до ${minutesToLabel(endMinutes - STUDIO_BUFFER_MIN)} · ${STUDIO_BUFFER_MIN} мин в конце — на сборы`;
       el.hidden = false;
     } else {
       el.hidden = true;
@@ -3635,7 +3674,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     document.getElementById('psTime').textContent =
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${durationLabel()}`;
     setShootingHint(endMinutes);
-    renderPeople();   // вместимость зависит от зала — обновляем при открытии
+    renderPeople();   // вместимость зависит от пространства — обновляем при открытии
     document.getElementById('psPrice').textContent = `${priceLabel()} ${CUR}`;
     overlay.dataset.open='true';
     panel.dataset.open='true';
@@ -4575,11 +4614,11 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
     if(hall){
       state.people = Math.min(b.people || 1, hall.capacity);
-      openHall(hall.id);                       // сетка 7 дней по этому залу
+      openHall(hall.id);                       // сетка 7 дней по этому пространству
       const ok = trySelectSameTime(b.start, durMin);
       showRepeatHint(hall.name, b.start, durMin, ok);
     } else {
-      showRepeatHint(hallName(b.hallId) || 'зал', b.start, durMin, false, true);
+      showRepeatHint(hallName(b.hallId) || 'пространство', b.start, durMin, false, true);
     }
     window.scrollTo(0, 0);
   }
@@ -4601,7 +4640,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(state.dates.slice(0, GRID_DAYS).findIndex(d => dateKey(d) === ps.date) < 0){
       state.dates = buildDatesForMonthWindow(new Date(ps.date + 'T00:00:00'));
     }
-    openHall(hall.id);   // сетка 7 дней по этому залу — окно дат уже верное
+    openHall(hall.id);   // сетка 7 дней по этому пространству — окно дат уже верное
     const di = state.dates.findIndex(d => dateKey(d) === ps.date);
     if(di >= 0) state.dateIndex = di;
     const startSlot = Math.round(ps.start / SLOT_MIN);
@@ -4635,7 +4674,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     const el = document.getElementById('repeatHint');
     const dur = (function(){ const m=durMin, h=Math.floor(m/60), r=m%60; return r?(h?h+' ч '+r+' мин':r+' мин'):h+' ч'; })();
     let msg;
-    if(hallGone) msg = `Зал из прошлой брони недоступен. Выберите зал и время заново.`;
+    if(hallGone) msg = `Пространство из прошлой брони недоступно. Выберите пространство и время заново.`;
     else if(exactOk) msg = `Повтор: <b>${esc(hallLabel)}</b> · ${dur} · ${esc(state.people)} чел. Время как в прошлый раз — проверьте и подтвердите.`;
     else msg = `Повтор: <b>${esc(hallLabel)}</b> · ${dur} · ${esc(state.people)} чел. Прежнее время занято — выбрали ближайшее свободное.`;
     el.innerHTML = `<span>${msg}</span><button type="button" id="repeatHintClose" aria-label="Скрыть">✕</button>`;
@@ -4892,6 +4931,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       // Шаг ровно тот, что примет сервер при переносе (server.js: reschedule).
       RS.step = RS.minBookingMin === 30 ? 30 : 60;
       RS.hall = (cfg.halls || []).find(h => h.id === booking.hallId) || null;
+      if(RS.hall) RS.hours = hallHoursOf(cfg, RS.hall);
       RS.pkgSlots = booking.packageHours != null
         ? Math.max(1, Math.round(booking.packageHours * 60 / RS.step)) : null;
       // Окно дат — от сегодня (или от месяца брони, если она дальше).
@@ -5105,7 +5145,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       const row=document.createElement('div'); row.className='price-row';
       row.innerHTML=`
         <div style="flex:1 1 100%;min-width:0">
-          <input class="hall-name-input" type="text" placeholder="Название зала" value="${esc(h.name)}" data-idx="${i}" data-field="name">
+          <input class="hall-name-input" type="text" placeholder="Название пространства" value="${esc(h.name)}" data-idx="${i}" data-field="name">
         </div>
         <div class="price-input-wrap">
           <input type="number" min="1" step="1" value="${esc(h.capacity)}" data-idx="${i}" data-field="capacity" aria-label="Вместимость">
@@ -5115,7 +5155,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
           <input type="number" min="0" step="1" value="${esc(h.rate)}" data-idx="${i}" data-field="rate" aria-label="Ставка">
           <span class="price-unit cur-label-h">BYN/ч</span>
         </div>
-        ${hallsDraft.length>1 ? `<button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Удалить зал">✕</button>` : ''}
+        ${hallsDraft.length>1 ? `<button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Удалить пространство">✕</button>` : ''}
       `;
       c.appendChild(row);
     });
@@ -5136,9 +5176,9 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   });
 
   function validateHallsDraft(){
-    if(hallsDraft.length<1) return 'Нужен хотя бы один зал';
+    if(hallsDraft.length<1) return 'Нужно хотя бы одно пространство';
     for(const h of hallsDraft){
-      if(!h.name || !h.name.trim()) return 'У каждого зала должно быть название';
+      if(!h.name || !h.name.trim()) return 'У каждого пространства должно быть название';
       if(!Number.isInteger(h.capacity) || h.capacity<1) return 'Вместимость — целое число от 1';
       if(typeof h.rate!=='number' || isNaN(h.rate) || h.rate<0) return 'Ставка — число не меньше нуля';
     }
@@ -5157,7 +5197,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       if(!HALLS.some(h=>h.id===state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
       hallsDraft = HALLS.map(h=>({id:h.id,name:h.name,capacity:h.capacity,rate:h.rate}));
       renderHallsEditor();
-      haptic('medium'); note.style.color='var(--accent)'; note.textContent='Залы обновлены';
+      haptic('medium'); note.style.color='var(--accent)'; note.textContent='Пространства обновлены';
     } catch(e){ note.style.color='var(--red)'; note.textContent=e.message; }
     setTimeout(()=>{ note.textContent=''; }, 2500);
   });
@@ -5611,7 +5651,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   }
 
   const TS_TYPES = { cyclorama:'Циклорама', interior:'Интерьер', hardlight:'Тёмный', daylight:'Дневной свет', other:'Другое' };
-  let tsType = null;                 // выбранный тип зала
+  let tsType = null;                 // выбранный тип пространства
   let searchMode = false;
 
   // Лента дат поиска — свой стейт, не привязан ни к какой открытой студии
@@ -5737,7 +5777,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   }
 
   function renderSearchResults(rows, date, start, end){
-    if(!rows.length){ catalogList.innerHTML = '<div class="catalog-empty">На это время свободных залов не нашлось. Попробуйте другое время или снимите фильтры.</div>'; return; }
+    if(!rows.length){ catalogList.innerHTML = '<div class="catalog-empty">На это время свободных пространств не нашлось. Попробуйте другое время или снимите фильтры.</div>'; return; }
     catalogList.innerHTML = '';
     rows.forEach(r=>{
       const props = [];
