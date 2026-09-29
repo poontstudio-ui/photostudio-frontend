@@ -3365,8 +3365,11 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function mapTarget(){
     const h = openHallId ? HALLS.find(x => x.id === openHallId) : (HALLS.length === 1 ? HALLS[0] : null);
     if(h && Number.isFinite(h.lat) && Number.isFinite(h.lon)){
-      const addr = [h.city, h.address].filter(Boolean).join(', ');
-      return { lat:h.lat, lon:h.lon, address: addr || STUDIO_ADDRESS };
+      // Адрес текстом — только её собственный. Если он не заполнен, адрес
+      // студии под чужим пином показывать нельзя (вводит в заблуждение).
+      const a = (h.address || '').trim(), c = (h.city || '').trim();
+      const addr = a && c && a.toLowerCase().indexOf(c.toLowerCase()) === -1 ? c + ', ' + a : (a || c);
+      return { lat:h.lat, lon:h.lon, address: addr };
     }
     return { lat:STUDIO_LAT, lon:STUDIO_LON, address:STUDIO_ADDRESS };
   }
