@@ -2133,7 +2133,9 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     daylight:true, constantLight:true, strobeLight:true, lightModifiers:true, ceilingRail:true, blackout:true,
     paperBackdrops:true, chromakey:true, fabricBackdrops:true,
     panoramicWindows:true, texturedWall:true, fireplace:true, mezzanine:true, balcony:true, soundproofing:true,
-    airConditioning:true, bluetoothSpeaker:true }; // свойства зала по вертикали (П4-1)
+    airConditioning:true, bluetoothSpeaker:true,
+    whiteBackdrop:true, sink:true, outdoorArea:true, skylights:true,
+    wheelchairAccessible:true, freightElevator:true, streetLevelAccess:true, publicTransport:true }; // свойства зала по вертикали (П4-1)
   let STUDIO_AMENITIES = {};   // удобства/правила студии из /config (миграция 0030)
   var HALL_STYLE_RU = { loft:'Лофт', scandi:'Скандинавский', classic:'Классический', minimal:'Минимализм',
     dark:'Тёмный', industrial:'Индустриальный', vintage:'Винтаж', provence:'Прованс' };
@@ -2170,7 +2172,10 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     {f:'fabricBackdrops',label:'Тканевые фоны'},{f:'panoramicWindows',label:'Большие окна'},
     {f:'texturedWall',label:'Фактурная стена'},{f:'fireplace',label:'Камин'},
     {f:'mezzanine',label:'Второй свет'},{f:'balcony',label:'Балкон / терраса'},
-    {f:'airConditioning',label:'Кондиционер'} ];
+    {f:'airConditioning',label:'Кондиционер'},
+    // 0053: свойства помещения, раньше отмечавшиеся в назначениях
+    {f:'whiteBackdrop',label:'Белый фон'},{f:'sink',label:'Раковина'},
+    {f:'outdoorArea',label:'Открытая площадка'} ];
   var STUDIO_INCLUDED_LIST = [
     {f:'wifi',label:'Wi-Fi'},{f:'makeupRoom',label:'Гримёрная'},{f:'makeupMirror',label:'Гримёрное зеркало'},
     {f:'restroom',label:'Санузел'},{f:'shower',label:'Душ'},{f:'kitchen',label:'Кухня / чай-кофе'},
@@ -2201,10 +2206,13 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     { key:'aboutLighting', title:'Свет', icon:'light', hall:[
       {f:'daylight',label:'Естественный свет'},{f:'constantLight',label:'Постоянный свет'},
       {f:'strobeLight',label:'Импульсный свет'},{f:'lightModifiers',label:'Модификаторы света'},
-      {f:'ceilingRail',label:'Потолочная система'},{f:'blackout',label:'Блэкаут'} ] },
+      {f:'ceilingRail',label:'Потолочная система'},{f:'blackout',label:'Блэкаут'},
+      {f:'skylights',label:'Мансардные окна'} ] },
     { key:'aboutSound', title:'Звук', icon:'sound', hall:[
       {f:'soundproofing',label:'Звукоизоляция'},{f:'bluetoothSpeaker',label:'Bluetooth-колонка'} ] },
     { key:'aboutAccess', title:'Доступ в студию', icon:'door',
+      hall:[{f:'streetLevelAccess',label:'Вход с улицы'},{f:'wheelchairAccessible',label:'Доступ для колясок'},
+            {f:'freightElevator',label:'Грузовой лифт'},{f:'publicTransport',label:'Общественный транспорт рядом'}],
       studio:[{f:'separateEntrance',label:'Отдельный вход'},{f:'elevator',label:'Лифт'}],
       facts:function(hall){
         if(!(HALL_PROPS.floor && Number.isInteger(hall.floor))) return [];
