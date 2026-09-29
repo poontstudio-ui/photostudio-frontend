@@ -1245,6 +1245,7 @@ body{
 }
 .people-field{display:flex;align-items:center;gap:14px;}
 .people-cap{font-size:var(--fs-sm);color:var(--text-2);}
+.people-rule{font-size:var(--fs-sm);color:var(--text-2);margin-top:6px;}
 .sb-bottom{
   display:flex;
   align-items:center;
@@ -1821,6 +1822,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="panel-summary-row"><span class="ps-label">Время</span><span class="ps-value" id="psTime"></span></div>
     <div class="panel-summary-hint" id="psShoot" hidden></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
+    <div class="panel-summary-hint" id="psBreak" hidden></div>
   </div>
   <div class="field">
     <label>Человек</label>
@@ -1832,6 +1834,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       </div>
       <span class="people-cap" id="peopleCap"></span>
     </div>
+    <div class="people-rule" id="peopleRule" hidden></div>
   </div>
   <div class="field">
     <label for="nameInput">Имя</label>
@@ -2395,7 +2398,36 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(Array.isArray(p.priceRules)) out.priceRules = p.priceRules;
     if(Number.isInteger(p.capacity)) out.capacity = p.capacity;
     out.purposeMinBookingMin = Number.isInteger(p.minBookingMin) ? p.minBookingMin : null;
+    out.guestPricing = p.guestPricing || null;
     return out;
+  }
+  // ---- Цена за гостей (0054) — зеркало lib/rules.js guestCharge/rentApplies ----
+  function gpRentApplies(g){ return !(g && g.mode === 'perPerson' && g.withRent === false); }
+  function gpCharge(g, people, hours){
+    if(!g || !(people >= 1)) return 0;
+    var mult = g.unit === 'hour' ? hours : 1;
+    if(g.mode === 'extra') return Math.max(0, people - g.included) * g.price * mult;
+    if(g.mode === 'perPerson'){
+      var price = g.tiers[0].price;
+      g.tiers.forEach(function(t){ if(people >= t.from) price = t.price; });
+      return people * price * mult;
+    }
+    return 0;
+  }
+  function gpMoney(v){ return String(Math.round(v * 100) / 100).replace('.', ','); }
+  function gpGuests(n){ var m10 = n % 10, m100 = n % 100;
+    return n + ' ' + (m10 === 1 && m100 !== 11 ? 'гость' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'гостя' : 'гостей'); }
+  // Правило цены за гостей одной фразой — под счётчиком людей.
+  function gpRuleText(g){
+    if(!g) return '';
+    var per = g.unit === 'hour' ? ' в час' : ' за бронь';
+    if(g.mode === 'extra') return 'В цену входит ' + gpGuests(g.included) + ', дальше +' + gpMoney(g.price) + ' ' + CUR + ' за каждого' + per;
+    var parts = g.tiers.map(function(t, k){
+      var next = g.tiers[k + 1];
+      var who = next && next.from === t.from + 1 ? String(t.from) : (next ? t.from + '–' + (next.from - 1) : 'от ' + t.from);
+      return who + ' чел. — ' + gpMoney(t.price);
+    });
+    return 'Цена за каждого' + per + ': ' + parts.join(', ') + ' ' + CUR + (g.withRent === false ? '' : ' + аренда');
   }
   // Зал, по которому считаются цена, минимум и вместимость — уже с учётом
   // выбранного назначения. Имя, фото и прочий показ берут обычный currentHall.
@@ -2435,9 +2467,11 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     const h = hoursUntilStart();
     return h >= 0 && h <= lm.hours;
   }
-  // Базовая (без скидки) аренда зала за выбранный интервал.
+  // Базовая (без скидки) аренда зала за выбранный интервал. У цели «только
+  // за людей» (0054) аренды нет.
   function baseRoomPrice(){
     const hall = pricingHall();
+    if(!gpRentApplies(hall.guestPricing)) return 0;
     if(state.packageHours != null){
       const pp = packagePriceOf(hall, state.packageHours);
       if(pp != null) return pp;
@@ -2453,12 +2487,18 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   }
   // Итог. Пакет — фикс-цена. Иначе аренда зала, при «горящем» окне — со скидкой.
   // Сервер пересчитывает авторитетно.
+  // Доплата за людей по правилу выбранной цели (0054): за пакет — на его часы.
+  function guestPrice(){
+    const hall = pricingHall();
+    const hours = state.packageHours != null ? state.packageHours : state.durationHours;
+    return gpCharge(hall.guestPricing, state.people, hours);
+  }
   function computePrice(){
-    const base = baseRoomPrice();
+    const base = baseRoomPrice() + guestPrice();
     if(state.packageHours == null && lastMinuteActive()){
       return +(base * (100 - STUDIO_LASTMINUTE.pct) / 100).toFixed(2);
     }
-    return base;
+    return +base.toFixed(2);
   }
   function priceLabel(){ return (+computePrice().toFixed(2)).toString().replace(/\.00$/,''); }
 
@@ -2494,11 +2534,17 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       ? hallPurposeList(h).map(function(p){ return purposeHall(h, p.code); })
       : [h];
     var rates = [];
+    var perGuest = [];
     variants.forEach(function(v){
+      if(!gpRentApplies(v.guestPricing)){   // только за людей — ставки за час нет
+        v.guestPricing.tiers.forEach(function(t){ perGuest.push(t.price); });
+        return;
+      }
       rates.push(v.rate);
       (Array.isArray(v.priceRules) ? v.priceRules : []).forEach(function(r){ rates.push(r.rate); });
     });
     rates = rates.filter(function(r){ return typeof r === 'number' && isFinite(r); });
+    if(!rates.length && perGuest.length) return 'от ' + gpMoney(Math.min.apply(null, perGuest)) + ' ' + CUR + ' за гостя';
     if(!rates.length) return '';
     var lo = Math.min.apply(null, rates), hi = Math.max.apply(null, rates);
     return (hi > lo ? 'от ' : '') + lo + ' ' + CUR + '/ч';
@@ -2668,6 +2714,27 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     document.getElementById('peopleMinus').disabled = state.people<=1;
     document.getElementById('peoplePlus').disabled = state.people>=cap;
     document.getElementById('peopleCap').textContent = 'до ' + cap + ' в этом зале';
+    // Цена зависит от числа людей (0054): правило словами + пересчёт суммы.
+    const g = pricingHall().guestPricing;
+    const rule = document.getElementById('peopleRule');
+    rule.hidden = !g;
+    rule.textContent = g ? gpRuleText(g) : '';
+    renderPanelPrice();
+  }
+  // Сумма в окне подтверждения: при цене за гостей — с раскладкой.
+  function renderPanelPrice(){
+    const el = document.getElementById('psPrice');
+    if(!el) return;
+    const g = pricingHall().guestPricing, guests = guestPrice();
+    el.textContent = `${priceLabel()} ${CUR}`;
+    const br = document.getElementById('psBreak');
+    if(!br) return;
+    const rent = baseRoomPrice();
+    br.hidden = !(g && guests > 0);
+    br.textContent = (g && guests > 0)
+      ? (gpRentApplies(g) ? 'аренда ' + gpMoney(rent) + ' + ' : '') + gpGuests(state.people) + ' ' + gpMoney(guests) + ' ' + CUR +
+        (state.packageHours == null && lastMinuteActive() ? ', со скидкой −' + STUDIO_LASTMINUTE.pct + '%' : '')
+      : '';
   }
 
   document.getElementById('peopleMinus').addEventListener('click', ()=>{
@@ -3333,7 +3400,10 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   }
   function renderHallPackages(hall){
     const box = document.getElementById('hallPackages');
-    const list = Array.isArray(hall.packages) ? hall.packages.slice().sort((a,b)=>a.hours-b.hours) : [];
+    // Пакет заменяет почасовую аренду; у цели «только за людей» её нет (0054).
+    const onlyPeople = !gpRentApplies(purposeHall(hall, state.purpose).guestPricing);
+    if(onlyPeople && state.packageHours != null) state.packageHours = null;
+    const list = onlyPeople ? [] : Array.isArray(hall.packages) ? hall.packages.slice().sort((a,b)=>a.hours-b.hours) : [];
     if(!list.length){ box.hidden = true; box.innerHTML = ''; return; }
     box.hidden = false;
     box.innerHTML = '<div class="pkg-title">Пакеты</div><div class="pkg-row">' +
