@@ -278,6 +278,7 @@ body{
 
 /* ---------- Steppers (live in the sticky bottom bar) ---------- */
 .stepper{
+  touch-action:manipulation;
   display:flex;
   align-items:center;
   gap:14px;
@@ -295,6 +296,8 @@ body{
   display:flex;
   align-items:center;
   justify-content:center;
+  touch-action:manipulation;   /* быстрые тапы по +/− не должны зумить страницу (двойной тап) */
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
 }
 .stepper button:disabled{opacity:0.3;cursor:not-allowed;}
 .stepper-count{
@@ -1243,7 +1246,7 @@ body{
   gap:14px;
   z-index:20;
 }
-.sb-people{display:flex;align-items:center;gap:12px;}
+.sb-people{display:flex;align-items:center;gap:12px;touch-action:manipulation;-webkit-user-select:none;user-select:none;}
 .sb-people-l{font-size:var(--fs-sm);color:var(--text-2);}
 .sb-people .stepper{gap:10px;}
 .sb-people .stepper button{width:30px;height:30px;}
