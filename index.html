@@ -1251,7 +1251,6 @@ body{
 .sb-people .stepper{gap:10px;}
 .sb-people .stepper button{width:30px;height:30px;}
 .people-cap{font-size:var(--fs-sm);color:var(--text-3);}
-.people-rule{font-size:var(--fs-xs);color:var(--text-2);margin-top:-8px;line-height:1.35;}
 .sb-bottom{
   display:flex;
   align-items:center;
@@ -1818,7 +1817,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       </div>
       <span class="people-cap" id="peopleCap"></span>
     </div>
-    <div class="people-rule" id="peopleRule" hidden></div>
     <div class="sb-bottom">
       <div class="summary-info">
         <div class="summary-row" id="summaryRow">Выберите время</div>
@@ -2438,18 +2436,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function gpMoney(v){ return String(Math.round(v * 100) / 100).replace('.', ','); }
   function gpGuests(n){ var m10 = n % 10, m100 = n % 100;
     return n + ' ' + (m10 === 1 && m100 !== 11 ? 'гость' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'гостя' : 'гостей'); }
-  // Правило цены за гостей одной фразой — под счётчиком людей.
-  function gpRuleText(g){
-    if(!g) return '';
-    var per = g.unit === 'hour' ? ' в час' : ' за бронь';
-    if(g.mode === 'extra') return 'В цену входит ' + gpGuests(g.included) + ', дальше +' + gpMoney(g.price) + ' ' + CUR + ' за каждого' + per;
-    var parts = g.tiers.map(function(t, k){
-      var next = g.tiers[k + 1];
-      var who = next && next.from === t.from + 1 ? String(t.from) : (next ? t.from + '–' + (next.from - 1) : 'от ' + t.from);
-      return who + ' чел. — ' + gpMoney(t.price);
-    });
-    return 'Цена за каждого' + per + ': ' + parts.join(', ') + ' ' + CUR + (g.withRent === false ? '' : ' + аренда');
-  }
   // Зал, по которому считаются цена, минимум и вместимость — уже с учётом
   // выбранного назначения. Имя, фото и прочий показ берут обычный currentHall.
   function pricingHall(){ return purposeHall(currentHall(), state.purpose); }
@@ -2736,11 +2722,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     document.getElementById('peoplePlus').disabled = state.people>=cap;
     document.getElementById('peopleCap').textContent = 'до ' + cap;
     const psP = document.getElementById('psPeople'); if(psP) psP.textContent = state.people;
-    // Цена зависит от числа людей (0054): правило словами + пересчёт суммы.
-    const g = pricingHall().guestPricing;
-    const rule = document.getElementById('peopleRule');
-    rule.hidden = !g;
-    rule.textContent = g ? gpRuleText(g) : '';
+    // Цена зависит от числа людей (0054): пересчитываем сумму.
     renderPanelPrice();
   }
   // Сумма в окне подтверждения: при цене за гостей — с раскладкой.
