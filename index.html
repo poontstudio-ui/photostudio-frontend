@@ -2297,17 +2297,35 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   // Часы работы по дням недели: массив из 7 {start,end} (целые часы),
   // индекс = Date.getDay() (0 = Вс). Старый конфиг без cfg.hours — одна пара на все дни.
   // Часы пространства с учётом конфига студии (для переноса брони, где WEEK_HOURS ещё не тот тенант).
+  // День может содержать перерывы: breaks:[{from,to}] (целые часы внутри дня).
+  // Выходной — {start:0,end:0}. start/end — «оболочка» дня.
+  function copyDay(d){
+    const o = { start:d.start, end:d.end };
+    if(Array.isArray(d.breaks) && d.breaks.length) o.breaks = d.breaks.map(b => ({ from:b.from, to:b.to }));
+    return o;
+  }
+  // Работает ли день на всём отрезке [s0,e0) минут: в часах, не в перерыве, не выходной.
+  function dayOpenAt(w, s0, e0){
+    if(!w || w.end <= w.start) return false;
+    if(s0 < w.start*60 || e0 > w.end*60) return false;
+    return !(Array.isArray(w.breaks) ? w.breaks : []).some(b => s0 < b.to*60 && e0 > b.from*60);
+  }
+  // Сколько рабочих часов в дне (без перерывов).
+  function dayOpenHours(w){
+    if(!w || w.end <= w.start) return 0;
+    return w.end - w.start - (Array.isArray(w.breaks) ? w.breaks : []).reduce((a,b) => a + (b.to - b.from), 0);
+  }
   function hallHoursOf(cfg, hall){
     const h = hall && hall.hours;
     if(Array.isArray(h) && h.length === 7 && h.every(d => d && Number.isInteger(d.start) && Number.isInteger(d.end))){
-      return h.map(d => ({ start:d.start, end:d.end }));
+      return h.map(copyDay);
     }
     return normalizeWeekHours(cfg);
   }
   function normalizeWeekHours(cfg){
     const h = cfg.hours;
     if(Array.isArray(h) && h.length===7 && h.every(d=>d && Number.isInteger(d.start) && Number.isInteger(d.end))){
-      return h.map(d=>({start:d.start, end:d.end}));
+      return h.map(copyDay);
     }
     return Array.from({length:7}, ()=>({start:cfg.hoursStart, end:cfg.hoursEnd}));
   }
@@ -2793,7 +2811,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function gridHourRange(){
     const cols = gridColumns();
     let a = 24, b = 0;
-    for(const c of cols){ const w = dayWindow(c.date, c.hall); a = Math.min(a, w.start); b = Math.max(b, w.end); }
+    for(const c of cols){ const w = dayWindow(c.date, c.hall); if(w.end <= w.start) continue; a = Math.min(a, w.start); b = Math.max(b, w.end); }
     return b > a ? {start:a, end:b} : {start:0, end:0};
   }
   // То же окно, но в индексах слотов по SLOT_MIN.
@@ -2824,7 +2842,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function cellState(col, slot){
     const w = dayWindow(col.date, col.hall);
     const s0 = slot * SLOT_MIN, e0 = s0 + SLOT_MIN;
-    if(s0 < w.start * 60 || e0 > w.end * 60) return 'closed';
+    if(!dayOpenAt(w, s0, e0)) return 'closed';
     const now = studioWallClock();
     const key = dateKey(col.date);
     if(key < now.date || (key === now.date && s0 < now.minutes)) return 'past';
@@ -4710,7 +4728,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function rsCellState(slot){
     const w = rsDayWindow(RS.date);
     const s0 = slot * RS.step, e0 = s0 + RS.step;
-    if(s0 < w.start*60 || e0 > w.end*60) return 'closed';
+    if(!dayOpenAt(w, s0, e0)) return 'closed';
     const now = rsWallClock();
     if(RS.date < now.date || (RS.date === now.date && s0 < now.minutes)) return 'past';
     const busy = RS.busy[RS.date] || [];
@@ -5053,7 +5071,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     // влиять на статистику владельца («Занятость за 7 дней» всегда от
     // реального сегодня, bookedHoursWeek ниже тоже считает от Date.now()).
     const totalSlotsWeek=buildDatesFrom(businessToday(), 7)
-      .reduce((sum,d)=>{ const w=dayWindow(d); return sum + Math.max(0, w.end-w.start); }, 0);
+      .reduce((sum,d)=>{ const w=dayWindow(d); return sum + dayOpenHours(w); }, 0);
     const bookedHoursWeek=active.filter(b=>{
       const diffDays=Math.floor((Date.now()-new Date(b.date+'T00:00:00').getTime())/86400000);
       return diffDays>=0 && diffDays<7;
@@ -5089,7 +5107,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       .map(e => ({id:e.id, name:e.name, price:e.price, unit:e.unit}));
     renderEquipEditor();
 
-    hoursDraft = WEEK_HOURS.map(d=>({start:d.start, end:d.end}));
+    hoursDraft = WEEK_HOURS.map(copyDay);
     document.getElementById('weekAllStart').value = hoursDraft[1].start;
     document.getElementById('weekAllEnd').value = hoursDraft[1].end;
     renderHoursEditor();
@@ -5290,7 +5308,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     const s=parseInt(document.getElementById('weekAllStart').value,10);
     const e=parseInt(document.getElementById('weekAllEnd').value,10);
     if(!Number.isInteger(s) || !Number.isInteger(e)) return;
-    for(let i=0;i<7;i++) hoursDraft[i]={start:s, end:e};
+    for(let i=0;i<7;i++) hoursDraft[i]={start:s, end:e};   // «на все дни» сбрасывает и перерывы
     renderHoursEditor();
     haptic('light');
   });
@@ -5299,6 +5317,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(!Array.isArray(hoursDraft) || hoursDraft.length!==7) return 'Часы заданы не для всех дней';
     for(const d of hoursDraft){
       if(!Number.isInteger(d.start) || !Number.isInteger(d.end)) return 'Часы должны быть целыми числами';
+      if(d.start===0 && d.end===0) continue;   // выходной (задаётся в кабинете)
       if(d.start<0 || d.end>24 || d.start>=d.end) return 'Открытие должно быть раньше закрытия, в пределах 0–24';
     }
     return null;
@@ -5310,8 +5329,8 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(err){ note.style.color='var(--red)'; note.textContent=err; return; }
     try{
       const updated = await api('PUT', '/admin/hours', hoursDraft);
-      WEEK_HOURS = updated.map(d=>({start:d.start, end:d.end}));
-      hoursDraft = WEEK_HOURS.map(d=>({start:d.start, end:d.end}));
+      WEEK_HOURS = updated.map(copyDay);
+      hoursDraft = WEEK_HOURS.map(copyDay);
       renderHoursEditor();
       clearSelection();
       renderAll();
