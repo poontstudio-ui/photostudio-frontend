@@ -955,7 +955,8 @@ body{
 /* Незаведённое владельцем назначение видно (весь словарь на виду — как в
    референсе), но не выбирается: серым и без курсора-руки, как «Play» там же. */
 .purpose-btn:disabled{opacity:.4;cursor:not-allowed;}
-.purpose-includes{margin-top:12px;}
+.purpose-includes{margin-top:18px;}
+.feat-qty{color:var(--text-3);white-space:nowrap;}
 .purpose-includes[hidden]{display:none;}
 .purpose-includes ul{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;}
 .purpose-includes li{font-size:var(--fs-sm);color:var(--text-2);display:flex;gap:8px;align-items:baseline;}
@@ -1015,7 +1016,7 @@ body{
 .feat[hidden]{display:none;}
 .feat-mark{flex:0 0 auto;color:var(--text-2);font-size:var(--fs-xs);}
 /* Чего в зале нет — в аккордеоне тем гасим и зачёркиваем: «нет звукоизоляции»
-   клиенту важно узнать до брони. В «Включено в бронь» отсутствующее не выводится. */
+   клиенту важно узнать до брони. В «Пространство и удобства» отсутствующее не выводится. */
 .feat[data-on="false"]{color:var(--text-3);}
 .feat[data-on="false"] .feat-label{text-decoration:line-through;}
 .feat-more{
@@ -2150,11 +2151,11 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   // Общий список удобств зала одной строкой больше не нужен: теперь они
   // разложены по темам — HALL_INCLUDED_LIST и секции HALL_ACC_SECTIONS ниже.
   var STUDIO_AMENITY_LIST = [
-    {f:'wifi',label:'Wi-Fi'},{f:'makeupRoom',label:'Гримёрная'},{f:'makeupMirror',label:'Гримёрное зеркало'},
+    {f:'wifi',label:'Wi-Fi'},
     {f:'restroom',label:'Санузел'},{f:'shower',label:'Душ'},{f:'kitchen',label:'Кухня / чай-кофе'},
     {f:'loungeArea',label:'Зона отдыха'},{f:'separateEntrance',label:'Отдельный вход'},
     {f:'elevator',label:'Лифт'},{f:'heating',label:'Отопление'},
-    {f:'onSiteManager',label:'Администратор'},{f:'garmentSteamer',label:'Отпариватель'} ];
+    {f:'onSiteManager',label:'Администратор'} ];
   var POLICY_LIST = [
     {f:'allowPets',label:'Можно с животными'},{f:'allowKids',label:'Можно с детьми'},
     {f:'allowNsfw',label:'Можно ню / 18+'},{f:'allowVideo',label:'Можно видеосъёмку'},
@@ -2172,23 +2173,24 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function parkingLabels(a){
     return PARKING_LIST.filter(function(x){ return a && a[x.f]; }).map(function(x){ return x.label; });
   }
-  // Блок «Включено в бронь» на странице зала: всё, что НЕ разобрано по темам
+  // Блок «Пространство и удобства» на странице зала: всё, что НЕ разобрано по темам
   // аккордеона ниже (свет, звук, доступ, парковка, правила) — иначе одно и то
   // же удобство попадалось бы на странице дважды.
   var HALL_INCLUDED_LIST = [
-    {f:'paperBackdrops',label:'Бумажные фоны'},{f:'chromakey',label:'Хромакей'},
-    {f:'fabricBackdrops',label:'Тканевые фоны'},{f:'panoramicWindows',label:'Большие окна'},
+    {f:'panoramicWindows',label:'Большие окна'},
     {f:'texturedWall',label:'Фактурная стена'},{f:'fireplace',label:'Камин'},
     {f:'mezzanine',label:'Второй свет'},{f:'balcony',label:'Балкон / терраса'},
     {f:'airConditioning',label:'Кондиционер'},
     // 0053: свойства помещения, раньше отмечавшиеся в назначениях
-    {f:'whiteBackdrop',label:'Белый фон'},{f:'sink',label:'Раковина'},
-    {f:'outdoorArea',label:'Открытая площадка'} ];
+    {f:'whiteBackdrop',label:'Циклорама / белый фон'},{f:'sink',label:'Раковина'},
+    {f:'outdoorArea',label:'Открытая площадка'},
+    // 0055: гримёрная — у пространства; свет, фоны и колонка — оснащение назначения
+    {f:'makeupRoom',label:'Гримёрная'},{f:'makeupMirror',label:'Гримёрное зеркало'} ];
   var STUDIO_INCLUDED_LIST = [
-    {f:'wifi',label:'Wi-Fi'},{f:'makeupRoom',label:'Гримёрная'},{f:'makeupMirror',label:'Гримёрное зеркало'},
+    {f:'wifi',label:'Wi-Fi'},
     {f:'restroom',label:'Санузел'},{f:'shower',label:'Душ'},{f:'kitchen',label:'Кухня / чай-кофе'},
     {f:'loungeArea',label:'Зона отдыха'},{f:'heating',label:'Отопление'},
-    {f:'onSiteManager',label:'Администратор'},{f:'garmentSteamer',label:'Отпариватель'} ];
+    {f:'onSiteManager',label:'Администратор'} ];
   var INCLUDED_COLLAPSED = 6;   // сколько пунктов видно до «Показать все»
   // Иконки секций аккордеона — те же тонкие контуры, что на референсе.
   var ACC_ICONS = {
@@ -2212,12 +2214,10 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         return parkingLabels(a);
       } },
     { key:'aboutLighting', title:'Свет', icon:'light', hall:[
-      {f:'daylight',label:'Естественный свет'},{f:'constantLight',label:'Постоянный свет'},
-      {f:'strobeLight',label:'Импульсный свет'},{f:'lightModifiers',label:'Модификаторы света'},
-      {f:'ceilingRail',label:'Потолочная система'},{f:'blackout',label:'Блэкаут'},
+      {f:'daylight',label:'Естественный свет'},{f:'blackout',label:'Блэкаут'},
       {f:'skylights',label:'Мансардные окна'} ] },
     { key:'aboutSound', title:'Звук', icon:'sound', hall:[
-      {f:'soundproofing',label:'Звукоизоляция'},{f:'bluetoothSpeaker',label:'Bluetooth-колонка'} ] },
+      {f:'soundproofing',label:'Звукоизоляция'} ] },
     { key:'aboutAccess', title:'Доступ в студию', icon:'door',
       hall:[{f:'streetLevelAccess',label:'Вход с улицы'},{f:'wheelchairAccessible',label:'Доступ для колясок'},
             {f:'freightElevator',label:'Грузовой лифт'},{f:'publicTransport',label:'Общественный транспорт рядом'}],
@@ -2387,6 +2387,19 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     wheelchairAccessible:'Доступ для колясок', freightElevator:'Грузовой лифт',
     streetLevelAccess:'Вход с улицы',
   };
+  // Каталог оснащения (0055) — подписи и порядок групп; без него подписи
+  // берутся из HALL_EQUIPMENT_RU выше (старые коды) или показывается код.
+  var EQ_LABEL = {}, EQ_ORDER = {};
+  function loadEqCatalog(){
+    return fetch(API_BASE + '/api/equipment-catalog').then(function(r){ return r.ok ? r.json() : []; }).then(function(groups){
+      var k = 0;
+      (Array.isArray(groups) ? groups : []).forEach(function(g){ (g.items || []).forEach(function(it){ EQ_LABEL[it.code] = it.label; EQ_ORDER[it.code] = k++; }); });
+      // каталог пришёл позже страницы — перерисуем подписи открытого пространства
+      var h = openHallId && HALLS.find(function(x){ return x.id === openHallId; });
+      if(h) renderHallPurposes(h);
+    }).catch(function(){});
+  }
+  var HALL_PURPOSE_GEN = { photo:'съёмки', event:'праздника', leisure:'отдыха', meeting:'встречи' };
   // Порядок словаря для переключателя — зеркало HALL_PURPOSES в lib/rules.js.
   var HALL_PURPOSE_ORDER = ['photo', 'event', 'leisure', 'meeting'];
   // Иконки переключателя целей — тот же формат, что ACC_ICONS у аккордеона:
@@ -3146,7 +3159,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) extra.push('потолок '+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м');
     if(HALL_PROPS.floor && Number.isInteger(hall.floor)) extra.push(hall.floor<=0 ? 'цокольный этаж' : hall.floor+'-й этаж');
     document.getElementById('hallFactsExtra').textContent = extra.join(' · ');
-    // Стиль интерьера — чипами. Удобства отсюда ушли в «Включено в бронь»
+    // Стиль интерьера — чипами. Удобства отсюда ушли в «Пространство и удобства»
     // и в аккордеон ниже: там у них есть и «нет такого», и пояснения.
     var chips = (Array.isArray(hall.styles)?hall.styles:[]).filter(function(s){return HALL_STYLE_RU[s];}).map(function(s){return HALL_STYLE_RU[s];});
     var cw = document.getElementById('hallChips');
@@ -3216,19 +3229,31 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       sub.hidden = !list.length || !cur;
       sub.textContent = cur ? (HALL_PURPOSE_RU[cur.code] || cur.code) : '';
     }
-    // Оборудование из фиксированного словаря (галочки в кабинете) + свои
-    // строки владельца — один и тот же ✓-список, порядок значения не имеет:
-    // выбранное оборудование сначала, свои пункты следом.
-    var equipLines = Array.isArray(cur && cur.equipment)
-      ? cur.equipment.map(function(code){ return HALL_EQUIPMENT_RU[code] || code; }) : [];
-    var ownLines = cur && typeof cur.includes === 'string'
-      ? cur.includes.split('\n').map(function(x){ return x.trim(); }).filter(Boolean) : [];
-    var lines = equipLines.concat(ownLines);
+    // Оснащение цели (0055): позиции каталога (порядок — как в каталоге:
+    // свет к свету) с количеством, затем свои пункты владельца; старый текст
+    // includes — тоже свои пункты. Свёрнуто — первые 6.
+    var eq = Array.isArray(cur && cur.equipment) ? cur.equipment.slice() : [];
+    eq.sort(function(a, b){ return (EQ_ORDER[a] != null ? EQ_ORDER[a] : 1e6) - (EQ_ORDER[b] != null ? EQ_ORDER[b] : 1e6); });
+    var qty = (cur && cur.equipmentQty) || {};
+    var lines = eq.map(function(code){ return { label:EQ_LABEL[code] || HALL_EQUIPMENT_RU[code] || code, qty:qty[code] }; })
+      .concat((cur && Array.isArray(cur.extras) ? cur.extras : []).map(function(x){ return { label:x.label, qty:x.qty }; }))
+      .concat(cur && typeof cur.includes === 'string'
+        ? cur.includes.split('\n').map(function(x){ return x.trim(); }).filter(Boolean).map(function(l){ return { label:l }; }) : []);
     box.hidden = !lines.length;
-    box.innerHTML = lines.length
-      ? '<div class="section-label">Что входит в аренду</div><ul>' +
-        lines.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('') + '</ul>'
-      : '';
+    if(!lines.length){ box.innerHTML = ''; return; }
+    var hiddenN = lines.length - INCLUDED_COLLAPSED;
+    box.innerHTML = '<div class="section-label">Оснащение для ' + esc(HALL_PURPOSE_GEN[cur.code] || 'аренды') + '</div>' +
+      '<div class="feat-grid">' + lines.map(function(x){
+        return '<div class="feat" data-on="true"><span class="feat-mark">✓</span><span class="feat-label">' + esc(x.label) +
+          (Number.isInteger(x.qty) && x.qty > 0 ? ' <span class="feat-qty">· ' + x.qty + ' шт.</span>' : '') + '</span></div>';
+      }).join('') + '</div>' +
+      (hiddenN > 0 ? '<button class="feat-more" type="button">Показать всё · ' + lines.length + '</button>' : '');
+    var cells = box.querySelectorAll('.feat'), more = box.querySelector('.feat-more'), open = false;
+    function apply(){
+      cells.forEach(function(el, k){ el.hidden = !open && k >= INCLUDED_COLLAPSED; });
+      if(more) more.textContent = open ? 'Свернуть' : 'Показать всё · ' + lines.length;
+    }
+    if(more){ apply(); more.addEventListener('click', function(){ open = !open; apply(); haptic('light'); }); }
   }
 
   // Смена цели меняет цену, минимум брони и вместимость, поэтому выбор
@@ -3276,7 +3301,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     });
   }
 
-  // «Включено в бронь»: только то, что есть. Чего нет — не показываем совсем
+  // «Пространство и удобства»: только то, что есть. Чего нет — не показываем совсем
   // (решение владельца: зачёркнутые пункты в списке «включено» путали).
   // Свёрнуто видно INCLUDED_COLLAPSED пунктов.
   function renderHallIncluded(hall){
@@ -3290,7 +3315,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     box.hidden = !items.length;
     if(!items.length){ box.innerHTML = ''; return; }
     var hidden = items.length - INCLUDED_COLLAPSED;
-    box.innerHTML = '<div class="section-label">Включено в бронь</div>' +
+    box.innerHTML = '<div class="section-label">Пространство и удобства</div>' +
       '<div class="feat-grid">' + items.map(function(it){ return featHtml(it.label, it.on); }).join('') + '</div>' +
       (hidden > 0 ? '<button class="feat-more" type="button">Показать все</button>' : '');
     var cells = box.querySelectorAll('.feat');
@@ -6112,6 +6137,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(TENANT_ID){ await bootStudio(); await maybeApplyRepeatParam(); return; }
     showCatalog();
     await Promise.all([loadPlatformConfig(), loadCities()]);
+    loadEqCatalog();   // подписи оснащения; не ждём — страница рисуется и без него
     let last = null;
     try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
     const initial = (last && ALL_CITIES.some(c=>c.city===last)) ? last
