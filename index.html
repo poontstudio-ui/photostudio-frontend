@@ -1014,8 +1014,8 @@ body{
    остаются видны — та же ловушка, что уже ловили на .time-search */
 .feat[hidden]{display:none;}
 .feat-mark{flex:0 0 auto;color:var(--text-2);font-size:var(--fs-xs);}
-/* Чего в зале нет — не прячем, а гасим и зачёркиваем: «нет звукоизоляции»
-   клиенту важно узнать до брони, а не на съёмке. */
+/* Чего в зале нет — в аккордеоне тем гасим и зачёркиваем: «нет звукоизоляции»
+   клиенту важно узнать до брони. В «Включено в бронь» отсутствующее не выводится. */
 .feat[data-on="false"]{color:var(--text-3);}
 .feat[data-on="false"] .feat-label{text-decoration:line-through;}
 .feat-more{
@@ -3276,16 +3276,17 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     });
   }
 
-  // «Включено в бронь»: сначала то, что есть, потом чего нет. Свёрнуто видно
-  // INCLUDED_COLLAPSED пунктов — в свёрнутом виде это ровно «что есть».
+  // «Включено в бронь»: только то, что есть. Чего нет — не показываем совсем
+  // (решение владельца: зачёркнутые пункты в списке «включено» путали).
+  // Свёрнуто видно INCLUDED_COLLAPSED пунктов.
   function renderHallIncluded(hall){
     var box = document.getElementById('hallIncluded');
     if(!box) return;
     var a = STUDIO_AMENITIES || {};
     var items = HALL_INCLUDED_LIST.filter(function(x){ return HALL_PROPS[x.f]; })
       .map(function(x){ return { label:x.label, on:!!hall[x.f] }; })
-      .concat(STUDIO_INCLUDED_LIST.map(function(x){ return { label:x.label, on:!!a[x.f] }; }));
-    items.sort(function(p, q){ return (q.on ? 1 : 0) - (p.on ? 1 : 0); });
+      .concat(STUDIO_INCLUDED_LIST.map(function(x){ return { label:x.label, on:!!a[x.f] }; }))
+      .filter(function(it){ return it.on; });
     box.hidden = !items.length;
     if(!items.length){ box.innerHTML = ''; return; }
     var hidden = items.length - INCLUDED_COLLAPSED;
