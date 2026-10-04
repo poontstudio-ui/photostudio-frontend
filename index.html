@@ -933,7 +933,7 @@ body{
 .hall-info-sub:empty{display:none;}
 /* Выбор цели аренды: сегментированный переключатель в виде «таблетки» —
    только значки, четыре равных сегмента. Выбранный подсвечен плашкой,
-   которая переезжает на новое место с лёгкой пружиной (на краях перелёт обрезается рамкой); не заведённое владельцем назначение
+   которая плавно переезжает на новое место; не заведённое владельцем назначение
    видно серым и не нажимается. Название выбранного — строкой под ним. */
 .purpose-row{
   position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:4px;overflow:hidden;
@@ -944,7 +944,7 @@ body{
 .pr-thumb{
   position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / 4);
   background:var(--surface);border-radius:var(--r-pill);box-shadow:0 1px 3px rgba(20,22,28,.16);
-  transition:transform .5s cubic-bezier(.34,1.45,.6,1);pointer-events:none;will-change:transform;
+  transition:transform .55s cubic-bezier(.45,.05,.25,1);pointer-events:none;will-change:transform;
 }
 @media (prefers-reduced-motion:reduce){ .pr-thumb{transition:none;} }
 .purpose-btn{
