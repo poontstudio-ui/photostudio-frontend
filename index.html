@@ -910,6 +910,10 @@ body{
   margin-top:8px;
 }
 .hall-info-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.hall-info-main{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;}
+.hall-info-main .hall-info-title{flex:0 1 auto;max-width:100%;}
+.hall-info-main .amenity-chips{margin-top:0;gap:6px;}
+.hall-info-main .amenity-chips .chip{font-size:var(--fs-xs);padding:5px 9px;}
 .hall-info-title{
   font-family:var(--f);
   font-weight:700;
@@ -1654,7 +1658,11 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="section" id="hallInfoSection" style="display:none">
       <div class="hall-info-head">
         <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем пространствам">←</button>
-        <div class="hall-info-title" id="hallInfoTitle"></div>
+        <!-- Стиль интерьера — чипами в строке с названием (если не помещаются — ниже под ним) -->
+        <div class="hall-info-main">
+          <div class="hall-info-title" id="hallInfoTitle"></div>
+          <div class="amenity-chips" id="hallChips" hidden></div>
+        </div>
       </div>
       <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       <div class="purpose-row" id="hallPurposeRow" hidden></div>
@@ -1663,7 +1671,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       <div class="hall-facts-extra" id="hallFactsExtra"></div>
       <div class="hall-price" id="hallPrice" hidden></div>
       <div class="purpose-includes" id="hallPurposeIncludes" hidden></div>
-      <div class="amenity-chips" id="hallChips" hidden></div>
       <div class="hall-about" id="hallAbout" hidden></div>
       <div class="hall-included" id="hallIncluded" hidden></div>
       <div class="hall-accordion" id="hallAccordion" hidden></div>
