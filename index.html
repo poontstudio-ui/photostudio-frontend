@@ -931,30 +931,33 @@ body{
 }
 .hall-info-sub{font-size:var(--fs-sm);color:var(--text-2);margin-top:3px;}
 .hall-info-sub:empty{display:none;}
-/* Выбор цели аренды: карточки в ряд — значок, название и цена, как в
-   предпросмотре кабинета. Выбранная — синяя обводка и подложка. Ряд идёт до
-   края экрана: обрезанная справа карточка подсказывает, что он листается. */
+/* Выбор цели аренды: сегментированный переключатель в виде «таблетки» —
+   только значки, четыре равных сегмента. Выбранный подсвечен плашкой,
+   которая переезжает на новое место; не заведённое владельцем назначение
+   видно серым и не нажимается. Название выбранного — строкой под ним. */
 .purpose-row{
-  display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;
-  margin:0 -20px 14px;padding:0 20px;
+  position:relative;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));padding:4px;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-pill);
+  margin-bottom:8px;
 }
 .purpose-row[hidden]{display:none;}
-.purpose-row::-webkit-scrollbar{display:none;}
-.purpose-btn{
-  flex:none;display:flex;align-items:center;gap:8px;
-  border:1px solid var(--line-strong);background:var(--surface);border-radius:var(--r-md);
-  padding:7px 12px 7px 7px;cursor:pointer;text-align:left;font:inherit;color:inherit;
-  touch-action:manipulation;transition:border-color .12s,background .12s;
+.pr-thumb{
+  position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / 4);
+  background:var(--surface);border-radius:var(--r-pill);box-shadow:0 1px 3px rgba(20,22,28,.16);
+  transition:transform .22s cubic-bezier(.3,.7,.3,1);pointer-events:none;
 }
-.purpose-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
-.pb-ic{width:30px;height:30px;border-radius:9px;background:var(--surface-2);color:var(--text-2);display:grid;place-items:center;flex:none;}
-.pb-ic svg{width:17px;height:17px;}
-.pb-tx{display:block;min-width:0;}
-.pb-tx b{display:block;font-size:var(--fs-sm);font-weight:600;line-height:1.25;white-space:nowrap;}
-.pb-tx small{display:block;font-size:var(--fs-xs);color:var(--text-3);line-height:1.25;white-space:nowrap;font-variant-numeric:tabular-nums;}
-.purpose-btn[data-on="true"]{border-color:var(--accent);background:var(--accent-bg);}
-.purpose-btn[data-on="true"] .pb-ic{background:var(--surface);color:var(--accent-dark);}
-.purpose-btn[data-on="true"] .pb-tx small{color:var(--text-2);}
+@media (prefers-reduced-motion:reduce){ .pr-thumb{transition:none;} }
+.purpose-btn{
+  position:relative;z-index:1;display:flex;align-items:center;justify-content:center;
+  height:42px;border:none;background:none;border-radius:var(--r-pill);padding:0;cursor:pointer;
+  color:var(--text-2);transition:color .15s;touch-action:manipulation;
+}
+.purpose-btn svg{width:22px;height:22px;}
+.purpose-btn[data-on="true"]{color:var(--accent-dark);}
+.purpose-btn:disabled{color:var(--text-3);opacity:.5;cursor:not-allowed;}
+.purpose-btn:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.hall-purpose-subtitle{font-size:var(--fs-md);font-weight:600;color:var(--text-2);margin:0 0 14px 4px;}
+.hall-purpose-subtitle[hidden]{display:none;}
 .hall-price{margin-top:18px;}
 .hall-price[hidden]{display:none;}
 .price-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;display:flex;flex-direction:column;gap:6px;}
@@ -1624,6 +1627,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         <div class="hall-info-sub" id="hallInfoSub"></div>
       </div>
       <div class="purpose-row" id="hallPurposeRow" hidden></div>
+      <div class="hall-purpose-subtitle" id="hallPurposeSubtitle" hidden></div>
       <div class="hall-facts" id="hallFacts"></div>
       <div class="hall-facts-extra" id="hallFactsExtra"></div>
       <div class="hall-price" id="hallPrice" hidden></div>
@@ -2426,23 +2430,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   function factTile(label, valueHtml){
     return '<div class="fact-tile"><small>'+esc(label)+'</small><b>'+valueHtml+'</b></div>';
   }
-  // Короткая цена на карточке цели: «40 BYN/ч», «от 120 BYN/ч» (если есть
-  // правила по дням и часам), «от 5 BYN с гостя». Считаем так же, как нижняя
-  // плашка до выбора времени.
-  function purposeChipPrice(hall, p){
-    var v = purposeHall(hall, p.code), g = v.guestPricing;
-    if(g && g.mode === 'perPerson' && Array.isArray(g.tiers) && g.tiers.length){
-      var pr = g.tiers.map(function(t){ return t.price; }).filter(function(x){ return typeof x === 'number' && isFinite(x); });
-      if(!pr.length) return '';
-      var plo = Math.min.apply(null, pr), phi = Math.max.apply(null, pr);
-      return (phi > plo ? 'от ' : '') + gpMoney(plo) + ' ' + CUR + ' с гостя';
-    }
-    var rates = [v.rate].concat((Array.isArray(v.priceRules) ? v.priceRules : []).map(function(r){ return r.rate; }))
-      .filter(function(x){ return typeof x === 'number' && isFinite(x); });
-    if(!rates.length) return '';
-    var lo = Math.min.apply(null, rates), hi = Math.max.apply(null, rates);
-    return (hi > lo ? 'от ' : '') + gpMoney(lo) + ' ' + CUR + '/ч';
-  }
   function hallPurposeList(h){ return Array.isArray(h && h.purposes) ? h.purposes : []; }
   // Зеркало lib/rules.js purposeOf: без кода — первое АКТИВНОЕ (деактивиро-
   // ванное не может быть выбором по умолчанию), по коду — как есть.
@@ -3234,35 +3221,40 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(!row || !box) return;
     var list = hallPurposeList(hall);
     var cur = purposeOf(hall, state.purpose);
-    // Показываем только то, что можно выбрать: деактивированное и не заведённое
-    // владельцем назначение клиенту ни к чему — у карточки есть цена, а у
-    // «серой» цены нет.
-    var active = list.filter(function(p){ return p.active !== false; });
-    row.hidden = !active.length;
-    var keepLeft = row.scrollLeft;
-    row.innerHTML = !active.length ? '' : HALL_PURPOSE_ORDER.map(function(code){
-      var p = active.find(function(x){ return x.code === code; });
-      if(!p) return '';
-      var icon = HALL_PURPOSE_ICONS[code];
-      var label = HALL_PURPOSE_RU[code] || code;
-      var price = purposeChipPrice(hall, p);
-      var on = !!(cur && cur.code === code);
-      return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" data-on="'+(on ? 'true' : 'false')+'" aria-pressed="'+(on ? 'true' : 'false')+'">' +
-        '<span class="pb-ic">' + (icon ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg>' : '') + '</span>' +
-        '<span class="pb-tx"><b>'+esc(label)+'</b>' + (price ? '<small>'+esc(price)+'</small>' : '') + '</span></button>';
-    }).join('');
-    row.querySelectorAll('.purpose-btn').forEach(function(btn){
+    var sub = document.getElementById('hallPurposeSubtitle');
+    row.hidden = !list.length;
+    var curIdx = cur ? HALL_PURPOSE_ORDER.indexOf(cur.code) : -1;
+    // Плашка выбранного скользит со старого места на новое; у другого
+    // пространства едет не из чужой позиции, а сразу встаёт на своё.
+    var prevIdx = row.dataset.hall === String(hall.id) && row.dataset.idx !== undefined ? Number(row.dataset.idx) : curIdx;
+    row.innerHTML = !list.length ? '' :
+      '<span class="pr-thumb" aria-hidden="true"' + (curIdx < 0 ? ' hidden' : ' style="transform:translateX(' + Math.max(prevIdx, 0) * 100 + '%)"') + '></span>' +
+      HALL_PURPOSE_ORDER.map(function(code){
+        // Деактивированное владельцем назначение — тот же disabled, что и
+        // никогда не заводившееся: клиенту нет разницы, почему нельзя выбрать.
+        var configured = list.some(function(p){ return p.code === code && p.active !== false; });
+        var icon = HALL_PURPOSE_ICONS[code];
+        var label = HALL_PURPOSE_RU[code] || code;
+        return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" ' +
+          'data-on="'+(cur && cur.code === code ? 'true' : 'false')+'" aria-label="'+esc(label)+'"' +
+          (configured ? '' : ' disabled') + '>' +
+          (icon ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+            'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg>' : '') +
+          '</button>';
+      }).join('');
+    var thumb = row.firstElementChild;
+    if(thumb && curIdx >= 0 && prevIdx !== curIdx){
+      void thumb.offsetWidth;
+      thumb.style.transform = 'translateX(' + curIdx * 100 + '%)';
+    }
+    row.dataset.hall = String(hall.id);
+    row.dataset.idx = String(curIdx);
+    row.querySelectorAll('.purpose-btn:not(:disabled)').forEach(function(btn){
       btn.addEventListener('click', function(){ haptic('light'); selectPurpose(btn.dataset.code); });
     });
-    // Ряд пересобирается при каждой смене цели — возвращаем прокрутку и не
-    // даём выбранной карточке уехать за край.
-    row.scrollLeft = keepLeft;
-    var onBtn = row.querySelector('.purpose-btn[data-on="true"]');
-    if(onBtn && !row.hidden){
-      var rb = row.getBoundingClientRect(), ob = onBtn.getBoundingClientRect();
-      if(ob.left < rb.left + 20) row.scrollLeft += ob.left - rb.left - 20;
-      else if(ob.right > rb.right - 20) row.scrollLeft += ob.right - rb.right + 20;
+    if(sub){
+      sub.hidden = !list.length || !cur;
+      sub.textContent = cur ? (HALL_PURPOSE_RU[cur.code] || cur.code) : '';
     }
     renderHallPrice(hall);
     // Оснащение цели (0055): позиции каталога (порядок — как в каталоге:
