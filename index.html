@@ -78,7 +78,7 @@ body{
   flex-direction:column;
   background:var(--bg);
   position:relative;
-  padding-bottom:260px;
+  padding-bottom:120px;
 }
 
 /* ---------- Header ---------- */
@@ -975,8 +975,6 @@ body{
 .price-tiers{display:flex;flex-wrap:wrap;gap:6px;}
 .price-tiers span{font-size:var(--fs-xs);background:var(--bg);border-radius:var(--r-pill);padding:3px 9px;color:var(--text-2);font-variant-numeric:tabular-nums;}
 .price-tiers b{color:var(--text);}
-.summary-break{font-size:var(--fs-xs);color:var(--text-3);font-variant-numeric:tabular-nums;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.summary-break[hidden]{display:none;}
 .purpose-includes{margin-top:18px;}
 .feat-qty{color:var(--text-3);white-space:nowrap;}
 .purpose-includes[hidden]{display:none;}
@@ -1252,85 +1250,46 @@ body{
   margin-right:5px;
 }
 
-/* ---------- Sticky summary bar ---------- */
+/* ---------- Нижняя плашка: гости · стоимость · кнопка ---------- */
 .summary-bar{
-  position:fixed;
-  bottom:0;
-  left:50%;
-  transform:translateX(-50%);
-  width:100%;
-  max-width:430px;
-  background:var(--surface-2);
-  border-top:1px solid var(--line);
-  padding:16px 18px 18px;
-  display:flex;
-  flex-direction:column;
-  align-items:stretch;
-  gap:14px;
-  z-index:20;
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:100%;max-width:430px;z-index:20;
+  background:var(--surface);border-top:1px solid var(--line);
+  box-shadow:0 -6px 20px rgba(20,22,28,.06);
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  display:flex;align-items:center;gap:10px;
 }
-.sb-people{display:flex;align-items:center;gap:12px;touch-action:manipulation;-webkit-user-select:none;user-select:none;}
-.sb-people-l{font-size:var(--fs-sm);color:var(--text-2);}
-.sb-people .stepper{gap:10px;}
-.sb-people .stepper button{width:30px;height:30px;}
-.people-cap{font-size:var(--fs-sm);color:var(--text-3);}
-.sb-bottom{
-  display:flex;
-  align-items:center;
-  gap:12px;
+.sb-guests{flex:none;display:flex;align-items:center;gap:2px;touch-action:manipulation;-webkit-user-select:none;user-select:none;}
+.sb-guests button{
+  width:30px;height:30px;border-radius:50%;border:1px solid var(--line-strong, var(--line));
+  background:var(--surface);color:var(--accent);font-size:18px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;padding:0;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;
 }
-.summary-info{flex:1;min-width:0;}
-.summary-row{
-  font-size:var(--fs-sm);
-  color:var(--text-2);
-  display:flex;
-  gap:6px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+.sb-guests button:disabled{opacity:.3;cursor:not-allowed;}
+.sb-guests-n{min-width:32px;text-align:center;line-height:1.1;}
+.sb-guests-n b{display:block;font-size:var(--fs-lg);font-weight:700;font-variant-numeric:tabular-nums;}
+.sb-guests-n small{display:block;font-size:var(--fs-xs);color:var(--text-3);}
+.sb-price{flex:1;min-width:0;}
+.sb-total{font-size:19px;font-weight:700;line-height:1.15;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text);}
+.sb-total small{font-size:var(--fs-sm);font-weight:600;color:var(--text-2);}
+.sb-cap{font-size:var(--fs-xs);color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.sb-cta{
+  flex:none;height:44px;padding:0 14px;border:none;border-radius:var(--r-md);
+  font-family:var(--f);font-size:var(--fs-md);font-weight:600;white-space:nowrap;cursor:pointer;
+  background:var(--accent-bg);color:var(--accent-dark);
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background .15s,color .15s;
 }
-.summary-total{
-  font-family:var(--f);
-  font-weight:700;
-  font-size:var(--fs-xl);
-  color:var(--text);
-  margin-top:2px;
+.sb-cta[data-ready="true"]{background:var(--accent);color:#fff;}
+.sb-cta:disabled{opacity:.5;cursor:default;}
+.sb-cta:focus-visible,.sb-guests button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+/* Совсем узкий экран: кнопка — второй строкой на всю ширину. */
+@media (max-width:350px){
+  .summary-bar{flex-wrap:wrap;}
+  .sb-cta{flex:1 1 100%;}
 }
-.rec-btn{
-  flex:0 0 auto;
-  width:56px;
-  height:56px;
-  border-radius:50%;
-  border:2px solid var(--red);
-  background:var(--red-bg);
-  color:var(--text);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  cursor:pointer;
-  position:relative;
-}
-.rec-btn::before{
-  content:'';
-  width:14px;
-  height:14px;
-  border-radius:50%;
-  background:var(--red);
-}
-.rec-btn[data-enabled="true"]{
-  box-shadow:0 0 0 0 rgba(193,68,60,0.5);
-  animation:rec-pulse 1.8s ease-out infinite;
-}
-@keyframes rec-pulse{
-  0%{box-shadow:0 0 0 0 rgba(193,68,60,0.45);}
-  70%{box-shadow:0 0 0 10px rgba(193,68,60,0);}
-  100%{box-shadow:0 0 0 0 rgba(193,68,60,0);}
-}
-.rec-btn[data-enabled="false"]{
-  opacity:0.35;
-  cursor:not-allowed;
-  animation:none;
-}
+@media (prefers-reduced-motion:reduce){ .sb-cta{transition:none;} }
+#dateSection{scroll-margin-top:8px;}
 
 /* ---------- Slide-up panel ---------- */
 .overlay{
@@ -1832,26 +1791,19 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     </div>
   </div>
 
+  <!-- Нижняя плашка: гости, стоимость и одна кнопка. Пока время не выбрано —
+       «Выбрать время» (ведёт к сетке), выбрано — «Забронировать». -->
   <div class="summary-bar" id="summaryBar">
-    <!-- Число людей — здесь, рядом с ценой: сумма зависит от него (0054) и
-         пересчитывается сразу, до открытия окна подтверждения. -->
-    <div class="sb-people">
-      <span class="sb-people-l">Человек</span>
-      <div class="stepper">
-        <button id="peopleMinus" type="button" aria-label="Меньше людей">−</button>
-        <span class="stepper-count" id="peopleCount">1</span>
-        <button id="peoplePlus" type="button" aria-label="Больше людей">+</button>
-      </div>
-      <span class="people-cap" id="peopleCap"></span>
+    <div class="sb-guests" role="group" aria-label="Сколько гостей">
+      <button id="peopleMinus" type="button" aria-label="Меньше гостей">−</button>
+      <span class="sb-guests-n"><b id="peopleCount">1</b><small id="peopleWord">гость</small></span>
+      <button id="peoplePlus" type="button" aria-label="Больше гостей">+</button>
     </div>
-    <div class="sb-bottom">
-      <div class="summary-info">
-        <div class="summary-row" id="summaryRow">Выберите время</div>
-        <div class="summary-total" id="summaryTotal">—</div>
-        <div class="summary-break" id="summaryBreak" hidden></div>
-      </div>
-      <div class="rec-btn" id="recBtn" data-enabled="false"></div>
+    <div class="sb-price" aria-live="polite">
+      <div class="sb-total" id="summaryTotal">—</div>
+      <div class="sb-cap" id="summaryRow">Выберите время</div>
     </div>
+    <button class="sb-cta" id="recBtn" type="button" data-ready="false">Выбрать время</button>
   </div>
 
 </div>
@@ -2807,13 +2759,22 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     });
   }
 
+  // Сколько гостей можно выбрать: в обзоре нескольких пространств, пока время
+  // не выбрано, — по самому вместительному; дальше — по выбранному.
+  function peopleMax(){
+    if(gridMode()==='halls' && HALLS.length > 1 && !hasSelection()){
+      return Math.max.apply(null, HALLS.map(h => purposeHall(h, null).capacity || 1));
+    }
+    return pricingHall().capacity;
+  }
   function renderPeople(){
-    const cap = pricingHall().capacity;
+    const cap = peopleMax();
     if(state.people > cap) state.people = cap;
     document.getElementById('peopleCount').textContent=state.people;
+    const n = state.people, m10 = n % 10, m100 = n % 100;
+    document.getElementById('peopleWord').textContent = m10 === 1 && m100 !== 11 ? 'гость' : (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'гостя' : 'гостей');
     document.getElementById('peopleMinus').disabled = state.people<=1;
     document.getElementById('peoplePlus').disabled = state.people>=cap;
-    document.getElementById('peopleCap').textContent = 'до ' + cap;
     const psP = document.getElementById('psPeople'); if(psP) psP.textContent = state.people;
     // Цена зависит от числа людей (0054): пересчитываем сумму.
     renderPanelPrice();
@@ -2838,7 +2799,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(state.people>1){ state.people--; haptic('light'); renderPeople(); renderSummary(); }
   });
   document.getElementById('peoplePlus').addEventListener('click', ()=>{
-    if(state.people<pricingHall().capacity){ state.people++; haptic('light'); renderPeople(); renderSummary(); }
+    if(state.people<peopleMax()){ state.people++; haptic('light'); renderPeople(); renderSummary(); }
   });
 
   // ---- Выбор зала и оборудования ----
@@ -2980,18 +2941,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     return !!col && spanFree(col, sel.start, sel.end) && (sel.end - sel.start) < minSlotsAt(col, sel.start);
   }
 
-  // Первая свободная клетка: по столбцам слева направо, внутри — снизу вверх по времени.
-  function autoSelect(){
-    clearSelection();
-    const cols = gridColumns();
-    const { start, end } = gridSlotRange();
-    for(const c of cols){
-      for(let i=start; i<end; i++){
-        if(cellState(c, i) === 'free' && setSel(c.key, i, i + targetSlotsAt(c, i))) return;
-      }
-    }
-  }
-
   // Тап — две точки промежутка. Нет выделения (или другой столбец) — первый
   // тап: отмечается только эта клетка. Тап вне текущего выделения, в том же
   // столбце — второй тап: выделяется весь промежуток от старой отметки до
@@ -3006,6 +2955,12 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       // промежуток не выделяется — тогда начинаем выбор с этой клетки, а не
       // молча игнорируем тап.
       return setSel(colKey, a, b) || setSel(colKey, slot, slot + 1);
+    }
+    // Выбран пакет — первый тап сразу отмечает окно его длины.
+    if(state.packageHours != null){
+      const col = gridColumns().find(c => c.key === colKey);
+      const n = col ? targetSlotsAt(col, slot) : 1;
+      if(n > 1 && setSel(colKey, slot, slot + n)) return true;
     }
     return setSel(colKey, slot, slot + 1);
   }
@@ -3144,7 +3099,12 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
   async function refreshGrid(){
     await fetchBusy();
-    if(!selectionValid()) autoSelect();
+    // Время по умолчанию не выбираем — клиент выбирает сам. Если выбранное
+    // за это время заняли, выбор снимаем, а не подставляем другое.
+    if(hasSelection()){
+      const col = gridColumns().find(c => c.key === sel.key);
+      if(!col || !spanFree(col, sel.start, sel.end)) clearSelection();
+    }
     renderGrid();
     scrollGridToSelection();
     renderPeople();
@@ -3319,17 +3279,17 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(more){ apply(); more.addEventListener('click', function(){ open = !open; apply(); haptic('light'); }); }
   }
 
-  // Смена цели меняет цену, минимум брони и вместимость, поэтому выбор
-  // времени пересобираем: то же окно при новой цели может оказаться короче
-  // её минимума, а молча растянуть бронь за клиента — хуже, чем переспросить.
+  // Смена цели меняет цену, минимум брони и вместимость. Выбранное время
+  // оставляем, если оно подходит и новой цели (удобно сравнить цены); если
+  // оно короче её минимума — снимаем: молча растянуть бронь хуже, чем
+  // переспросить.
   function selectPurpose(code){
     if(state.purpose === code) return;
     state.purpose = code;
     var cap = pricingHall().capacity;
     if(state.people > cap) state.people = cap;
     state.packageHours = null;
-    clearSelection();
-    autoSelect();
+    if(hasSelection() && !selectionValid()) clearSelection();
     renderAll();
     refreshGrid();
   }
@@ -3554,16 +3514,15 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       const already = state.packageHours != null && Math.abs(state.packageHours - h) < 1e-9;
       state.packageHours = already ? null : h;
       state.hallId = hall.id;
-      if(!already) state.durationHours = h;
-      clearSelection();
-      autoSelect();
       haptic('light');
-      renderAll();
-      if(state.packageHours != null && !hasSelection()){
-        // не нашлось свободного окна нужной длины — откатываем выбор пакета
-        state.packageHours = null;
-        autoSelect(); renderAll();
+      // Время клиент выбирает сам: уже выбранный промежуток подгоняем под
+      // длину пакета от того же начала; не выходит — снимаем выбор, и первый
+      // тап по сетке сразу отметит окно длины пакета (см. tapCell).
+      if(!already && hasSelection()){
+        const n = Math.max(1, Math.round(h * 60 / SLOT_MIN));
+        if(!setSel(sel.key, sel.start, sel.start + n)) clearSelection();
       }
+      renderAll();
     }));
   }
 
@@ -3665,36 +3624,91 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   }
   document.getElementById('hallBackBtn').addEventListener('click', ()=>{ haptic('light'); closeHall(); });
 
-  function renderSummary(){
-    const bar=document.getElementById('summaryRow');
-    const total=document.getElementById('summaryTotal');
-    const rec=document.getElementById('recBtn');
+  // Цена, пока время не выбрано: ставка за час (у цены «за гостя» — цена с
+  // гостя при текущем числе гостей). В обзоре нескольких пространств — самая
+  // низкая из всех.
+  function barRate(){
+    if(!(gridMode()==='halls' && HALLS.length > 1)){
+      const ph = pricingHall(), g = ph.guestPricing;
+      if(g && g.mode === 'perPerson'){
+        let pr = g.tiers[0].price;
+        g.tiers.forEach(t => { if(state.people >= t.from) pr = t.price; });
+        return { big:moneyTxt(pr), cap:'с гостя ' + (g.unit === 'hour' ? 'в час' : 'за бронь') + (g.withRent !== false ? ' + аренда' : '') };
+      }
+      const rates = [ph.rate].concat((Array.isArray(ph.priceRules) ? ph.priceRules : []).map(r => r.rate))
+        .filter(r => typeof r === 'number' && isFinite(r));
+      if(!rates.length) return { big:'—', cap:'' };
+      const lo = Math.min.apply(null, rates), hi = Math.max.apply(null, rates);
+      return { big:(hi > lo ? 'от ' : '') + moneyTxt(lo), cap:'в час' };
+    }
+    let rates = [], per = [];
+    HALLS.forEach(h => {
+      const vs = hallPurposeList(h).filter(p => p.active !== false).map(p => purposeHall(h, p.code));
+      (vs.length ? vs : [h]).forEach(v => {
+        if(!gpRentApplies(v.guestPricing)){ v.guestPricing.tiers.forEach(t => per.push(t.price)); return; }
+        rates.push(v.rate);
+        (Array.isArray(v.priceRules) ? v.priceRules : []).forEach(r => rates.push(r.rate));
+      });
+    });
+    rates = rates.filter(r => typeof r === 'number' && isFinite(r));
+    if(rates.length) return { big:'от ' + moneyTxt(Math.min.apply(null, rates)), cap:'в час' };
+    if(per.length) return { big:'от ' + moneyTxt(Math.min.apply(null, per)), cap:'с гостя' };
+    return { big:'—', cap:'' };
+  }
+  function moneyBig(v){ return Number(v).toLocaleString('ru-RU', { maximumFractionDigits:2 }); }
 
-    if(!selectionValid()){
-      const brk0 = document.getElementById('summaryBreak'); if(brk0) brk0.hidden = true;
-      bar.textContent = !HALLS.length ? 'Нет доступных пространств'
-        : selectionPending() ? 'Отметьте вторую точку промежутка'
-        : 'Выберите время на сетке';
-      total.textContent = '—';
-      rec.dataset.enabled='false';
+  // Нижняя плашка: гости, стоимость и одна кнопка. Время по умолчанию не
+  // выбрано: кнопка «Выбрать время» ведёт к сетке, рядом — цена за час.
+  // Выбрал — итог за выбранное время и «Забронировать».
+  function renderSummary(){
+    const cap = document.getElementById('summaryRow');
+    const total = document.getElementById('summaryTotal');
+    const btn = document.getElementById('recBtn');
+    const ready = selectionValid();
+    btn.dataset.ready = ready ? 'true' : 'false';
+    btn.textContent = ready ? 'Забронировать' : 'Выбрать время';
+    btn.disabled = !HALLS.length;
+    if(!HALLS.length){ total.textContent = '—'; cap.textContent = 'Нет доступных пространств'; return; }
+    if(!ready){
+      const r = barRate();
+      total.innerHTML = r.big === '—' ? '—' : esc(r.big).replace(/^от /, '<small>от</small> ') + ' <small>' + esc(CUR) + '</small>';
+      if(selectionPending()){
+        const col = gridColumns().find(c => c.key === sel.key);
+        cap.textContent = 'Минимум ' + minLabel(col ? minSlotsAt(col, sel.start) * SLOT_MIN : SLOT_MIN) + ' — отметьте конец';
+      } else if(state.packageHours != null){
+        cap.textContent = 'Пакет ' + pkgHoursLabel(state.packageHours) + ' — выберите начало';
+      } else cap.textContent = r.cap;
       return;
     }
     const col = gridColumns().find(c => c.key === sel.key);
-    bar.textContent = `${col.hall.name} · ${col.date.toLocaleDateString('ru-RU',{day:'numeric',month:'short'})} · `
-      + `${minutesToLabel(sel.start*SLOT_MIN)}–${minutesToLabel(sel.end*SLOT_MIN)}`;
-    total.textContent = `${priceLabel()} ${CUR} · ${durationLabel()}`
-      + (state.packageHours != null ? ' · пакет' : (lastMinuteActive() ? ` · −${STUDIO_LASTMINUTE.pct}%` : ''));
-    // Из чего сложилась сумма — когда в ней есть гости (иначе это просто аренда).
-    const brk = document.getElementById('summaryBreak');
-    if(brk){
-      const g = pricingHall().guestPricing, gp = guestPrice(), rent = baseRoomPrice();
-      const show = !!g && (gp > 0 || g.mode === 'perPerson');
-      brk.hidden = !show;
-      brk.textContent = !show ? '' : (gpRentApplies(g) ? moneyTxt(rent) + ' аренда + ' : '') + moneyTxt(gp) + (g.mode === 'perPerson' ? ' за гостей' : ' доплата за гостей')
-        + (state.packageHours == null && lastMinuteActive() ? `, до скидки −${STUDIO_LASTMINUTE.pct}%` : '');
-    }
-    rec.dataset.enabled='true';
+    const time = `${minutesToLabel(sel.start*SLOT_MIN)}–${minutesToLabel(sel.end*SLOT_MIN)}`;
+    const where = (gridMode()==='halls' && HALLS.length > 1)
+      ? col.hall.name
+      : col.date.toLocaleDateString('ru-RU', { weekday:'short', day:'numeric', month:'short' });
+    const mark = state.packageHours != null ? ' · пакет' : (lastMinuteActive() ? ` · −${STUDIO_LASTMINUTE.pct}%` : '');
+    total.innerHTML = esc(moneyBig(computePrice())) + ' <small>' + esc(CUR + mark) + '</small>';
+    cap.textContent = `${time} · ${where}`;
   }
+
+  // «Выбрать время» — плавно к сетке (вместе с выбором даты над ней). Окно
+  // прокручиваем сами: scrollIntoView со smooth в Chrome обрывается, если
+  // заодно надо сдвинуть горизонтальный скроллер сетки.
+  function scrollToTimePicker(){
+    const reduceM = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const go = (y) => window.scrollTo({ top:Math.max(0, Math.round(y)), behavior: reduceM ? 'auto' : 'smooth' });
+    // Начало уже отмечено, ждём конец — ведём к отмеченной клетке.
+    const first = hasSelection() && gridEl.querySelector('.grid-cell[data-sel-first="true"]');
+    if(first){
+      scrollGridToSelection();
+      const r = first.getBoundingClientRect();
+      go(window.scrollY + r.top - (window.innerHeight - r.height) / 2);
+      return;
+    }
+    const ds = document.getElementById('dateSection');
+    const target = (ds && ds.style.display !== 'none') ? ds : gridEl.closest('.section');
+    if(target) go(window.scrollY + target.getBoundingClientRect().top - 8);
+  }
+
 
   function renderAll(){
     applyHallMode();
@@ -3793,10 +3807,9 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   }
 
   document.getElementById('recBtn').addEventListener('click', ()=>{
-    if(document.getElementById('recBtn').dataset.enabled==='true'){
-      haptic('medium');
-      openPanel();
-    }
+    if(selectionValid()){ haptic('medium'); openPanel(); return; }
+    haptic('light');
+    scrollToTimePicker();
   });
   overlay.addEventListener('click', closePanel);
   document.getElementById('cancelBtn').addEventListener('click', closePanel);
@@ -4754,13 +4767,12 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     const startSlot = Math.round(ps.start / SLOT_MIN);
     const slots = Math.max(1, Math.round((ps.end - ps.start) / SLOT_MIN));
     const ok = setSel(ps.date, startSlot, startSlot + slots);
-    if(!ok) autoSelect();
     renderGrid(); renderPeople(); renderSummary();
     const el = document.getElementById('repeatHint');
     const durMin = ps.end - ps.start;
     const dur = (function(){ const m=durMin,h=Math.floor(m/60),r=m%60; return r?(h?h+' ч '+r+' мин':r+' мин'):h+' ч'; })();
     el.innerHTML = `<span>Из поиска: <b>${esc(hall.name)}</b> · ${dur}` +
-      (ok ? ' — проверьте и подтвердите.' : '. Это время только что заняли — выбрали ближайшее свободное.') +
+      (ok ? ' — проверьте и подтвердите.' : '. Это время только что заняли — выберите другое в сетке ниже.') +
       `</span><button type="button" id="repeatHintClose" aria-label="Скрыть">✕</button>`;
     el.hidden = false;
     document.getElementById('repeatHintClose').addEventListener('click', ()=>{ el.hidden = true; });
@@ -4774,7 +4786,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     for(const c of gridColumns()){
       if(setSel(c.key, startSlot, startSlot + slots)) { renderGrid(); renderPeople(); renderSummary(); return true; }
     }
-    autoSelect(); renderGrid(); renderPeople(); renderSummary();
+    clearSelection(); renderGrid(); renderPeople(); renderSummary();
     return false;
   }
 
@@ -4784,7 +4796,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     let msg;
     if(hallGone) msg = `Пространство из прошлой брони недоступно. Выберите пространство и время заново.`;
     else if(exactOk) msg = `Повтор: <b>${esc(hallLabel)}</b> · ${dur} · ${esc(state.people)} чел. Время как в прошлый раз — проверьте и подтвердите.`;
-    else msg = `Повтор: <b>${esc(hallLabel)}</b> · ${dur} · ${esc(state.people)} чел. Прежнее время занято — выбрали ближайшее свободное.`;
+    else msg = `Повтор: <b>${esc(hallLabel)}</b> · ${dur} · ${esc(state.people)} чел. Прежнее время занято — выберите другое в сетке ниже.`;
     el.innerHTML = `<span>${msg}</span><button type="button" id="repeatHintClose" aria-label="Скрыть">✕</button>`;
     el.hidden = false;
     document.getElementById('repeatHintClose').addEventListener('click', ()=>{ el.hidden = true; });
