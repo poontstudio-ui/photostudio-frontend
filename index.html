@@ -2443,8 +2443,8 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       ? '<div class="price-tiers">' + g.tiers.map(function(t, k){ return '<span>' + (k === 0 && g.tiers[1].from === 2 ? '1 гость' : 'от ' + t.from) + ' — <b>' + moneyTxt(t.price) + '</b></span>'; }).join('') + '</div>' : '';
     // Разъяснение правила — за значком «i»: на экране остаётся цена, а подробности по тапу.
     box.innerHTML = '<div class="section-label">Цена</div><div class="price-card"><div class="price-line"><div class="price-big">' + big + '</div>' +
-      '<button class="info-btn" type="button" aria-expanded="false" aria-controls="priceWhy" aria-label="Как считается цена">i</button></div>' + tiers +
-      '<div class="price-why" id="priceWhy" hidden>' + lines.map(function(t){ return '<p>' + esc(t) + '</p>'; }).join('') + '</div></div>';
+      '<button class="info-btn" type="button" aria-expanded="false" aria-controls="priceWhy" aria-label="Как считается цена">i</button></div>' +
+      '<div class="price-why" id="priceWhy" hidden>' + tiers + lines.map(function(t){ return '<p>' + esc(t) + '</p>'; }).join('') + '</div></div>';
     box.hidden = false;
     const ib = box.querySelector('.info-btn'), why = box.querySelector('.price-why');
     ib.addEventListener('click', () => {
