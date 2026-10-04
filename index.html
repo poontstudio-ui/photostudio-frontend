@@ -944,13 +944,13 @@ body{
 .pr-thumb{
   position:absolute;top:4px;bottom:4px;left:4px;width:calc((100% - 8px) / 4);
   background:var(--surface);border-radius:var(--r-pill);box-shadow:0 1px 3px rgba(20,22,28,.16);
-  transition:transform .22s cubic-bezier(.3,.7,.3,1);pointer-events:none;
+  transition:transform .42s cubic-bezier(.32,.72,0,1);pointer-events:none;will-change:transform;
 }
 @media (prefers-reduced-motion:reduce){ .pr-thumb{transition:none;} }
 .purpose-btn{
   position:relative;z-index:1;display:flex;align-items:center;justify-content:center;
   height:42px;border:none;background:none;border-radius:var(--r-pill);padding:0;cursor:pointer;
-  color:var(--text-2);transition:color .15s;touch-action:manipulation;
+  color:var(--text-2);transition:color .3s ease;touch-action:manipulation;
 }
 .purpose-btn svg{width:22px;height:22px;}
 .purpose-btn[data-on="true"]{color:var(--accent-dark);}
@@ -3224,34 +3224,47 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     var sub = document.getElementById('hallPurposeSubtitle');
     row.hidden = !list.length;
     var curIdx = cur ? HALL_PURPOSE_ORDER.indexOf(cur.code) : -1;
-    // Плашка выбранного скользит со старого места на новое; у другого
-    // пространства едет не из чужой позиции, а сразу встаёт на своё.
-    var prevIdx = row.dataset.hall === String(hall.id) && row.dataset.idx !== undefined ? Number(row.dataset.idx) : curIdx;
-    row.innerHTML = !list.length ? '' :
-      '<span class="pr-thumb" aria-hidden="true"' + (curIdx < 0 ? ' hidden' : ' style="transform:translateX(' + Math.max(prevIdx, 0) * 100 + '%)"') + '></span>' +
-      HALL_PURPOSE_ORDER.map(function(code){
-        // Деактивированное владельцем назначение — тот же disabled, что и
-        // никогда не заводившееся: клиенту нет разницы, почему нельзя выбрать.
-        var configured = list.some(function(p){ return p.code === code && p.active !== false; });
-        var icon = HALL_PURPOSE_ICONS[code];
-        var label = HALL_PURPOSE_RU[code] || code;
-        return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" ' +
-          'data-on="'+(cur && cur.code === code ? 'true' : 'false')+'" aria-label="'+esc(label)+'"' +
-          (configured ? '' : ' disabled') + '>' +
-          (icon ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-            'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg>' : '') +
-          '</button>';
-      }).join('');
-    var thumb = row.firstElementChild;
-    if(thumb && curIdx >= 0 && prevIdx !== curIdx){
-      void thumb.offsetWidth;
-      thumb.style.transform = 'translateX(' + curIdx * 100 + '%)';
+    // Плашка и кнопки живут между перерисовками: смена цели только двигает
+    // плашку и перекрашивает значки, поэтому переход идёт непрерывно, даже
+    // если тапнуть ещё раз на лету. Пересобираем ряд лишь для другого
+    // пространства.
+    var sameHall = row.dataset.hall === String(hall.id) && row.querySelector('.pr-thumb');
+    if(!list.length){
+      row.innerHTML = '';
+      delete row.dataset.hall;
+    } else if(!sameHall){
+      row.innerHTML = '<span class="pr-thumb" aria-hidden="true"></span>' +
+        HALL_PURPOSE_ORDER.map(function(code){
+          // Деактивированное владельцем назначение — тот же disabled, что и
+          // никогда не заводившееся: клиенту нет разницы, почему нельзя выбрать.
+          var configured = list.some(function(p){ return p.code === code && p.active !== false; });
+          var icon = HALL_PURPOSE_ICONS[code];
+          return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" data-on="false" ' +
+            'aria-label="'+esc(HALL_PURPOSE_RU[code] || code)+'"' + (configured ? '' : ' disabled') + '>' +
+            (icon ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+              'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg>' : '') +
+            '</button>';
+        }).join('');
+      row.dataset.hall = String(hall.id);
+      row.querySelectorAll('.purpose-btn:not(:disabled)').forEach(function(btn){
+        btn.addEventListener('click', function(){ haptic('light'); selectPurpose(btn.dataset.code); });
+      });
     }
-    row.dataset.hall = String(hall.id);
-    row.dataset.idx = String(curIdx);
-    row.querySelectorAll('.purpose-btn:not(:disabled)').forEach(function(btn){
-      btn.addEventListener('click', function(){ haptic('light'); selectPurpose(btn.dataset.code); });
-    });
+    if(list.length){
+      var thumb = row.querySelector('.pr-thumb');
+      thumb.hidden = curIdx < 0;
+      var pos = 'translateX(' + Math.max(curIdx, 0) * 100 + '%)';
+      if(!sameHall){   // новая плашка встаёт на место сразу, без переезда
+        thumb.style.transition = 'none';
+        thumb.style.transform = pos;
+        void thumb.offsetWidth;
+        thumb.style.transition = '';
+      } else thumb.style.transform = pos;
+      row.querySelectorAll('.purpose-btn').forEach(function(btn){
+        var on = !!cur && btn.dataset.code === cur.code;
+        btn.dataset.on = on ? 'true' : 'false';
+      });
+    }
     if(sub){
       sub.hidden = !list.length || !cur;
       sub.textContent = cur ? (HALL_PURPOSE_RU[cur.code] || cur.code) : '';
