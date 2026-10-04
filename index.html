@@ -924,21 +924,37 @@ body{
    вкладок Create/Celebrate/Play/Meet в референсе, только в светлой палитре
    приложения вместо тёмной карточки оригинала. Стоит прямо над фактами,
    которые он и меняет. */
-.purpose-row{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 12px;padding:2px 0;}
+.purpose-row{
+  display:flex;gap:2px;padding:4px;overflow-x:auto;scrollbar-width:none;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md);
+  margin-bottom:6px;
+}
 .purpose-row[hidden]{display:none;}
-.purpose-row::-webkit-scrollbar{display:none;}
-/* Название цели — подписью, только когда цель одна (без переключателя). */
-.hall-purpose-subtitle{font-size:var(--fs-md);font-weight:600;color:var(--text-2);margin:0 0 14px;text-align:left;}
+/* Название выбранной цели — раньше подписью в каждой кнопке-иконке
+   переключателя, теперь одной строкой ПОД переключателем: кнопки стали
+   чисто иконками (уже своей рамкой в data-on="true" понятно, что выбрано),
+   а текст не дублируется шесть раз подряд на одной дорожке. */
+.hall-purpose-subtitle{
+  font-size:var(--fs-md);font-weight:600;color:var(--text-2);
+  margin:0 0 14px;text-align:left;
+}
 .hall-purpose-subtitle[hidden]{display:none;}
-/* Кнопка цели: значок, название и цена — сравнить цели можно не переключаясь. */
-.purpose-btn{flex:none;display:flex;align-items:center;gap:9px;text-align:left;border:1px solid var(--line);background:var(--surface);
-  border-radius:var(--r-md);padding:8px 13px 8px 8px;cursor:pointer;color:var(--text);font-family:var(--f);touch-action:manipulation;transition:border-color .12s,background .12s;}
-.purpose-ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--bg);flex:none;color:var(--text-2);}
-.purpose-ic svg{width:17px;height:17px;}
-.purpose-txt b{display:block;font-size:var(--fs-sm);font-weight:600;line-height:1.2;}
-.purpose-txt small{display:block;font-size:var(--fs-xs);color:var(--text-3);font-variant-numeric:tabular-nums;white-space:nowrap;}
-.purpose-btn[data-on="true"]{border-color:var(--accent);background:var(--accent-bg);}
-.purpose-btn[data-on="true"] .purpose-ic{background:var(--surface);color:var(--accent-dark);}
+.purpose-row::-webkit-scrollbar{display:none;}
+.purpose-btn{
+  flex:1 1 0;min-width:52px;
+  display:flex;align-items:center;justify-content:center;
+  border:none;background:none;border-radius:var(--r-sm);
+  padding:12px 6px;cursor:pointer;color:var(--text-3);
+  font-family:var(--f);transition:background .12s,color .12s;
+}
+.purpose-btn svg{width:20px;height:20px;flex:0 0 auto;}
+.purpose-btn[data-on="true"]{
+  background:var(--surface);color:var(--text);
+  box-shadow:0 1px 3px rgba(20,22,28,.14);
+}
+/* Незаведённое владельцем назначение видно (весь словарь на виду — как в
+   референсе), но не выбирается: серым и без курсора-руки, как «Play» там же. */
+.purpose-btn:disabled{opacity:.4;cursor:not-allowed;}
 .hall-price{margin-top:18px;}
 .hall-price[hidden]{display:none;}
 .price-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 14px;display:flex;flex-direction:column;gap:6px;}
@@ -2399,16 +2415,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   var HALL_PURPOSE_GEN = { photo:'съёмки', event:'праздника', leisure:'отдыха', meeting:'встречи' };
   function gpGuestsWord(n){ var m10 = n % 10, m100 = n % 100; return n + ' ' + (m10 === 1 && m100 !== 11 ? 'гость' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'гостя' : 'гостей'); }
   function moneyTxt(v){ return String(Math.round(v * 100) / 100).replace('.', ','); }
-  // «40 BYN/ч», «от 120 BYN/ч» (есть цены по часам), «от 5 BYN с гостя».
-  function purposeShortPrice(hall, code){
-    var ph = purposeHall(hall, code), g = ph.guestPricing;
-    if(g && g.mode === 'perPerson'){
-      var m = Math.min.apply(null, g.tiers.map(function(t){ return t.price; }));
-      return (g.tiers.length > 1 ? 'от ' : '') + moneyTxt(m) + ' ' + CUR + ' с гостя';
-    }
-    var rules = Array.isArray(ph.priceRules) && ph.priceRules.length;
-    return (rules ? 'от ' : '') + moneyTxt(ph.rate) + ' ' + CUR + '/ч';
-  }
   // Блок «Цена»: крупно — ставка, ниже правило одной-двумя фразами. Владелец
   // видит эти же фразы в предпросмотре кабинета.
   function renderHallPrice(hall){
@@ -3239,24 +3245,28 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(!row || !box) return;
     var list = hallPurposeList(hall);
     var cur = purposeOf(hall, state.purpose);
-    // Только то, что можно забронировать: выключенные и незаведённые цели не
-    // показываем (серые кнопки, на которые нельзя нажать, только сбивают). На
-    // кнопке — цена: сравнить цели можно, не переключаясь. Одна цель — без
-    // переключателя, её название подписью.
-    var live = HALL_PURPOSE_ORDER.filter(function(code){ return list.some(function(p){ return p.code === code && p.active !== false; }); });
-    row.hidden = live.length < 2;
-    row.innerHTML = live.length < 2 ? '' : live.map(function(code){
-      var icon = HALL_PURPOSE_ICONS[code], label = HALL_PURPOSE_RU[code] || code;
-      return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" data-on="'+(cur && cur.code === code ? 'true' : 'false')+'">' +
-        '<span class="purpose-ic">' + (icon ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg>' : '') + '</span>' +
-        '<span class="purpose-txt"><b>'+esc(label)+'</b><small>'+esc(purposeShortPrice(hall, code))+'</small></span></button>';
+    row.hidden = !list.length;
+    row.innerHTML = !list.length ? '' : HALL_PURPOSE_ORDER.map(function(code){
+      // Деактивированное владельцем назначение — тот же disabled, что и
+      // никогда не заводившееся: клиенту нет разницы, почему нельзя выбрать.
+      var configured = list.some(function(p){ return p.code === code && p.active !== false; });
+      var icon = HALL_PURPOSE_ICONS[code];
+      var label = HALL_PURPOSE_RU[code] || code;
+      // Подпись убрана из самой кнопки (шесть подряд одинаковых слов на
+      // одной дорожке — шум) и живёт одной строкой под заголовком зала —
+      // aria-label сохраняет кнопку доступной для скринридера.
+      return '<button class="purpose-btn" type="button" data-code="'+esc(code)+'" ' +
+        'data-on="'+(cur && cur.code === code ? 'true' : 'false')+'" aria-label="'+esc(label)+'"' +
+        (configured ? '' : ' disabled') + '>' +
+        (icon ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icon+'</svg>' : '') +
+        '</button>';
     }).join('');
-    row.querySelectorAll('.purpose-btn').forEach(function(btn){
+    row.querySelectorAll('.purpose-btn:not(:disabled)').forEach(function(btn){
       btn.addEventListener('click', function(){ haptic('light'); selectPurpose(btn.dataset.code); });
     });
     if(sub){
-      sub.hidden = !(live.length === 1 && cur);
+      sub.hidden = !list.length || !cur;
       sub.textContent = cur ? (HALL_PURPOSE_RU[cur.code] || cur.code) : '';
     }
     renderHallPrice(hall);
