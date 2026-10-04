@@ -961,6 +961,13 @@ body{
 .price-big{font-size:var(--fs-lg);font-weight:700;font-variant-numeric:tabular-nums;}
 .price-big small{font-size:var(--fs-sm);font-weight:500;color:var(--text-2);}
 .price-card p{margin:0;font-size:var(--fs-sm);color:var(--text-2);}
+.price-line{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.price-why{display:flex;flex-direction:column;gap:6px;padding-top:8px;border-top:1px solid var(--line);}
+.price-why[hidden]{display:none;}
+.info-btn{flex:none;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--line-strong);background:var(--surface);color:var(--text-2);
+  font:italic 600 13px/1 Georgia,'Times New Roman',serif;cursor:pointer;display:grid;place-items:center;padding:0;touch-action:manipulation;}
+.info-btn[data-on="true"]{border-color:var(--accent);background:var(--accent-bg);color:var(--accent-dark);}
+.info-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .price-tiers{display:flex;flex-wrap:wrap;gap:6px;}
 .price-tiers span{font-size:var(--fs-xs);background:var(--bg);border-radius:var(--r-pill);padding:3px 9px;color:var(--text-2);font-variant-numeric:tabular-nums;}
 .price-tiers b{color:var(--text);}
@@ -2434,9 +2441,17 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     if(gpRentApplies(g) && Array.isArray(ph.priceRules) && ph.priceRules.length) lines.push('В некоторые дни и часы цена другая — итог видно после выбора времени.');
     var tiers = g && g.mode === 'perPerson' && g.tiers.length > 1
       ? '<div class="price-tiers">' + g.tiers.map(function(t, k){ return '<span>' + (k === 0 && g.tiers[1].from === 2 ? '1 гость' : 'от ' + t.from) + ' — <b>' + moneyTxt(t.price) + '</b></span>'; }).join('') + '</div>' : '';
-    box.innerHTML = '<div class="section-label">Цена</div><div class="price-card"><div class="price-big">' + big + '</div>' + tiers +
-      lines.map(function(t){ return '<p>' + esc(t) + '</p>'; }).join('') + '</div>';
+    // Разъяснение правила — за значком «i»: на экране остаётся цена, а подробности по тапу.
+    box.innerHTML = '<div class="section-label">Цена</div><div class="price-card"><div class="price-line"><div class="price-big">' + big + '</div>' +
+      '<button class="info-btn" type="button" aria-expanded="false" aria-controls="priceWhy" aria-label="Как считается цена">i</button></div>' + tiers +
+      '<div class="price-why" id="priceWhy" hidden>' + lines.map(function(t){ return '<p>' + esc(t) + '</p>'; }).join('') + '</div></div>';
     box.hidden = false;
+    const ib = box.querySelector('.info-btn'), why = box.querySelector('.price-why');
+    ib.addEventListener('click', () => {
+      const open = why.hidden;
+      why.hidden = !open; ib.setAttribute('aria-expanded', open ? 'true' : 'false'); ib.dataset.on = open ? 'true' : 'false';
+      haptic('light');
+    });
   }
   // Порядок словаря для переключателя — зеркало HALL_PURPOSES в lib/rules.js.
   var HALL_PURPOSE_ORDER = ['photo', 'event', 'leisure', 'meeting'];
