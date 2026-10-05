@@ -554,12 +554,6 @@ body{
   font-size:var(--fs-sm);
   color:var(--text);
 }
-.admin-booking-owner{
-  font-family:var(--f);
-  font-size:var(--fs-sm);
-  color:var(--text);
-  margin-bottom:2px;
-}
 
 .danger-zone{
   margin:10px 20px 0;
@@ -1706,93 +1700,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="bookings-list" id="bookingsList"></div>
   </div>
 
-  <div class="admin-view" id="adminView">
-    <div class="bookings-header">
-      <button class="back-btn" id="adminBackBtn" type="button">←</button>
-      <div class="bookings-title">Кабинет владельца</div>
-    </div>
-
-    <div class="section">
-      <div class="section-label">Статистика</div>
-      <div class="stat-grid">
-        <div class="stat-card">
-          <div class="stat-value" id="statCount">0</div>
-          <div class="stat-label">Активных броней</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statRevenue">0</div>
-          <div class="stat-label">Выручка, <span class="cur-label">BYN</span></div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statAvg">0</div>
-          <div class="stat-label">Средний чек, <span class="cur-label">BYN</span></div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="statOccupancy">0%</div>
-          <div class="stat-label">Занятость за 7 дней</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-label">Выручка за 7 дней</div>
-      <div class="eq-chart" id="eqChart"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-label">Пространства</div>
-      <div class="price-editor" id="hallsEditor"></div>
-      <button class="tier-add-btn" id="addHallBtn" type="button">+ Добавить пространство</button>
-      <button class="btn-primary" id="saveHallsBtn" style="margin-top:12px">Сохранить пространства</button>
-      <div class="save-note" id="hallsSaveNote"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-label">Оборудование</div>
-      <div class="price-editor" id="equipEditor"></div>
-      <button class="tier-add-btn" id="addEquipBtn" type="button">+ Добавить позицию</button>
-      <button class="btn-primary" id="saveEquipBtn" style="margin-top:12px">Сохранить оборудование</button>
-      <div class="save-note" id="equipSaveNote"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-label">Часы работы</div>
-      <div class="hours-week-row">
-        <span>Вся неделя</span>
-        <input type="number" min="0" max="24" step="1" id="weekAllStart" aria-label="Открытие для всей недели">
-        <span>–</span>
-        <input type="number" min="0" max="24" step="1" id="weekAllEnd" aria-label="Закрытие для всей недели">
-        <button class="hours-apply-all" id="applyWeekAllBtn" type="button">Применить ко всем</button>
-      </div>
-      <div class="price-editor" id="hoursEditor"></div>
-      <button class="btn-primary" id="saveHoursBtn" style="margin-top:12px">Сохранить часы</button>
-      <div class="save-note" id="hoursSaveNote"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-label">Владельцы</div>
-      <div class="owners-list" id="ownersEditor"></div>
-      <div class="owners-add">
-        <input type="text" inputmode="numeric" id="newOwnerId" placeholder="Telegram ID" aria-label="Telegram ID нового владельца">
-        <button class="hours-apply-all" id="addOwnerBtn" type="button">Добавить</button>
-      </div>
-      <div class="owners-hint">ID нового владельца: пусть отправит любое сообщение боту @userinfobot</div>
-      <button class="btn-primary" id="saveOwnersBtn" style="margin-top:12px">Сохранить владельцев</button>
-      <div class="save-note" id="ownersSaveNote"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-label">Все брони</div>
-      <div class="bookings-list" id="adminBookingsList"></div>
-    </div>
-
-    <div class="danger-zone">
-      <div class="danger-title">Опасная зона</div>
-      <div class="danger-text">Удаляет только уже прошедшие брони. Активные и предстоящие брони останутся без изменений. Действие необратимо.</div>
-      <button class="danger-btn" id="clearHistoryBtn">Очистить прошедшие брони</button>
-    </div>
-  </div>
-
   <!-- Нижняя плашка: гости, стоимость и одна кнопка. Пока время не выбрано —
        «Выбрать время» (ведёт к сетке), выбрано — «Забронировать». -->
   <div class="summary-bar" id="summaryBar">
@@ -1914,12 +1821,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   <button class="btn-ghost" id="rsDismissBtn">Отмена</button>
 </div>
 
-<div class="panel" id="clearHistoryPanel">
-  <div class="panel-title">Очистить прошедшие брони?</div>
-  <div class="cancel-panel-text">Будут удалены только уже прошедшие брони. <b>Активные и предстоящие брони не пострадают.</b> Отменить это действие нельзя.</div>
-  <button class="btn-primary" style="background:var(--red);color:#fff" id="clearHistoryConfirmBtn">Да, очистить прошедшие</button>
-  <button class="btn-ghost" id="clearHistoryDismissBtn">Отмена</button>
-</div>
 
 <!-- Быстрый просмотр студии по клику на цену на карте каталога — тот же
      механизм окна (.panel/.overlay), что и везде в приложении, просто без
@@ -4611,36 +4512,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     else alert(msg);
   }
 
-  // Действия владельца по жизненному циклу брони — тот же набор и те же
-  // состояния, что в браузерном кабинете (bkActions в studio.html): pending
-  // решается подтверждением/отклонением; confirmed — завершением, отметкой
-  // «не пришёл» или отменой. Раньше единственным способом отказать заявке
-  // тут было «Отменить» (общая с клиентом кнопка) — тот же результат для
-  // клиента, но не тот путь в БД (cancel вместо decline, другой cancel_kind).
-  // Теперь у pending — ровно confirm/decline, без путаницы с cancel.
-  const OWNER_LIFECYCLE = {
-    pending:   [{ action:'confirm',  label:'Подтвердить', cls:'booking-confirm-btn' },
-                { action:'decline',  label:'Отклонить',   cls:'booking-cancel-btn'  }],
-    confirmed: [{ action:'complete', label:'Завершить',   cls:'booking-confirm-btn' },
-                { action:'no-show',  label:'Не пришёл',   cls:'booking-cancel-btn'  },
-                { action:'cancel',   label:'Отменить',    cls:'booking-cancel-btn'  }],
-  };
-  async function ownerBookingAction(b, action, row){
-    row.querySelectorAll('button').forEach(x=>{ x.disabled=true; });
-    // cancel — общий с клиентом роут (/bookings/:id/cancel), остальное —
-    // владельческий жизненный цикл (/admin/bookings/:id/<action>).
-    const url = action === 'cancel' ? '/bookings/'+b.id+'/cancel' : '/admin/bookings/'+b.id+'/'+action;
-    try{
-      await api('POST', url, null, b.studioId);
-      haptic('medium');
-      renderAdmin();
-    } catch(e){
-      row.querySelectorAll('button').forEach(x=>{ x.disabled=false; });
-      notifyError(e.message);
-    }
-  }
-
-  function renderBookingCard(b, onCancelClick, isAdmin){
+  function renderBookingCard(b, onCancelClick){
     const card=document.createElement('div');
     card.className='booking-card';
     card.dataset.status=b.status;
@@ -4651,41 +4523,25 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         <div class="booking-status" data-status="${esc(b.status)}">${esc(BK_ST[b.status] || b.status)}</div>
       </div>
       ${b.studioName ? '<div class="booking-studio">'+esc(b.studioName)+(b.studioCity ? ' · '+esc(b.studioCity) : '')+'</div>' : ''}
-      ${isAdmin ? '<div class="admin-booking-owner">'+esc(b.name || 'Без имени')+'</div>' : ''}
       <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} ${CUR}</div>
     `;
     const row=document.createElement('div');
     row.className='booking-card-actions';
-    if(isAdmin){
-      // Владельцу — жизненный цикл (confirm/decline/complete/no-show/cancel),
-      // как в браузерном кабинете. Ни «Повторить» (создало бы бронь от имени
-      // владельца), ни «Перенести» (в браузерном кабинете этого действия
-      // тоже нет — если понадобится отдельно, это осознанное решение, не
-      // случайный лишний пункт) тут не показываем.
-      (OWNER_LIFECYCLE[b.status] || []).forEach(a=>{
-        const btn=document.createElement('button');
-        btn.className=a.cls;
-        btn.textContent=a.label;
-        btn.addEventListener('click', ()=>ownerBookingAction(b, a.action, row));
-        row.appendChild(btn);
-      });
-    } else {
-      const rep=document.createElement('button');
-      rep.className='booking-move-btn';
-      rep.textContent='Повторить';
-      rep.addEventListener('click', ()=>repeatBooking(b));
-      row.appendChild(rep);
-      if(BK_CANCELABLE.has(b.status)){
-        const rs=document.createElement('button');
-        rs.className='booking-move-btn';
-        rs.textContent='Перенести';
-        rs.addEventListener('click', ()=>openReschedule(b));
-        const btn=document.createElement('button');
-        btn.className='booking-cancel-btn';
-        btn.textContent='Отменить';
-        btn.addEventListener('click', onCancelClick);
-        row.appendChild(rs); row.appendChild(btn);
-      }
+    const rep=document.createElement('button');
+    rep.className='booking-move-btn';
+    rep.textContent='Повторить';
+    rep.addEventListener('click', ()=>repeatBooking(b));
+    row.appendChild(rep);
+    if(BK_CANCELABLE.has(b.status)){
+      const rs=document.createElement('button');
+      rs.className='booking-move-btn';
+      rs.textContent='Перенести';
+      rs.addEventListener('click', ()=>openReschedule(b));
+      const btn=document.createElement('button');
+      btn.className='booking-cancel-btn';
+      btn.textContent='Отменить';
+      btn.addEventListener('click', onCancelClick);
+      row.appendChild(rs); row.appendChild(btn);
     }
     card.appendChild(row);
     return card;
@@ -4706,7 +4562,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       return;
     }
     list.forEach(b=>{
-      bookingsList.appendChild(renderBookingCard(b, ()=>openCancelConfirm(b), false));
+      bookingsList.appendChild(renderBookingCard(b, ()=>openCancelConfirm(b)));
     });
   }
 
@@ -5120,8 +4976,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         alert('Бронь перенесена. По правилам студии такой перенос платный — студия свяжется по доплате.');
       }
       if(bookingsView.dataset.visible==='true') renderBookings();
-      if(adminView.dataset.visible==='true') renderAdmin();
-      refreshGrid();
+        refreshGrid();
     }catch(e){
       err.textContent = e.message || 'Не удалось перенести';
       // Время могли занять, пока панель была открыта — перечитываем занятость.
@@ -5162,403 +5017,21 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       console.warn(e.message);
     }
     if(bookingsView.dataset.visible==='true') renderBookings();
-    if(adminView.dataset.visible==='true') renderAdmin();
     // Освободившийся слот должен пропасть с сетки сразу, а не после
     // переключения дня туда-обратно.
     refreshGrid();
   });
 
-  // ---- Кабинет владельца ----
-  const adminView=document.getElementById('adminView');
-  const clearHistoryPanel=document.getElementById('clearHistoryPanel');
-  let lastAdminBookings=[]; // для проверки «есть ли что чистить» на кнопке очистки
-
-  async function renderAdmin(){
-    const list=document.getElementById('adminBookingsList');
-    list.innerHTML='<div class="bookings-empty">Загрузка…</div>';
-    document.getElementById('clearHistoryBtn').disabled=true;
-
-    let overview;
-    try{
-      overview = await api('GET', '/admin/overview');
-    } catch(e){
-      list.innerHTML='<div class="bookings-empty">'+esc(e.message)+'</div>';
-      // Кнопку надо вернуть в работу: её выключили перед загрузкой, и на этой
-      // ветке выхода она оставалась мёртвой до перезагрузки страницы.
-      document.getElementById('clearHistoryBtn').disabled=false;
-      document.getElementById('statCount').textContent='—';
-      document.getElementById('statRevenue').textContent='—';
-      document.getElementById('statAvg').textContent='—';
-      document.getElementById('statOccupancy').textContent='—';
-      document.getElementById('eqChart').innerHTML='';
-      return;
-    }
-
-    const all=overview.bookings;
-    lastAdminBookings=all;
-    const active=all.filter(b=>['pending','confirmed','completed'].includes(b.status));
-
-    document.getElementById('statCount').textContent=overview.stats.count;
-    document.getElementById('statRevenue').textContent=overview.stats.revenue;
-    document.getElementById('statAvg').textContent=overview.stats.avgCheck;
-
-    // Именно «сегодня + 7 дней», а не state.dates.slice(0,7) — то окно
-    // сдвигается слайдером месяцев на клиентской сетке дат и не должно
-    // влиять на статистику владельца («Занятость за 7 дней» всегда от
-    // реального сегодня, bookedHoursWeek ниже тоже считает от Date.now()).
-    const totalSlotsWeek=buildDatesFrom(businessToday(), 7)
-      .reduce((sum,d)=>{ const w=dayWindow(d); return sum + dayOpenHours(w); }, 0);
-    const bookedHoursWeek=active.filter(b=>{
-      const diffDays=Math.floor((Date.now()-new Date(b.date+'T00:00:00').getTime())/86400000);
-      return diffDays>=0 && diffDays<7;
-    }).reduce((sum,b)=>sum+(b.end-b.start),0);
-    document.getElementById('statOccupancy').textContent=
-      (totalSlotsWeek ? Math.round(bookedHoursWeek/totalSlotsWeek*100) : 0)+'%';
-
-    const chart=document.getElementById('eqChart');
-    chart.innerHTML='';
-    const dayRevenues=[];
-    for(let i=6;i>=0;i--){
-      const day=new Date();
-      day.setDate(day.getDate()-i);
-      const dayKeyStr=day.toDateString();
-      const dayRevenue=active.filter(b=>new Date(b.date+'T00:00:00').toDateString()===dayKeyStr)
-        .reduce((sum,b)=>sum+b.price,0);
-      dayRevenues.push({day,dayRevenue});
-    }
-    const maxRevenue=Math.max(1, ...dayRevenues.map(d=>d.dayRevenue));
-    dayRevenues.forEach(({day,dayRevenue})=>{
-      const wrap=document.createElement('div');
-      wrap.className='eq-bar-wrap';
-      const pct=dayRevenue>0 ? Math.max(6, Math.round(dayRevenue/maxRevenue*100)) : 2;
-      wrap.innerHTML=`<div class="eq-bar" style="height:${pct}%"></div><div class="eq-label">${DAY_NAMES[day.getDay()]}</div>`;
-      chart.appendChild(wrap);
-    });
-
-    (overview.halls || []).forEach(h => { allHallsById[h.id] = h; });
-    hallsDraft = (overview.halls || []).filter(h => h.active !== false)
-      .map(h => ({id:h.id, name:h.name, capacity:h.capacity, rate:h.rate}));
-    renderHallsEditor();
-    equipDraft = (overview.equipment || []).filter(e => e.active !== false)
-      .map(e => ({id:e.id, name:e.name, price:e.price, unit:e.unit}));
-    renderEquipEditor();
-
-    hoursDraft = WEEK_HOURS.map(copyDay);
-    document.getElementById('weekAllStart').value = hoursDraft[1].start;
-    document.getElementById('weekAllEnd').value = hoursDraft[1].end;
-    renderHoursEditor();
-
-    ownerMe = overview.me || null;
-    ownersDraft = (overview.owners || []).slice();
-    document.getElementById('newOwnerId').value='';
-    renderOwnersEditor();
-
-    list.innerHTML='';
-    if(all.length===0){
-      list.innerHTML='<div class="bookings-empty">История броней пуста.</div>';
-    } else {
-      all.forEach(b=>{
-        list.appendChild(renderBookingCard(b, ()=>openCancelConfirm(b), true));
-      });
-    }
-
-    document.getElementById('clearHistoryBtn').disabled = !all.some(isPastBooking);
-  }
-
+  // Шестерёнка ведёт в браузерный кабинет владельца. Прежний экран «Кабинет
+  // владельца» внутри мини-аппа остался со времён единственной студии: его
+  // «Сохранить пространства» стирал тип, описание и адрес зала, а владельцев и
+  // выручку он больше не получал. Всё это теперь живёт только в кабинете.
   document.getElementById('ownerBtn').addEventListener('click', ()=>{
     haptic('light');
-    document.getElementById('mainView').dataset.hidden='true';
-    document.getElementById('summaryBar').style.display='none';
-    adminView.dataset.visible='true';
-    renderAdmin();
+    const url = 'https://app.poont.space/studio.html?id=' + encodeURIComponent(TENANT_ID || '');
+    if(tg && typeof tg.openLink === 'function') tg.openLink(url);
+    else window.open(url, '_blank', 'noopener');
   });
-  document.getElementById('adminBackBtn').addEventListener('click', ()=>{
-    adminView.dataset.visible='false';
-    document.getElementById('mainView').dataset.hidden='false';
-    document.getElementById('summaryBar').style.display='flex';
-  });
-
-  // ---- Залы (кабинет) ----
-  let hallsDraft = [];
-
-  function renderHallsEditor(){
-    const c=document.getElementById('hallsEditor'); c.innerHTML='';
-    hallsDraft.forEach((h,i)=>{
-      const row=document.createElement('div'); row.className='price-row';
-      row.innerHTML=`
-        <div style="flex:1 1 100%;min-width:0">
-          <input class="hall-name-input" type="text" placeholder="Название пространства" value="${esc(h.name)}" data-idx="${i}" data-field="name">
-        </div>
-        <div class="price-input-wrap">
-          <input type="number" min="1" step="1" value="${esc(h.capacity)}" data-idx="${i}" data-field="capacity" aria-label="Вместимость">
-          <span class="price-unit">чел</span>
-        </div>
-        <div class="price-input-wrap">
-          <input type="number" min="0" step="1" value="${esc(h.rate)}" data-idx="${i}" data-field="rate" aria-label="Ставка">
-          <span class="price-unit cur-label-h">BYN/ч</span>
-        </div>
-        ${hallsDraft.length>1 ? `<button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Удалить пространство">✕</button>` : ''}
-      `;
-      c.appendChild(row);
-    });
-    c.querySelectorAll('input[data-field]').forEach(inp=>{
-      inp.addEventListener('input', ()=>{
-        const h=hallsDraft[Number(inp.dataset.idx)], f=inp.dataset.field;
-        h[f] = f==='name' ? inp.value : (f==='capacity' ? parseInt(inp.value,10) : parseFloat(inp.value));
-      });
-    });
-    c.querySelectorAll('.tier-delete-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{ hallsDraft.splice(Number(btn.dataset.idx),1); renderHallsEditor(); });
-    });
-  }
-
-  document.getElementById('addHallBtn').addEventListener('click', ()=>{
-    hallsDraft.push({name:'', capacity:10, rate:30});
-    renderHallsEditor(); haptic('light');
-  });
-
-  function validateHallsDraft(){
-    if(hallsDraft.length<1) return 'Нужно хотя бы одно пространство';
-    for(const h of hallsDraft){
-      if(!h.name || !h.name.trim()) return 'У каждого пространства должно быть название';
-      if(!Number.isInteger(h.capacity) || h.capacity<1) return 'Вместимость — целое число от 1';
-      if(typeof h.rate!=='number' || isNaN(h.rate) || h.rate<0) return 'Ставка — число не меньше нуля';
-    }
-    return null;
-  }
-
-  document.getElementById('saveHallsBtn').addEventListener('click', async ()=>{
-    const note=document.getElementById('hallsSaveNote');
-    const err=validateHallsDraft();
-    if(err){ note.style.color='var(--red)'; note.textContent=err; return; }
-    try{
-      const updated = await api('PUT','/admin/halls',
-        hallsDraft.map(h=>({id:h.id, name:h.name.trim(), capacity:h.capacity, rate:h.rate})));
-      updated.forEach(h=>{ allHallsById[h.id]=h; });
-      HALLS = updated.filter(h=>h.active!==false);
-      if(!HALLS.some(h=>h.id===state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
-      hallsDraft = HALLS.map(h=>({id:h.id,name:h.name,capacity:h.capacity,rate:h.rate}));
-      renderHallsEditor();
-      haptic('medium'); note.style.color='var(--accent)'; note.textContent='Пространства обновлены';
-    } catch(e){ note.style.color='var(--red)'; note.textContent=e.message; }
-    setTimeout(()=>{ note.textContent=''; }, 2500);
-  });
-
-  // ---- Оборудование (кабинет) ----
-  let equipDraft = [];
-
-  function renderEquipEditor(){
-    const c=document.getElementById('equipEditor'); c.innerHTML='';
-    equipDraft.forEach((e,i)=>{
-      const row=document.createElement('div'); row.className='price-row';
-      row.innerHTML=`
-        <div style="flex:1 1 100%;min-width:0">
-          <input class="hall-name-input" type="text" placeholder="Название" value="${esc(e.name)}" data-idx="${i}" data-field="name">
-        </div>
-        <div class="price-input-wrap">
-          <input type="number" min="0" step="1" value="${esc(e.price)}" data-idx="${i}" data-field="price" aria-label="Цена">
-          <span class="price-unit cur-label">BYN</span>
-        </div>
-        <select class="equip-unit-sel" data-idx="${i}" data-field="unit">
-          <option value="flat"${e.unit==='flat'?' selected':''}>за бронь</option>
-          <option value="hour"${e.unit==='hour'?' selected':''}>за час</option>
-        </select>
-        <button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Удалить">✕</button>
-      `;
-      c.appendChild(row);
-    });
-    c.querySelectorAll('input[data-field], select[data-field]').forEach(inp=>{
-      inp.addEventListener('input', ()=>{
-        const e=equipDraft[Number(inp.dataset.idx)], f=inp.dataset.field;
-        e[f] = f==='price' ? parseFloat(inp.value) : inp.value;
-      });
-    });
-    c.querySelectorAll('.tier-delete-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{ equipDraft.splice(Number(btn.dataset.idx),1); renderEquipEditor(); });
-    });
-  }
-
-  document.getElementById('addEquipBtn').addEventListener('click', ()=>{
-    equipDraft.push({name:'', price:10, unit:'flat'});
-    renderEquipEditor(); haptic('light');
-  });
-
-  function validateEquipDraft(){
-    for(const e of equipDraft){
-      if(!e.name || !e.name.trim()) return 'У каждой позиции должно быть название';
-      if(typeof e.price!=='number' || isNaN(e.price) || e.price<0) return 'Цена — число не меньше нуля';
-      if(e.unit!=='flat' && e.unit!=='hour') return 'Единица — «за бронь» или «за час»';
-    }
-    return null;
-  }
-
-  document.getElementById('saveEquipBtn').addEventListener('click', async ()=>{
-    const note=document.getElementById('equipSaveNote');
-    const err=validateEquipDraft();
-    if(err){ note.style.color='var(--red)'; note.textContent=err; return; }
-    try{
-      const updated = await api('PUT','/admin/equipment',
-        equipDraft.map(e=>({id:e.id, name:e.name.trim(), price:e.price, unit:e.unit})));
-      EQUIPMENT = updated.filter(e=>e.active!==false);
-      state.equipment = state.equipment.filter(id=>EQUIPMENT.some(e=>e.id===id));
-      equipDraft = EQUIPMENT.map(e=>({id:e.id,name:e.name,price:e.price,unit:e.unit}));
-      renderEquipEditor();
-      haptic('medium'); note.style.color='var(--accent)'; note.textContent='Оборудование обновлено';
-    } catch(e){ note.style.color='var(--red)'; note.textContent=e.message; }
-    setTimeout(()=>{ note.textContent=''; }, 2500);
-  });
-
-  // ---- Часы работы по дням недели ----
-  // hoursDraft — 7 x {start,end}, индекс = Date.getDay() (0 = Вс). В редакторе
-  // выводим с понедельника.
-  const WEEKDAY_ORDER = [1,2,3,4,5,6,0];
-  const WEEKDAY_LABELS = {0:'Вс',1:'Пн',2:'Вт',3:'Ср',4:'Чт',5:'Пт',6:'Сб'};
-  let hoursDraft = [];
-
-  function renderHoursEditor(){
-    const container=document.getElementById('hoursEditor');
-    container.innerHTML='';
-    WEEKDAY_ORDER.forEach(dow=>{
-      const d=hoursDraft[dow];
-      const row=document.createElement('div');
-      row.className='price-row';
-      row.innerHTML=`
-        <div class="price-row-label">${WEEKDAY_LABELS[dow]}</div>
-        <div class="price-input-wrap">
-          <input type="number" min="0" max="24" step="1" value="${d.start}" data-dow="${dow}" data-field="start">
-          <span class="price-unit">–</span>
-          <input type="number" min="0" max="24" step="1" value="${d.end}" data-dow="${dow}" data-field="end">
-          <span class="price-unit">ч</span>
-        </div>
-      `;
-      container.appendChild(row);
-    });
-    container.querySelectorAll('input[data-field]').forEach(inp=>{
-      inp.addEventListener('input', ()=>{
-        hoursDraft[Number(inp.dataset.dow)][inp.dataset.field] = parseInt(inp.value,10);
-      });
-    });
-  }
-
-  document.getElementById('applyWeekAllBtn').addEventListener('click', ()=>{
-    const s=parseInt(document.getElementById('weekAllStart').value,10);
-    const e=parseInt(document.getElementById('weekAllEnd').value,10);
-    if(!Number.isInteger(s) || !Number.isInteger(e)) return;
-    for(let i=0;i<7;i++) hoursDraft[i]={start:s, end:e};   // «на все дни» сбрасывает и перерывы
-    renderHoursEditor();
-    haptic('light');
-  });
-
-  function validateHoursDraft(){
-    if(!Array.isArray(hoursDraft) || hoursDraft.length!==7) return 'Часы заданы не для всех дней';
-    for(const d of hoursDraft){
-      if(!Number.isInteger(d.start) || !Number.isInteger(d.end)) return 'Часы должны быть целыми числами';
-      if(d.start===0 && d.end===0) continue;   // выходной (задаётся в кабинете)
-      if(d.start<0 || d.end>24 || d.start>=d.end) return 'Открытие должно быть раньше закрытия, в пределах 0–24';
-    }
-    return null;
-  }
-
-  document.getElementById('saveHoursBtn').addEventListener('click', async ()=>{
-    const note=document.getElementById('hoursSaveNote');
-    const err=validateHoursDraft();
-    if(err){ note.style.color='var(--red)'; note.textContent=err; return; }
-    try{
-      const updated = await api('PUT', '/admin/hours', hoursDraft);
-      WEEK_HOURS = updated.map(copyDay);
-      hoursDraft = WEEK_HOURS.map(copyDay);
-      renderHoursEditor();
-      clearSelection();
-      renderAll();
-      refreshGrid();
-      haptic('medium');
-      note.style.color='var(--accent)';
-      note.textContent='Часы работы обновлены';
-    } catch(e){
-      note.style.color='var(--red)';
-      note.textContent=e.message;
-    }
-    setTimeout(()=>{ note.textContent=''; }, 2500);
-  });
-
-  // ---- Владельцы ----
-  // ownersDraft — массив строк-ID; ownerMe — ID текущего пользователя (себя убрать нельзя).
-  let ownersDraft = [];
-  let ownerMe = null;
-
-  function renderOwnersEditor(){
-    const container=document.getElementById('ownersEditor');
-    container.innerHTML='';
-    ownersDraft.forEach((id, i)=>{
-      const row=document.createElement('div');
-      row.className='owner-row';
-      const isMe = id===ownerMe;
-      row.innerHTML =
-        `<span>${esc(id)}${isMe ? '<span class="owner-you">вы</span>' : ''}</span>` +
-        (isMe ? '' : `<button class="tier-delete-btn" type="button" data-idx="${i}" aria-label="Убрать владельца">✕</button>`);
-      container.appendChild(row);
-    });
-    container.querySelectorAll('.tier-delete-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        ownersDraft.splice(Number(btn.dataset.idx), 1);
-        renderOwnersEditor();
-        haptic('light');
-      });
-    });
-  }
-
-  document.getElementById('addOwnerBtn').addEventListener('click', ()=>{
-    const inp=document.getElementById('newOwnerId');
-    const note=document.getElementById('ownersSaveNote');
-    const id=inp.value.trim();
-    if(!/^\d{3,}$/.test(id)){ note.style.color='var(--red)'; note.textContent='ID — это число (узнать: @userinfobot)'; return; }
-    if(ownersDraft.includes(id)){ note.style.color='var(--red)'; note.textContent='Этот ID уже в списке'; return; }
-    ownersDraft.push(id);
-    inp.value='';
-    note.textContent='';
-    renderOwnersEditor();
-    haptic('light');
-  });
-
-  document.getElementById('saveOwnersBtn').addEventListener('click', async ()=>{
-    const note=document.getElementById('ownersSaveNote');
-    if(ownersDraft.length===0){ note.style.color='var(--red)'; note.textContent='Нужен хотя бы один владелец'; return; }
-    if(ownerMe && !ownersDraft.includes(ownerMe)){ note.style.color='var(--red)'; note.textContent='Нельзя убрать себя из владельцев'; return; }
-    try{
-      const updated = await api('PUT', '/admin/owners', ownersDraft);
-      ownersDraft = (updated.owners || []).slice();
-      renderOwnersEditor();
-      haptic('medium');
-      note.style.color='var(--accent)';
-      note.textContent='Список владельцев обновлён';
-    } catch(e){
-      note.style.color='var(--red)';
-      note.textContent=e.message;
-    }
-    setTimeout(()=>{ note.textContent=''; }, 2500);
-  });
-
-  document.getElementById('clearHistoryBtn').addEventListener('click', ()=>{
-    if(!lastAdminBookings.some(isPastBooking)) return;
-    overlay.dataset.open='true';
-    clearHistoryPanel.dataset.open='true';
-  });
-  function closeClearHistory(){
-    overlay.dataset.open='false';
-    clearHistoryPanel.dataset.open='false';
-  }
-  document.getElementById('clearHistoryDismissBtn').addEventListener('click', closeClearHistory);
-  document.getElementById('clearHistoryConfirmBtn').addEventListener('click', async ()=>{
-    closeClearHistory();
-    try{
-      await api('POST', '/admin/clear-history');
-      haptic('heavy');
-    } catch(e){
-      console.warn(e.message);
-    }
-    renderAdmin();
-  });
-  overlay.addEventListener('click', closeClearHistory);
 
   // Роль приходит в /me вместе с контактами — отдельный запрос не нужен.
   // Раньше здесь дёргался /admin/overview: выгрузка всех броней студии ради
@@ -6152,7 +5625,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
   function backToCatalog(){
     document.getElementById('bookingsView').dataset.visible='false';
-    document.getElementById('adminView').dataset.visible='false';
     document.getElementById('successView').dataset.visible='false';
     showCatalog();   // каталог сохраняет выбранный город и список — возвращаемся как было
   }
