@@ -1769,6 +1769,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
     <div class="panel-summary-hint" id="psBreak" hidden></div>
     <div class="panel-summary-hint" id="psPolicy" hidden></div>
+    <div class="panel-summary-hint" id="psPay">Оплата — напрямую студии. Платформа платежи не принимает.</div>
   </div>
   <div class="field">
     <label for="nameInput">Имя</label>
@@ -4334,7 +4335,8 @@ var PF = (function(){
         `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`+
         (equipLine ? `${esc(equipLine)}<br>` : '')+
         `${esc(nameInput.value.trim())} · ${esc(phoneInput.value.trim())}<br>`+
-        `Итого: ${esc(booking.price)} ${CUR}`;
+        `Итого: ${esc(booking.price)} ${CUR}<br>`+
+        `<span style="color:var(--text-2)">Оплата — напрямую студии.</span>`;
 
       const tgNote = document.getElementById('successTgNote');
       tgNote.hidden = !noTg;
@@ -5088,10 +5090,10 @@ var PF = (function(){
   function policyLines(cfg){
     const pol = policyOf(cfg).slice().sort((a, b) => b.hoursBefore - a.hoursBefore);
     const when = (t, i) => i === pol.length - 1 ? (pol.length > 1 ? 'позже' : 'в любое время') : 'за ' + t.hoursBefore + ' ч и раньше';
-    const cancel = pol.map((t, i) => when(t, i) + ' — ' + (t.refundPct >= 100 ? 'бесплатно' : 'удержим ' + (100 - t.refundPct) + '% стоимости')).join('; ');
+    const cancel = pol.map((t, i) => when(t, i) + ' — ' + (t.refundPct >= 100 ? 'бесплатно' : 'студия вправе потребовать ' + (100 - t.refundPct) + '% стоимости')).join('; ');
     const paidMove = pol.map((t, i) => ({ t, i })).filter(x => !x.t.rescheduleFree);
-    const move = paidMove.length ? 'Перенос ' + paidMove.map(x => when(x.t, x.i)).join(', ') + ' — платный (' + (Number.isInteger(cfg.rescheduleFeePct) ? cfg.rescheduleFeePct : 25) + '% стоимости).' : 'Перенос бесплатный.';
-    return 'Отмена: ' + cancel + '. ' + move;
+    const move = paidMove.length ? 'Перенос ' + paidMove.map(x => when(x.t, x.i)).join(', ') + ' — платный (студия вправе потребовать ' + (Number.isInteger(cfg.rescheduleFeePct) ? cfg.rescheduleFeePct : 25) + '% стоимости).' : 'Перенос бесплатный.';
+    return 'Условия отмены студии: ' + cancel + '. ' + move;
   }
   // Что будет при отмене брони b прямо сейчас.
   function cancelTermsHtml(b, cfg){
@@ -5102,8 +5104,8 @@ var PF = (function(){
     if(tier.refundPct >= 100) return 'Отмена бесплатная: место освободится.';
     const fee = feeOf(b.price, 100 - tier.refundPct);
     return (hrs < 0 ? 'Бронь уже началась. ' : 'До начала ' + hoursWord(hrs) + '. ') +
-      'По правилам студии такая отмена платная: удержим <b>' + esc(gpMoney(fee)) + ' ' + esc(cur) + '</b> (' + (100 - tier.refundPct) + '% стоимости). ' +
-      'Сумма запишется за вами — студия свяжется для расчёта.';
+      'По условиям студии за такую отмену она вправе потребовать <b>' + esc(gpMoney(fee)) + ' ' + esc(cur) + '</b> (' + (100 - tier.refundPct) + '% стоимости). ' +
+      'Решение и расчёт — за студией, она свяжется с вами. Платформа денег не принимает.';
   }
 
   const RS = {
@@ -5321,8 +5323,8 @@ var PF = (function(){
             + (Math.abs(np - was) > 0.004 ? '(сейчас ' + esc(gpMoney(was)) + ')' : '') + '</span>' : '')
         + (RS.fee ? (RS.fee.free
             ? '<span class="rs-fee" data-warn="false">Перенос бесплатный.</span>'
-            : '<span class="rs-fee" data-warn="true">Перенос платный: удержим ' + esc(gpMoney(RS.fee.amount)) + ' ' + esc(cur)
-              + ' (' + RS.fee.pct + '% стоимости) — запишем за вами, студия свяжется для расчёта.</span>') : '');
+            : '<span class="rs-fee" data-warn="true">Перенос платный по условиям студии: она вправе потребовать ' + esc(gpMoney(RS.fee.amount)) + ' ' + esc(cur)
+              + ' (' + RS.fee.pct + '% стоимости). Расчёт — напрямую со студией.</span>') : '');
       btn.disabled = false;
     } else {
       box.dataset.state = '';
