@@ -2390,9 +2390,11 @@ var PF = (function(){
     throw new Error(message);
   }
 
+  // Черновик и приостановленная студия отдают конфиг только своей команде — поэтому
+  // запрос идёт с авторизацией, если она есть (у остальных — 404, как у несуществующей).
   function loadTenantConfig(tenantId){
-    return fetch(API_BASE + '/api/t/' + tenantId + '/config').then(r=>{
-      if(!r.ok) throw new Error('Неизвестный tenant: '+tenantId);
+    return fetch(API_BASE + '/api/t/' + tenantId + '/config', { headers: authHeaders() }).then(r=>{
+      if(!r.ok){ const e = new Error('Неизвестный tenant: '+tenantId); e.status = r.status; throw e; }
       return r.json();
     });
   }
@@ -3145,7 +3147,7 @@ var PF = (function(){
       : base + '?hallId=' + encodeURIComponent(gridHall().id) +
         '&from=' + dateKey(state.dates[0]) + '&days=' + state.dates.length;
     try{
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: authHeaders() });
       const data = res.ok ? await res.json() : null;
       if(data && typeof data === 'object' && !Array.isArray(data)) BUSY = data;
     }catch(e){ /* сеть — сетка просто покажется свободной, сервер всё равно проверит */ }
@@ -6139,8 +6141,21 @@ var PF = (function(){
         applyPendingSlot(ps);
       }
     } catch(e){
-      document.getElementById('loadingScreen').textContent =
-        'Не удалось загрузить студию. Проверьте соединение и попробуйте снова.';
+      const ls = document.getElementById('loadingScreen');
+      ls.style.display = 'flex';
+      if(e && e.status === 404){
+        // Нет такой студии или она ещё не опубликована / снята с показа.
+        ls.innerHTML = '<div style="text-align:center;padding:0 24px">Студия не найдена или пока недоступна.' +
+          '<br><button class="btn-primary" id="lsCatalogBtn" type="button" style="margin-top:16px;max-width:220px">К списку студий</button></div>';
+        document.getElementById('lsCatalogBtn').addEventListener('click', ()=>{
+          TENANT_ID = null; cameFromCatalog = false;
+          try{ const u = new URL(location.href); u.searchParams.delete('tenant'); u.searchParams.delete('startapp'); history.replaceState(null, '', u.toString()); }catch(_){}
+          ls.style.display = 'none';
+          boot();
+        });
+      } else {
+        ls.textContent = 'Не удалось загрузить студию. Проверьте соединение и попробуйте снова.';
+      }
     }
   }
 
