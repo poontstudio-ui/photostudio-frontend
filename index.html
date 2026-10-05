@@ -835,6 +835,11 @@ body{
 .rs-sum{font-size:var(--fs-sm);color:var(--text-2);margin:10px 0 14px;min-height:38px;}
 .rs-sum[data-state="ready"]{color:var(--text);}
 .rs-sum b{display:block;font-family:var(--f);font-size:var(--fs-xl);font-weight:700;margin-top:2px;}
+.rs-sum .rs-price{display:block;margin-top:8px;color:var(--text);}
+.rs-sum .rs-price b{display:inline;font-size:var(--fs-lg);margin:0 4px;}
+.rs-sum .rs-fee{display:block;margin-top:6px;line-height:1.45;}
+.rs-sum .rs-fee[data-warn="true"]{color:var(--amber);}
+.rs-sum .rs-fee[data-warn="false"]{color:var(--green);}
 .cancel-panel-text{
   font-size:var(--fs-sm);
   color:var(--text-2);
@@ -1763,6 +1768,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="panel-summary-hint" id="psShoot" hidden></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
     <div class="panel-summary-hint" id="psBreak" hidden></div>
+    <div class="panel-summary-hint" id="psPolicy" hidden></div>
   </div>
   <div class="field">
     <label for="nameInput">Имя</label>
@@ -1837,6 +1843,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 <div class="panel" id="cancelPanel">
   <div class="panel-title">Отменить бронь?</div>
   <div class="cancel-panel-text" id="cancelPanelText"></div>
+  <div class="save-note" id="cancelError" style="color:var(--red)"></div>
   <button class="btn-primary" style="background:var(--red);color:#fff" id="cancelConfirmBtn">Да, отменить</button>
   <button class="btn-ghost" id="cancelDismissBtn">Оставить бронь</button>
 </div>
@@ -2497,6 +2504,7 @@ var PF = (function(){
     return on.join(' · ');
   }
   let STUDIO_NAME = '';
+  let STUDIO_CFG = null;     // конфиг студии целиком: из него условия отмены и переноса в окне брони
   let STUDIO_LAT = null, STUDIO_LON = null, STUDIO_ADDRESS = '';  // координаты студии для карты
   let STUDIO_GO_REF = '';                                         // партнёрский ref для ссылок Яндекс Go
   let _studioMapDrawn = false;                                    // карта студии уже отрисована
@@ -2533,6 +2541,7 @@ var PF = (function(){
     STUDIO_LON = Number.isFinite(cfg.lon) ? cfg.lon : null;
     STUDIO_ADDRESS = cfg.address || '';
     STUDIO_NAME = cfg.name || '';
+    STUDIO_CFG = cfg;
     PF.setStudio(cfg.country);   // телефон по умолчанию — страны студии
     STUDIO_GO_REF = typeof cfg.yandexGoRef === 'string' ? cfg.yandexGoRef : '';
     // Ключ карт приходит здесь же — отдельный запрос /api/config в ветке
@@ -4095,6 +4104,8 @@ var PF = (function(){
     document.getElementById('psTime').textContent =
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${durationLabel()}`;
     setShootingHint(endMinutes);
+    const pol = document.getElementById('psPolicy');
+    if(pol){ pol.hidden = !STUDIO_CFG; pol.textContent = STUDIO_CFG ? policyLines(STUDIO_CFG) : ''; }
     renderPeople();   // вместимость зависит от пространства — обновляем при открытии
     document.getElementById('psPrice').textContent = `${priceLabel()} ${CUR}`;
     overlay.dataset.open='true';
@@ -5032,8 +5043,71 @@ var PF = (function(){
   // Отдельная от главной сетки: бронь может быть в ДРУГОЙ студии («Мои брони»
   // показывают брони всех студий), поэтому часы работы, шаг и занятость
   // грузим по её tenant, а не берём из текущего STUDIO_*.
+  // ---- Условия отмены и переноса по правилам студии (зеркало lib/rules.js) ----
+  // Конфиг студии нужен и для чужих броней из «Мои брони»: у каждой студии свои
+  // политика, таймзона и валюта.
+  const TENANT_CFG = {};
+  function tenantCfg(id){
+    return TENANT_CFG[id] ? Promise.resolve(TENANT_CFG[id])
+      : loadTenantConfig(id).then(c => { TENANT_CFG[id] = c; return c; });
+  }
+  function clockIn(tz){
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, hourCycle:'h23', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit',
+    }).formatToParts(new Date());
+    const g = t => parts.find(p => p.type === t).value;
+    return { date:`${g('year')}-${g('month')}-${g('day')}`, minutes:Number(g('hour'))*60 + Number(g('minute')) };
+  }
+  // Часов до начала в таймзоне студии (отрицательное — уже началась).
+  function hoursUntilIn(tz, dateStr, startMin){
+    const now = clockIn(tz);
+    const dd = Math.round((Date.parse(String(dateStr).slice(0,10) + 'T00:00:00Z') - Date.parse(now.date + 'T00:00:00Z')) / 86400000);
+    return dd * 24 + (startMin - now.minutes) / 60;
+  }
+  const DEFAULT_CANCEL_POLICY = [
+    { hoursBefore:24, refundPct:100, rescheduleFree:true },
+    { hoursBefore:0, refundPct:50, rescheduleFree:false },
+  ];
+  function policyOf(cfg){ return Array.isArray(cfg && cfg.cancelPolicy) && cfg.cancelPolicy.length ? cfg.cancelPolicy : DEFAULT_CANCEL_POLICY; }
+  function refundTierOf(policy, hrs){
+    const sorted = policy.slice().sort((a, b) => b.hoursBefore - a.hoursBefore);
+    for(const t of sorted) if(hrs >= t.hoursBefore) return t;
+    return sorted[sorted.length - 1];
+  }
+  function feeOf(price, pct){
+    const p = Number(price), k = Number(pct);
+    if(!(p > 0) || !(k > 0)) return 0;
+    return +(p * Math.min(k, 100) / 100).toFixed(2);
+  }
+  function hoursWord(h){
+    if(h < 1) return 'меньше часа';
+    const n = Math.floor(h);
+    return n < 48 ? n + ' ч' : Math.floor(n / 24) + ' дн.';
+  }
+  // Условия отмены и переноса словами — для окна подтверждения брони.
+  function policyLines(cfg){
+    const pol = policyOf(cfg).slice().sort((a, b) => b.hoursBefore - a.hoursBefore);
+    const when = (t, i) => i === pol.length - 1 ? (pol.length > 1 ? 'позже' : 'в любое время') : 'за ' + t.hoursBefore + ' ч и раньше';
+    const cancel = pol.map((t, i) => when(t, i) + ' — ' + (t.refundPct >= 100 ? 'бесплатно' : 'удержим ' + (100 - t.refundPct) + '% стоимости')).join('; ');
+    const paidMove = pol.map((t, i) => ({ t, i })).filter(x => !x.t.rescheduleFree);
+    const move = paidMove.length ? 'Перенос ' + paidMove.map(x => when(x.t, x.i)).join(', ') + ' — платный (' + (Number.isInteger(cfg.rescheduleFeePct) ? cfg.rescheduleFeePct : 25) + '% стоимости).' : 'Перенос бесплатный.';
+    return 'Отмена: ' + cancel + '. ' + move;
+  }
+  // Что будет при отмене брони b прямо сейчас.
+  function cancelTermsHtml(b, cfg){
+    if(b.status === 'pending') return 'Заявка ещё не подтверждена — отмена бесплатная.';
+    const cur = cfg.currency || CUR;
+    const hrs = hoursUntilIn(cfg.timezone || 'Europe/Minsk', b.date, b.start);
+    const tier = refundTierOf(policyOf(cfg), hrs);
+    if(tier.refundPct >= 100) return 'Отмена бесплатная: место освободится.';
+    const fee = feeOf(b.price, 100 - tier.refundPct);
+    return (hrs < 0 ? 'Бронь уже началась. ' : 'До начала ' + hoursWord(hrs) + '. ') +
+      'По правилам студии такая отмена платная: удержим <b>' + esc(gpMoney(fee)) + ' ' + esc(cur) + '</b> (' + (100 - tier.refundPct) + '% стоимости). ' +
+      'Сумма запишется за вами — студия свяжется для расчёта.';
+  }
+
   const RS = {
-    booking:null, tenant:null, hall:null,
+    booking:null, tenant:null, hall:null, cfg:null, fee:null,
     tz:'Europe/Minsk', hours:null,
     step:60,                 // шаг сетки = шаг, который примет сервер при переносе
     minBookingMin:60,
@@ -5079,8 +5153,10 @@ var PF = (function(){
   // Минимум брони в этом слоте: правило цены зала может поднять студийный
   // минимум — тот же расчёт, что у сервера (lib/rules.js minDurationFor).
   function rsMinSlots(slot){
-    let minMin = RS.minBookingMin;
-    const rules = (RS.hall && Array.isArray(RS.hall.priceRules)) ? RS.hall.priceRules : [];
+    // Минимум и тарифы — у назначения, под которое оформлена бронь (как считает сервер).
+    const ph = RS.hall ? purposeHall(RS.hall, RS.booking && RS.booking.purpose || null) : null;
+    let minMin = ph && Number.isInteger(ph.purposeMinBookingMin) ? ph.purposeMinBookingMin : RS.minBookingMin;
+    const rules = (ph && Array.isArray(ph.priceRules)) ? ph.priceRules : [];
     if(rules.length){
       const dow = new Date(RS.date + 'T00:00:00').getDay(), sm = slot * RS.step;
       for(const r of rules){
@@ -5200,15 +5276,53 @@ var PF = (function(){
     wrap.innerHTML = html;
     rsRenderSum();
   }
+  // Стоимость брони на новом времени — как считает сервер (тарифы по минутам, гости,
+  // скидка «горящего» окна); у пакета цена не меняется.
+  function rsNewPrice(date, start, end){
+    const b = RS.booking;
+    if(b.packageHours != null) return Number(b.price);
+    const ph = RS.hall ? purposeHall(RS.hall, b.purpose || null) : null;
+    if(!ph) return null;
+    const hours = (end - start) / 60;
+    let total = 0;
+    if(gpRentApplies(ph.guestPricing)){
+      const rules = Array.isArray(ph.priceRules) ? ph.priceRules : [];
+      if(!rules.length) total = ph.rate * hours;
+      else {
+        const dow = new Date(date + 'T00:00:00').getDay();
+        let perMin = 0;
+        for(let m = start; m < end; m++) perMin += minuteRate(ph, rules, dow, m);
+        total = perMin / 60;
+      }
+    }
+    total += gpCharge(ph.guestPricing, b.people || 1, hours);
+    (Array.isArray(b.equipment) ? b.equipment : []).forEach(eq => { total += eq.unit === 'hour' ? eq.price * hours : eq.price; });
+    total = +total.toFixed(2);
+    const lm = RS.cfg && RS.cfg.lastminute;
+    if(lm && lm.enabled){
+      const pct = Math.round(Number(lm.pct)), h = hoursUntilIn(RS.tz, date, start);
+      if(pct >= 1 && pct <= 90 && Number(lm.hours) >= 1 && h >= 0 && h <= Number(lm.hours)) total = +(total * (100 - pct) / 100).toFixed(2);
+    }
+    return total;
+  }
   function rsRenderSum(){
     const box = document.getElementById('rsSum');
     const btn = document.getElementById('rsConfirmBtn');
     if(rsSelValid()){
       const mins = (RS.sel.end - RS.sel.start) * RS.step;
+      const cur = (RS.cfg && RS.cfg.currency) || CUR;
+      const np = rsNewPrice(RS.date, RS.sel.start * RS.step, RS.sel.end * RS.step);
+      const was = Number(RS.booking.price);
       box.dataset.state = 'ready';
       box.innerHTML = 'Новое время<b>' + esc(dateLabelFromISO(RS.date)) + ', '
         + minutesToLabel(RS.sel.start*RS.step) + '–' + minutesToLabel(RS.sel.end*RS.step)
-        + ' · ' + durationLabelOf(mins) + '</b>';
+        + ' · ' + durationLabelOf(mins) + '</b>'
+        + (np != null ? '<span class="rs-price">Стоимость:<b>' + esc(gpMoney(np)) + ' ' + esc(cur) + '</b>'
+            + (Math.abs(np - was) > 0.004 ? '(сейчас ' + esc(gpMoney(was)) + ')' : '') + '</span>' : '')
+        + (RS.fee ? (RS.fee.free
+            ? '<span class="rs-fee" data-warn="false">Перенос бесплатный.</span>'
+            : '<span class="rs-fee" data-warn="true">Перенос платный: удержим ' + esc(gpMoney(RS.fee.amount)) + ' ' + esc(cur)
+              + ' (' + RS.fee.pct + '% стоимости) — запишем за вами, студия свяжется для расчёта.</span>') : '');
       btn.disabled = false;
     } else {
       box.dataset.state = '';
@@ -5268,6 +5382,7 @@ var PF = (function(){
     reschedulePanel.dataset.open = 'true';
     try{
       const cfg = await loadTenantConfig(RS.tenant);
+      RS.cfg = cfg;
       RS.tz = cfg.timezone || 'Europe/Minsk';
       RS.hours = normalizeWeekHours(cfg);
       RS.minBookingMin = Number.isInteger(cfg.minBookingMin) ? cfg.minBookingMin : 60;
@@ -5275,6 +5390,10 @@ var PF = (function(){
       RS.step = RS.minBookingMin === 30 ? 30 : 60;
       RS.hall = (cfg.halls || []).find(h => h.id === booking.hallId) || null;
       if(RS.hall) RS.hours = hallHoursOf(cfg, RS.hall);
+      // Платность переноса определяет, насколько поздно о нём просят (по СТАРОМУ времени).
+      const tier = refundTierOf(policyOf(cfg), hoursUntilIn(RS.tz, booking.date, booking.start));
+      RS.fee = { free: !!tier.rescheduleFree, amount: feeOf(booking.price, Number.isInteger(cfg.rescheduleFeePct) ? cfg.rescheduleFeePct : 25),
+                 pct: Number.isInteger(cfg.rescheduleFeePct) ? cfg.rescheduleFeePct : 25 };
       RS.pkgSlots = booking.packageHours != null
         ? Math.max(1, Math.round(booking.packageHours * 60 / RS.step)) : null;
       // Окно дат — от сегодня (или от месяца брони, если она дальше).
@@ -5317,9 +5436,6 @@ var PF = (function(){
         { date, start, end }, pendingRescheduleTenant);
       haptic('medium');
       closeReschedule();
-      if(res && res.rescheduleFree === false){
-        alert('Бронь перенесена. По правилам студии такой перенос платный — студия свяжется по доплате.');
-      }
       if(bookingsView.dataset.visible==='true') renderBookings();
         refreshGrid();
     }catch(e){
@@ -5333,14 +5449,27 @@ var PF = (function(){
     }
   });
 
-  function openCancelConfirm(booking){
+  async function openCancelConfirm(booking){
     pendingCancelId=booking.id;
     pendingCancelTenant=booking.studioId || null;
-    document.getElementById('cancelPanelText').innerHTML =
-      `<b>${esc(dateLabelFromISO(booking.date))}, ${minutesToLabel(booking.start)}–${minutesToLabel(booking.end)}</b><br>`+
-      `Место освободится, и участники чата студии получат сообщение об отмене.`;
+    const when = `<b>${esc(dateLabelFromISO(booking.date))}, ${minutesToLabel(booking.start)}–${minutesToLabel(booking.end)}</b>`;
+    const box = document.getElementById('cancelPanelText');
+    const confirm = document.getElementById('cancelConfirmBtn');
+    document.getElementById('cancelError').textContent='';
+    box.innerHTML = when + '<br>Считаем условия отмены…';
+    confirm.disabled = true;
     overlay.dataset.open='true';
     cancelPanel.dataset.open='true';
+    let note;
+    try{
+      const cfg = await tenantCfg(booking.studioId || TENANT_ID);
+      note = cancelTermsHtml(booking, cfg);
+    }catch(e){
+      note = 'Не удалось узнать условия отмены — они зависят от времени до начала брони. Отменить всё равно можно.';
+    }
+    if(pendingCancelId !== booking.id) return;   // окно успели закрыть
+    box.innerHTML = when + '<br>' + note;
+    confirm.disabled = false;
   }
   function closeCancelConfirm(){
     overlay.dataset.open='false';
@@ -5354,13 +5483,19 @@ var PF = (function(){
     if(pendingCancelId===null) return;
     const id=pendingCancelId;
     const tenant=pendingCancelTenant;
-    closeCancelConfirm();
+    const btn=document.getElementById('cancelConfirmBtn');
+    btn.disabled=true;
     try{
       await api('POST', '/bookings/'+id+'/cancel', null, tenant);
       haptic('medium');
     } catch(e){
-      console.warn(e.message);
+      // Раньше ошибка молча терялась: окно закрывалось, а бронь оставалась как была.
+      btn.disabled=false;
+      document.getElementById('cancelError').textContent = e.message || 'Не удалось отменить бронь';
+      if(bookingsView.dataset.visible==='true') renderBookings();
+      return;
     }
+    closeCancelConfirm();
     if(bookingsView.dataset.visible==='true') renderBookings();
     // Освободившийся слот должен пропасть с сетки сразу, а не после
     // переключения дня туда-обратно.
