@@ -1512,6 +1512,11 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   margin-bottom:26px;
 }
 .success-detail b{color:var(--text);font-weight:500;}
+/* Клиенту без Telegram: сообщений о брони не будет — говорим сразу и даём привязать. */
+.success-note{max-width:320px;margin:0 auto 20px;padding:12px 14px;border-radius:var(--r-md);background:var(--amber-bg);color:var(--amber);font-size:var(--fs-sm);line-height:1.5;text-align:left;}
+.success-note[hidden]{display:none;}
+.success-links{display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:10px;}
+.success-links[hidden]{display:none;}
 
 .main-view[data-hidden="true"]{display:none;}
 
@@ -1670,7 +1675,12 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     </div>
     <div class="success-title" id="successTitle">Бронь подтверждена</div>
     <div class="success-detail" id="successDetail"></div>
+    <div class="success-note" id="successTgNote" hidden></div>
     <button class="btn-primary" style="max-width:220px" id="bookAnotherBtn">Назад</button>
+    <div class="success-links" id="successLinks" hidden>
+      <button class="btn-ghost" style="max-width:220px" id="successTgBtn" type="button">Привязать Telegram</button>
+      <button class="btn-ghost" style="max-width:220px" id="successMineBtn" type="button">Мои брони</button>
+    </div>
   </div>
 
   <!-- Экран завершения привязки Telegram (Ф2 плана «Телефон вместо Telegram»,
@@ -1756,7 +1766,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   <div class="panel-title">Подтвердите номер</div>
   <div class="save-note" id="verifyHint" style="color:var(--text-2)"></div>
   <div class="field">
-    <label for="verifyCodeInput">Код из Telegram или SMS</label>
+    <label for="verifyCodeInput">Код из Telegram</label>
     <input id="verifyCodeInput" type="tel" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code">
   </div>
   <button class="btn-primary" id="verifySubmitBtn" disabled>Подтвердить</button>
@@ -3976,16 +3986,27 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
       const equipLine = (booking.equipment || []).map(e => e.name).join(', ');
       const isPending = booking.status === 'pending';
+      // Сообщения о решении студии приходят в Telegram; у входившего по телефону
+      // без привязки их не будет — говорим об этом сразу.
+      const noTg = booking.customerTelegramId == null && !(tg && tg.initData);
       document.getElementById('successTitle').textContent =
         isPending ? 'Заявка отправлена' : 'Бронь подтверждена';
       document.getElementById('successDetail').innerHTML =
-        (isPending ? '<span style="color:var(--text-2)">Студия подтвердит бронь в течение суток.</span><br>' : '') +
-        `<b>${esc(currentHall().name)}</b><br>`+
+        (isPending ? '<span style="color:var(--text-2)">Заявка ждёт ответа студии — не дольше суток.</span><br>' : '') +
+        `<b>${esc(currentHall().name)}</b>${booking.purpose && HALL_PURPOSE_RU[booking.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[booking.purpose]) : ''}<br>`+
         `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`+
         (equipLine ? `${esc(equipLine)}<br>` : '')+
         `${esc(nameInput.value.trim())} · ${esc(phoneInput.value.trim())}<br>`+
         `Итого: ${esc(booking.price)} ${CUR}`;
 
+      const tgNote = document.getElementById('successTgNote');
+      tgNote.hidden = !noTg;
+      document.getElementById('successLinks').hidden = !noTg;
+      if(noTg){
+        tgNote.textContent = isPending
+          ? 'Ответ студии сам не придёт: у вас не привязан Telegram. Привяжите его — или смотрите статус в «Моих бронях».'
+          : 'Напоминание и сообщения об отмене сами не придут: у вас не привязан Telegram. Привяжите его, чтобы получать их бесплатно.';
+      }
       closePanel();
       document.getElementById('mainView').dataset.hidden='true';
       document.getElementById('summaryBar').style.display='none';
@@ -4071,7 +4092,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     verifyCodeInput.value='';
     verifyError.textContent='';
     verifySubmitBtn.disabled=true;
-    verifyHint.textContent = 'Код придёт в Telegram или SMS на ' + formatByPhone(toE164Phone());
+    verifyHint.textContent = 'Отправим код в Telegram на ' + formatByPhone(toE164Phone());
     resetResendButton(); // новая сессия входа — не тащим состояние от прошлой попытки/номера
     verifyPanel.dataset.open='true';
     requestVerifyCode()
@@ -4459,9 +4480,9 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   // телефонной Bearer-сессией (authHeaders её уже подставит), получаем
   // t.me-ссылку с одноразовым (10 мин) токеном в startapp и уходим по ней —
   // дальше это уже открывается В Telegram, страница здесь не при чём.
-  if(linkTelegramPromptBtn) linkTelegramPromptBtn.addEventListener('click', async ()=>{
+  async function startTelegramLink(btn){
     haptic('light');
-    linkTelegramPromptBtn.disabled = true;
+    btn.disabled = true;
     try{
       const res = await fetch(API_BASE + '/api/link-telegram/start', {
         method:'POST', headers:{'Content-Type':'application/json', ...authHeaders()},
@@ -4472,8 +4493,15 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     } catch(e){
       alert(e.message); // редкий путь, отдельной панели под это не заводили
     } finally{
-      linkTelegramPromptBtn.disabled = false;
+      btn.disabled = false;
     }
+  }
+  if(linkTelegramPromptBtn) linkTelegramPromptBtn.addEventListener('click', ()=> startTelegramLink(linkTelegramPromptBtn));
+  document.getElementById('successTgBtn').addEventListener('click', ()=> startTelegramLink(document.getElementById('successTgBtn')));
+  // «Мои брони» с экрана успеха: прячем его и открываем список — оттуда видно статус заявки.
+  document.getElementById('successMineBtn').addEventListener('click', ()=>{
+    document.getElementById('successView').dataset.visible='false';
+    openMyBookings('studio');
   });
 
   updateAuthUI();
@@ -4523,7 +4551,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         <div class="booking-status" data-status="${esc(b.status)}">${esc(BK_ST[b.status] || b.status)}</div>
       </div>
       ${b.studioName ? '<div class="booking-studio">'+esc(b.studioName)+(b.studioCity ? ' · '+esc(b.studioCity) : '')+'</div>' : ''}
-      <div class="booking-meta">${esc(hall)} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} ${CUR}</div>
+      <div class="booking-meta">${esc(hall)}${b.purpose && HALL_PURPOSE_RU[b.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[b.purpose]) : ''} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} ${CUR}</div>
     `;
     const row=document.createElement('div');
     row.className='booking-card-actions';
