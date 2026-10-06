@@ -3912,14 +3912,15 @@ var PF = (function(){
     if(HALLS.length <= 1) document.getElementById('gridLabel').textContent = 'Время брони';
   }
 
-  function openHall(id){
+  function openHall(id, purpose){
     openHallId = id;
     // Время по умолчанию не выбрано, а цену и вместимость плашка берёт у
     // state.hallId — без этого до первого тапа по сетке считалось бы по
     // первому пространству студии, а не по открытому.
     state.hallId = id;
     state.packageHours = null;
-    state.purpose = null;   // у другого пространства свой набор целей
+    // у другого пространства свой набор целей; из поиска приходим уже с выбранной
+    state.purpose = purpose || null;
     gridScrollEl.scrollLeft = 0;
     clearSelection();
     applyHallMode();
@@ -4995,9 +4996,6 @@ var PF = (function(){
   function applyPendingSlot(ps){
     const hall = HALLS.find(h => h.id === ps.hallId);
     if(!hall){ return; }
-    if(Number.isInteger(ps.people) && ps.people > 0){
-      state.people = Math.min(ps.people, hall.capacity);
-    }
     // openHall() ниже переводит сетку в режим 'days' ВСЕГДА (свой/чужой зал —
     // не важно), а на экране без прокрутки в нём только первые GRID_DAYS
     // столбцов; openHall к тому же сбрасывает прокрутку сетки в начало. Если
@@ -5007,7 +5005,11 @@ var PF = (function(){
     if(state.dates.slice(0, GRID_DAYS).findIndex(d => dateKey(d) === ps.date) < 0){
       state.dates = buildDatesForMonthWindow(new Date(ps.date + 'T00:00:00'));
     }
-    openHall(hall.id);   // сетка 7 дней по этому пространству — окно дат уже верное
+    // Назначение, под которое поиск нашёл окно: у него своя вместимость, минимум и цена.
+    openHall(hall.id, ps.purpose && purposeOf(hall, ps.purpose) ? ps.purpose : null);   // сетка 7 дней по этому пространству — окно дат уже верное
+    if(Number.isInteger(ps.people) && ps.people > 0){
+      state.people = Math.min(ps.people, pricingHall().capacity);
+    }
     const di = state.dates.findIndex(d => dateKey(d) === ps.date);
     if(di >= 0) state.dateIndex = di;
     const startSlot = Math.round(ps.start / SLOT_MIN);
@@ -6030,6 +6032,7 @@ var PF = (function(){
       if(r.ceilingCm) props.push('потолок ' + (r.ceilingCm/100).toFixed(1).replace('.0','') + ' м');
       if(Number.isInteger(r.floor)) props.push(r.floor<=0 ? 'цокольный этаж' : r.floor + '-й этаж');
       props.push('до ' + r.capacity + ' чел.');
+      if(r.purposeLabel) props.unshift(r.purposeLabel);
       const el = document.createElement('div');
       el.className = 'search-result';
       el.innerHTML =
@@ -6043,15 +6046,15 @@ var PF = (function(){
       el.querySelector('button').addEventListener('click', ()=>{
         haptic('medium');
         chooseStudioWithSlot(r.studioId, r.hallId, date, start, end,
-          Number.isInteger(pplWanted) && pplWanted > 0 ? Math.min(pplWanted, r.capacity) : null);
+          Number.isInteger(pplWanted) && pplWanted > 0 ? Math.min(pplWanted, r.capacity) : null, r.purpose);
       });
       catalogList.appendChild(el);
     });
   }
 
   let pendingSlot = null;   // {hallId, date, start, end, people, fromSearch} — применить после bootStudio
-  function chooseStudioWithSlot(studioId, hallId, date, startMin, endMin, people){
-    pendingSlot = { hallId, date, start: startMin, end: endMin, people: people || null, fromSearch: true };
+  function chooseStudioWithSlot(studioId, hallId, date, startMin, endMin, people, purpose){
+    pendingSlot = { hallId, date, start: startMin, end: endMin, people: people || null, purpose: purpose || null, fromSearch: true };
     chooseStudio(studioId);
   }
 
