@@ -644,6 +644,8 @@ body{
    иначе последняя карточка списка оказывается у неё под низом */
 .catalog-list{padding:14px 20px calc(86px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px;}
 .catalog-empty{color:var(--text-2);font-size:var(--fs-sm);padding:30px 4px;}
+.catalog-links{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:10px;}
+.catalog-links .catalog-mode-toggle{margin-top:0;}
 .catalog-mode-toggle{margin-top:10px;background:none;border:none;color:var(--accent);font-family:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;padding:2px 0;}
 
 /* ---------- Карточка студии в списке каталога ---------- */
@@ -1589,7 +1591,10 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         </div>
       </div>
       <input type="text" id="studioSearch" class="catalog-search" placeholder="Поиск студии по названию" autocomplete="off" spellcheck="false">
-      <button class="catalog-mode-toggle" id="searchModeToggle" type="button">Найти по времени →</button>
+      <div class="catalog-links">
+        <button class="catalog-mode-toggle" id="favFilterBtn" type="button" data-on="false">♥ Избранное</button>
+        <button class="catalog-mode-toggle" id="searchModeToggle" type="button">Найти по времени →</button>
+      </div>
       <div class="time-search" id="timeSearch" hidden>
         <div class="month-row" id="tsMonthRow"></div>
         <div class="date-row" id="tsDateRow"></div>
@@ -4478,6 +4483,7 @@ var PF = (function(){
       if(!res.ok) throw new Error((data && data.error) || 'Неверный код');
       setPhoneToken(data.token);
       updateAuthUI(); // сессия появилась независимо от повода — шапка должна знать сразу, не только при самостоятельном входе
+      favSync();
       haptic('medium');
       hideVerifyStep();
       if(verifyPurpose === 'booking'){
@@ -4618,6 +4624,7 @@ var PF = (function(){
         clearPersistedBotLogin();
         setPhoneToken(data.token);
         updateAuthUI();
+        favSync();
         haptic('medium');
         hideBotLogin();
         hideVerifyStep();
@@ -4799,6 +4806,7 @@ var PF = (function(){
       clearPhoneToken();
       clearBookingDraft();
       updateAuthUI();
+      favForget();
     } else {
       openLoginPanel();
     }
@@ -5676,21 +5684,65 @@ var PF = (function(){
     show();
   }
 
-  // «Избранное»: id студий в localStorage этого устройства. Сердечко в карточке
-  // списка и в быстром просмотре читает и пишет один и тот же набор; избранные
-  // студии идут первыми в списке города (favFirst).
-  const FAV_KEY = 'poont.favStudios';
-  function favLoad(){
-    try{ const a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); return new Set(Array.isArray(a) ? a.map(String) : []); }
-    catch(e){ return new Set(); }
+  // «Избранное» живёт на сервере (GET/PUT/DELETE /api/favorites, привязано к
+  // пользователю — Telegram или вход по телефону), поэтому одинаково на всех его
+  // устройствах. localStorage — только кэш, чтобы сердечки рисовались сразу, и
+  // «гостевой» запас: отметки без входа уезжают на сервер при первом входе.
+  const FAV_KEY = 'poont.favStudios', FAV_GUEST_KEY = 'poont.favGuest';
+  let favSet = new Set();
+  try{ const a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); if(Array.isArray(a)) favSet = new Set(a.map(String)); }catch(e){}
+  function favSave(){ try{ localStorage.setItem(FAV_KEY, JSON.stringify([...favSet])); }catch(e){} }
+  function favAuthed(){ return !!((tg && tg.initData) || getPhoneToken()); }
+  function favHas(id){ return favSet.has(String(id)); }
+  function favApi(method, path){
+    return fetch(API_BASE + '/api/favorites' + (path || ''), { method, headers: authHeaders() });
   }
-  function favHas(id){ return favLoad().has(String(id)); }
+  function favRepaint(){
+    document.querySelectorAll('#catalogList .cat-card').forEach(function(c){
+      const b = c.querySelector('.cat-fav'); if(b) favPaint(b, favHas(c._studioId));
+    });
+    if(_previewStudio) favPaint(document.getElementById('spFavBtn'), favHas(_previewStudio.id));
+  }
+  // Переключает отметку сразу (оптимистично) и сообщает серверу; не вышло — откат.
   function favToggle(id){
-    const set = favLoad(); const k = String(id);
-    const on = !set.has(k);
-    if(on) set.add(k); else set.delete(k);
-    try{ localStorage.setItem(FAV_KEY, JSON.stringify([...set])); }catch(e){}
+    const k = String(id), on = !favSet.has(k);
+    if(on) favSet.add(k); else favSet.delete(k);
+    favSave();
+    if(!favAuthed()){
+      try{ localStorage.setItem(FAV_GUEST_KEY, '1'); }catch(e){}
+    } else {
+      favApi(on ? 'PUT' : 'DELETE', '/' + encodeURIComponent(k)).then(function(r){
+        if(!r.ok) throw new Error(String(r.status));
+      }).catch(function(){
+        if(on) favSet.delete(k); else favSet.add(k);
+        favSave(); favRepaint();
+      });
+    }
     return on;
+  }
+  // Подтягивает подборку с сервера. Отметки, поставленные до входа, сначала
+  // отправляются туда же, чтобы вход их не затёр.
+  async function favSync(){
+    if(!favAuthed()) return;
+    try{
+      let guest = false; try{ guest = localStorage.getItem(FAV_GUEST_KEY) === '1'; }catch(e){}
+      if(guest){
+        await Promise.all([...favSet].map(function(id){ return favApi('PUT', '/' + encodeURIComponent(id)).catch(function(){}); }));
+        try{ localStorage.removeItem(FAV_GUEST_KEY); }catch(e){}
+      }
+      const r = await favApi('GET');
+      if(!r.ok) return;
+      const list = await r.json();
+      if(!Array.isArray(list)) return;
+      favSet = new Set(list.map(function(x){ return String(x.id); }));
+      favSave(); favRepaint();
+    }catch(e){}
+  }
+  function favForget(){
+    favSet = new Set(); favSave();
+    try{ localStorage.removeItem(FAV_GUEST_KEY); }catch(e){}
+    favRepaint();
+    if(favMode) setFavMode(false);
   }
   function favPaint(btn, on){
     btn.dataset.on = on ? 'true' : 'false';
@@ -5699,9 +5751,51 @@ var PF = (function(){
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   function favFirst(list){
-    const set = favLoad();
     return list.map((s, i) => [s, i]).sort((a, b) =>
-      (set.has(String(b[0].id)) - set.has(String(a[0].id))) || (a[1] - b[1])).map(x => x[0]);
+      (favSet.has(String(b[0].id)) - favSet.has(String(a[0].id))) || (a[1] - b[1])).map(x => x[0]);
+  }
+
+  // Режим «Избранное» в каталоге: подборка по всем городам.
+  let favMode = false;
+  function setFavMode(on){
+    favMode = on;
+    const btn = document.getElementById('favFilterBtn');
+    btn.textContent = on ? '← Все студии' : '♥ Избранное';
+    btn.dataset.on = on ? 'true' : 'false';
+    document.getElementById('studioSearch').style.display = on ? 'none' : (searchMode ? 'none' : '');
+    document.getElementById('searchModeToggle').style.display = on ? 'none' : '';
+    if(!on) return;
+    if(catalogMapShown) setCatalogMap(false);
+    renderFavorites();
+  }
+  async function renderFavorites(){
+    if(!favAuthed()){
+      catalogStudios = []; updateMapBtn();
+      catalogList.innerHTML = '<div class="catalog-empty">Избранное хранится в вашем профиле и доступно на всех устройствах. ' +
+        '<button type="button" class="catalog-mode-toggle" id="favLoginBtn">Войти</button></div>';
+      document.getElementById('favLoginBtn').addEventListener('click', function(){ haptic('light'); openLoginPanel(); });
+      return;
+    }
+    catalogList.innerHTML = '<div class="catalog-empty">Загрузка…</div>';
+    let list;
+    try{
+      const r = await favApi('GET');
+      if(!r.ok) throw new Error(String(r.status));
+      list = await r.json();
+    }catch(e){
+      if(favMode) catalogList.innerHTML = '<div class="catalog-empty">Не удалось загрузить избранное.</div>';
+      return;
+    }
+    if(!favMode) return;   // пока ждали, режим выключили
+    favSet = new Set(list.map(function(x){ return String(x.id); })); favSave();
+    if(!list.length){
+      catalogStudios = []; updateMapBtn();
+      catalogList.innerHTML = '<div class="catalog-empty">Пока пусто. Нажмите ♡ на карточке студии, чтобы сохранить её сюда.</div>';
+      return;
+    }
+    catalogList.innerHTML = '';
+    list.forEach(s => catalogList.appendChild(studioRow(s, true)));
+    catalogStudios = list; updateMapBtn();
   }
 
   // Одна карточка студии в списке каталога: карусель фото, вместимость,
@@ -5754,6 +5848,7 @@ var PF = (function(){
   });
 
   async function renderStudioSearch(q){
+    if(favMode) setFavMode(false);
     catalogList.innerHTML = '<div class="catalog-empty">Поиск…</div>';
     let rows;
     try{ rows = await fetch(API_BASE + '/api/studios?q=' + encodeURIComponent(q)).then(r=>r.json()); }
@@ -5866,6 +5961,12 @@ var PF = (function(){
     setCatalogMap(!catalogMapShown);
   });
 
+  document.getElementById('favFilterBtn').addEventListener('click', ()=>{
+    haptic('light');
+    if(favMode){ setFavMode(false); renderStudios(selectedCity); }
+    else setFavMode(true);
+  });
+
   document.getElementById('searchModeToggle').addEventListener('click', ()=>{
     searchMode = !searchMode;
     if(catalogMapShown) setCatalogMap(false);
@@ -5955,6 +6056,7 @@ var PF = (function(){
   }
 
   async function renderStudios(city){
+    if(favMode) setFavMode(false);
     if(!city){
       citySelectValue.textContent = 'Выберите город';
       catalogStudios = []; updateMapBtn();
@@ -6246,6 +6348,7 @@ var PF = (function(){
     if(TENANT_ID){ await bootStudio(); await maybeApplyRepeatParam(); return; }
     showCatalog();
     await Promise.all([loadPlatformConfig(), loadCities()]);
+    favSync();
     loadEqCatalog();   // подписи оснащения; не ждём — страница рисуется и без него
     let last = null;
     try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
