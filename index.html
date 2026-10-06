@@ -4338,7 +4338,7 @@ var PF = (function(){
       document.getElementById('successTitle').textContent =
         isPending ? 'Заявка отправлена' : 'Бронь подтверждена';
       document.getElementById('successDetail').innerHTML =
-        (isPending ? '<span style="color:var(--text-2)">Заявка ждёт ответа студии — не дольше суток.</span><br>' : '') +
+        (isPending ? '<span style="color:var(--text-2)">Заявка ждёт ответа студии — не дольше суток и не позже начала брони.</span><br>' : '') +
         `<b>${esc(currentHall().name)}</b>${booking.purpose && HALL_PURPOSE_RU[booking.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[booking.purpose]) : ''}<br>`+
         `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`+
         (equipLine ? `${esc(equipLine)}<br>` : '')+
