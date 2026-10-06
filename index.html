@@ -5676,6 +5676,34 @@ var PF = (function(){
     show();
   }
 
+  // «Избранное»: id студий в localStorage этого устройства. Сердечко в карточке
+  // списка и в быстром просмотре читает и пишет один и тот же набор; избранные
+  // студии идут первыми в списке города (favFirst).
+  const FAV_KEY = 'poont.favStudios';
+  function favLoad(){
+    try{ const a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); return new Set(Array.isArray(a) ? a.map(String) : []); }
+    catch(e){ return new Set(); }
+  }
+  function favHas(id){ return favLoad().has(String(id)); }
+  function favToggle(id){
+    const set = favLoad(); const k = String(id);
+    const on = !set.has(k);
+    if(on) set.add(k); else set.delete(k);
+    try{ localStorage.setItem(FAV_KEY, JSON.stringify([...set])); }catch(e){}
+    return on;
+  }
+  function favPaint(btn, on){
+    btn.dataset.on = on ? 'true' : 'false';
+    btn.textContent = on ? '♥' : '♡';
+    btn.setAttribute('aria-label', on ? 'Убрать из избранного' : 'В избранное');
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  function favFirst(list){
+    const set = favLoad();
+    return list.map((s, i) => [s, i]).sort((a, b) =>
+      (set.has(String(b[0].id)) - set.has(String(a[0].id))) || (a[1] - b[1])).map(x => x[0]);
+  }
+
   // Одна карточка студии в списке каталога: карусель фото, вместимость,
   // пара удобств и цена «от» — тот же набор данных, что в карточке быстрого
   // просмотра с карты (openStudioPreview), только сразу видна в списке.
@@ -5684,6 +5712,7 @@ var PF = (function(){
   function studioRow(s, showCity){
     const row = document.createElement('div');
     row.className = 'cat-card';
+    row._studioId = String(s.id);
     const photos = Array.isArray(s.photos) ? s.photos.filter(Boolean) : [];
     const sub = [showCity ? s.city : null, s.address, showCity ? null : s.subtitle]
       .filter(Boolean).join(' · ');
@@ -5705,11 +5734,11 @@ var PF = (function(){
         (Number.isFinite(s.price) ? '<div class="cat-price">От <b>'+esc(s.price)+' '+esc(cur)+'</b>/ч</div>' : '') +
       '</div>';
     if(photos.length > 1) wireCardCarousel(row.querySelector('.cat-media'), photos);
-    row.querySelector('.cat-fav').addEventListener('click', function(e){
+    const favEl = row.querySelector('.cat-fav');
+    favPaint(favEl, favHas(s.id));
+    favEl.addEventListener('click', function(e){
       e.stopPropagation();
-      const on = this.dataset.on !== 'true';
-      this.dataset.on = on ? 'true' : 'false';
-      this.textContent = on ? '♥' : '♡';
+      favPaint(this, favToggle(s.id));
       haptic('light');
     });
     row.addEventListener('click', ()=>{ haptic('medium'); chooseStudio(s.id); });
@@ -5942,6 +5971,7 @@ var PF = (function(){
       catalogStudios = []; updateMapBtn(); catalogList.innerHTML = '<div class="catalog-empty">В этом городе пока нет студий.</div>'; return;
     }
     catalogList.innerHTML = '';
+    studios = favFirst(studios);
     studios.forEach(s => catalogList.appendChild(studioRow(s, false)));
     catalogStudios = studios;
     updateMapBtn();
@@ -6064,10 +6094,7 @@ var PF = (function(){
       const cur = s.currency || CUR || 'BYN';
       priceEl.innerHTML = 'От <b>' + esc(s.price) + ' ' + esc(cur) + '</b>/ч';
     }
-    // Декоративное «избранное» — своего сохранения пока нет, только визуал.
-    const favBtn = document.getElementById('spFavBtn');
-    favBtn.dataset.on = 'false';
-    favBtn.textContent = '♡';
+    favPaint(document.getElementById('spFavBtn'), favHas(s.id));
     overlay.dataset.open = 'true';
     document.getElementById('studioPreviewPanel').dataset.open = 'true';
   }
@@ -6078,10 +6105,13 @@ var PF = (function(){
   document.getElementById('spCloseBtn').addEventListener('click', (e) => { e.stopPropagation(); closeStudioPreview(); });
   document.getElementById('spFavBtn').addEventListener('click', function(e){
     e.stopPropagation();
-    const on = this.dataset.on !== 'true';
-    this.dataset.on = on ? 'true' : 'false';
-    this.textContent = on ? '♥' : '♡';
+    if(!_previewStudio) return;
+    favPaint(this, favToggle(_previewStudio.id));
     haptic('light');
+    // Сердечко в списке под модалкой — в том же состоянии, когда её закроют.
+    document.querySelectorAll('#catalogList .cat-card').forEach(function(c){
+      if(c._studioId === String(_previewStudio.id)) favPaint(c.querySelector('.cat-fav'), favHas(_previewStudio.id));
+    });
   });
   document.getElementById('spViewBtn').addEventListener('click', () => {
     // Иначе модалка оставалась открытой поверх экрана студии: chooseStudio
