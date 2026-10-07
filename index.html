@@ -3465,7 +3465,7 @@ var PF = (function(){
     // между целями аренды, а справочные детали зала; простая строка без
     // иконок, отдельно от карточек фактов выше.
     const extra = [];
-    if(HALL_PROPS.hallType && hall.hallType && HALL_TYPE_RU[hall.hallType]) extra.push(HALL_TYPE_RU[hall.hallType]);
+    if(HALL_PROPS.hallType && hall.hallType && hallTypeLabel(hall.hallType)) extra.push(hallTypeLabel(hall.hallType));
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) extra.push('потолок '+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м');
     if(HALL_PROPS.floor && Number.isInteger(hall.floor)) extra.push(hall.floor<=0 ? 'цокольный этаж' : hall.floor+'-й этаж');
     document.getElementById('hallFactsExtra').textContent = extra.join(' · ');
@@ -3838,7 +3838,18 @@ var PF = (function(){
     }));
   }
 
+  // Подписи типов — из открытого справочника (278+ значений и свои у владельцев).
+  // Пока он грузится (или не загрузился) — пять исходных.
   const HALL_TYPE_RU = { cyclorama:'Циклорама', interior:'Интерьер', hardlight:'Тёмный', daylight:'Дневной свет', other:'Другое' };
+  function hallTypeLabel(code){ return code ? (HALL_TYPE_RU[code] || '') : ''; }
+  async function loadSpaceTypes(){
+    try{
+      const rows = await fetch(API_BASE + '/api/dictionaries?kind=space_type').then(r => r.json());
+      if(!Array.isArray(rows)) return;
+      rows.forEach(function(r){ if(r && r.code && r.labelRu) HALL_TYPE_RU[r.code] = r.labelRu; });
+      if(typeof renderHallInfo === 'function' && openHallId) renderHallInfo();
+    }catch(e){}
+  }
 
   // Полноэкранный просмотр фото зала. Листается тапом по краям и свайпом,
   // зациклен (последнее -> первое). Соседние кадры предзагружаются.
@@ -5876,7 +5887,6 @@ var PF = (function(){
     if(!Array.isArray(ALL_CITIES)) ALL_CITIES = [];
   }
 
-  const TS_TYPES = { cyclorama:'Циклорама', interior:'Интерьер', hardlight:'Тёмный', daylight:'Дневной свет', other:'Другое' };
   let tsType = null;                 // выбранный тип пространства
   let searchMode = false;
 
@@ -5929,9 +5939,35 @@ var PF = (function(){
     });
     scrollChipIntoView(row, activeChip);
   }
-  function initTimeSearch(){
+  // Фильтр типа — только то, что есть в выбранном городе (из справочника в 278
+  // значений выбирать было бы нечего). Перестраивается при смене города.
+  let tsTypesCity = null;
+  async function tsLoadTypeChips(){
     const chips = document.getElementById('tsTypeChips');
-    if(chips.childElementCount){
+    if(!selectedCity || tsTypesCity === selectedCity) return;
+    const city = selectedCity;
+    let rows = [];
+    try{ rows = await fetch(API_BASE + '/api/search/types?city=' + encodeURIComponent(city)).then(r => r.json()); }catch(e){}
+    if(city !== selectedCity) return;
+    tsTypesCity = city; tsType = null;
+    chips.innerHTML = '';
+    (Array.isArray(rows) ? rows : []).forEach(function(t){
+      const c = document.createElement('span');
+      c.className = 'ts-chip'; c.dataset.type = t.code; c.dataset.on = 'false';
+      c.textContent = HALL_TYPE_RU[t.code] || t.label || t.code;
+      c.addEventListener('click', ()=>{
+        const on = c.dataset.on === 'true';
+        chips.querySelectorAll('.ts-chip').forEach(x=>x.dataset.on='false');
+        tsType = on ? null : t.code;
+        c.dataset.on = on ? 'false' : 'true';
+      });
+      chips.appendChild(c);
+    });
+  }
+  let tsInited = false;
+  function initTimeSearch(){
+    tsLoadTypeChips();
+    if(tsInited){
       // Панель могли открыть на следующий день — лента дат должна снова
       // начинаться от «сегодня», а не от даты прошлого открытия.
       if(TS.date !== dateKey(businessToday())){
@@ -5941,18 +5977,7 @@ var PF = (function(){
       }
       return;
     }
-    for(const k of Object.keys(TS_TYPES)){
-      const c = document.createElement('span');
-      c.className = 'ts-chip'; c.dataset.type = k; c.dataset.on = 'false';
-      c.textContent = TS_TYPES[k];
-      c.addEventListener('click', ()=>{
-        const on = c.dataset.on === 'true';
-        chips.querySelectorAll('.ts-chip').forEach(x=>x.dataset.on='false');
-        tsType = on ? null : k;
-        c.dataset.on = on ? 'false' : 'true';
-      });
-      chips.appendChild(c);
-    }
+    tsInited = true;
     TS.dates = buildDatesForMonthWindow(businessToday());
     TS.date = dateKey(TS.dates[0]);
     tsRenderMonths(); tsRenderDates();
@@ -6013,7 +6038,7 @@ var PF = (function(){
     catalogList.innerHTML = '';
     rows.forEach(r=>{
       const props = [];
-      if(r.hallType && TS_TYPES[r.hallType]) props.push(TS_TYPES[r.hallType]);
+      if(r.hallType && hallTypeLabel(r.hallType)) props.push(hallTypeLabel(r.hallType));
       (Array.isArray(r.styles)?r.styles:[]).forEach(function(s){ if(HALL_STYLE_RU[s]) props.push(HALL_STYLE_RU[s]); });
       if(r.daylight) props.push('естественный свет');
       if(r.constantLight) props.push('постоянный свет');
@@ -6352,6 +6377,7 @@ var PF = (function(){
     showCatalog();
     await Promise.all([loadPlatformConfig(), loadCities()]);
     favSync();
+    loadSpaceTypes();
     loadEqCatalog();   // подписи оснащения; не ждём — страница рисуется и без него
     let last = null;
     try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
