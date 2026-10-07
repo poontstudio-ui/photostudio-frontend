@@ -791,6 +791,7 @@ body{
   color:var(--text);
   margin-bottom:4px;
 }
+.booking-address{font-size:var(--fs-sm);color:var(--text-2);margin:-2px 0 6px;line-height:1.35;}
 .booking-meta{
   font-family:var(--f-mono);
   font-size:var(--fs-sm);
@@ -4928,6 +4929,7 @@ var PF = (function(){
         <div class="booking-status" data-status="${esc(b.status)}">${esc(BK_ST[b.status] || b.status)}</div>
       </div>
       ${b.studioName ? '<div class="booking-studio">'+esc(b.studioName)+(b.studioCity ? ' · '+esc(b.studioCity) : '')+'</div>' : ''}
+      ${b.address ? '<div class="booking-address">'+esc(b.address)+'</div>' : ''}
       <div class="booking-meta">${esc(hall)}${b.purpose && HALL_PURPOSE_RU[b.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[b.purpose]) : ''} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} ${CUR}</div>
     `;
     const row=document.createElement('div');
