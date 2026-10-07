@@ -872,6 +872,9 @@ body{
 .hall-card:active{border-color:var(--accent);}
 .hall-card-photo{position:relative;width:100%;aspect-ratio:4/3;background:var(--surface-2);}
 .hall-card-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+/* Фото не загрузилось (файл удалён, сбой CDN): вместо пустого белого блока —
+   нейтральная подложка того же размера; у карточки пространства — штриховка. */
+img.img-broken{visibility:hidden;background:var(--surface-2);}
 .hall-card-placeholder{
   width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:0 12px;
   background-image:repeating-linear-gradient(135deg,var(--ph-a) 0 12px,var(--ph-b) 12px 24px);
@@ -3404,6 +3407,28 @@ var PF = (function(){
     ['#e4d6bd', '#eee2cd'],
     ['#c7d6e0', '#d8e5ed'],
   ];
+  // Битая ссылка на фото: <img> без onerror оставлял пустую карточку. Слушаем
+  // ошибки загрузки во всём документе (событие не всплывает — ловим на погружении).
+  // Успешная загрузка снимает отметку: карусель подставляет в тот же <img> другие кадры.
+  document.addEventListener('error', function(e){
+    const im = e.target;
+    if(!im || im.tagName !== 'IMG') return;
+    const card = im.closest('.hall-card-photo');
+    if(card && !card.querySelector('.hall-card-placeholder')){
+      const cards = Array.from(document.querySelectorAll('.hall-card'));
+      const idx = Math.max(0, cards.indexOf(card.closest('.hall-card')));
+      const [a, b] = HALL_PLACEHOLDER_COLORS[idx % HALL_PLACEHOLDER_COLORS.length];
+      const name = card.closest('.hall-card').querySelector('.hall-card-name-text');
+      card.innerHTML = '<div class="hall-card-placeholder" style="--ph-a:'+a+';--ph-b:'+b+'">'+
+        '<span class="hall-card-placeholder-label">фото: '+esc(name ? name.textContent : '')+'</span></div>';
+      return;
+    }
+    im.classList.add('img-broken');
+  }, true);
+  document.addEventListener('load', function(e){
+    if(e.target && e.target.tagName === 'IMG') e.target.classList.remove('img-broken');
+  }, true);
+
   function renderHallCards(){
     const box = document.getElementById('hallCards');
     box.innerHTML = '';
