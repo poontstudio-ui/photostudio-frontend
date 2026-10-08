@@ -851,6 +851,10 @@ body{
   color:var(--text);
   margin-bottom:4px;
 }
+.booking-wifi{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;margin:-4px 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);}
+.booking-wifi small{display:block;font-size:var(--fs-xs);color:var(--text-3);}
+.booking-wifi b{font-family:var(--f-mono);font-size:var(--fs-sm);font-weight:600;word-break:break-all;}
+.booking-wifi-copy{margin-left:auto;background:none;border:none;color:var(--accent);font:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;padding:4px 0;}
 .booking-address{font-size:var(--fs-sm);color:var(--text-2);margin:-2px 0 6px;line-height:1.35;}
 .booking-meta{
   font-family:var(--f-mono);
@@ -1071,6 +1075,11 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 /* Свёрнутый текст описания — четыре строки с «Читать далее». line-clamp
    вместо обрезки по символам: рвать текст на полуслове в вёрстке незачем,
    а сколько влезет — знает сам браузер. */
+.hall-tours{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0;}
+.hall-tours[hidden]{display:none;}
+.hall-tour{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--line);border-radius:var(--r-pill);
+  background:var(--surface);color:var(--accent);font:inherit;font-size:var(--fs-sm);font-weight:600;cursor:pointer;text-decoration:none;}
+.hall-tour svg{width:15px;height:15px;}
 .hall-about{margin-top:14px;}
 .hall-about[hidden]{display:none;}
 .hall-about-text{
@@ -1752,6 +1761,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем пространствам">←</button>
         <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       </div>
+      <div class="hall-tours" id="hallTours" hidden></div>
       <div class="hall-info-head">
         <!-- Стиль интерьера — чипами в строке с названием (если не помещаются — ниже под ним) -->
         <div class="hall-info-main">
@@ -2572,6 +2582,7 @@ var PF = (function(){
     door:'<path d="M3 21h18M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M14.5 12h.01"/>',
     plug:'<path d="M9 2v6M15 2v6M6 8h12v2.5a6 6 0 0 1-12 0V8ZM12 16.5V22"/>',
     rules:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    clean:'<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 16l.7 1.8L21.5 18.5l-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/>',
   };
   // Секции аккордеона — набор и порядок как на референсе. У каждой: свободный
   // текст владельца (ключ зала из миграции 0040) и, где есть что показать,
@@ -2599,6 +2610,7 @@ var PF = (function(){
         return ['Этаж: ' + (hall.floor <= 0 ? 'цокольный' : hall.floor)];
       } },
     { key:'aboutElectrical', title:'Электрика', icon:'plug' },
+    { key:'aboutCleaning', title:'Уборка и чистота', icon:'clean' },
     { key:'aboutRules', title:'Правила', icon:'rules', studio:POLICY_LIST },
   ];
   // Строчка-блёрб в карточке быстрого просмотра студии (карта каталога) —
@@ -2795,6 +2807,7 @@ var PF = (function(){
         lines.push('В цену ' + (g.included === 1 ? 'входит ' : 'входят ') + gpGuestsWord(g.included) + '. Каждый следующий — +' + moneyTxt(g.price) + ' ' + CUR + (g.unit === 'hour' ? ' в час.' : ' за всю бронь.'));
       } else lines.push('Цена не зависит от числа гостей.');
     }
+    if(fullDayPct(ph, 8)) lines.push('Бронь от 8 часов — скидка ' + ph.fullDayDiscountPct + '% на аренду и гостей.');
     if(gpRentApplies(g) && Array.isArray(ph.priceRules) && ph.priceRules.length) lines.push('В некоторые дни и часы цена другая — итог видно после выбора времени.');
     var tiers = g && g.mode === 'perPerson' && g.tiers.length > 1
       ? '<div class="price-tiers">' + g.tiers.map(function(t, k){ return '<span>' + (k === 0 && g.tiers[1].from === 2 ? '1 гость' : 'от ' + t.from) + ' — <b>' + moneyTxt(t.price) + '</b></span>'; }).join('') + '</div>' : '';
@@ -2845,6 +2858,7 @@ var PF = (function(){
     if(Number.isInteger(p.capacity)) out.capacity = p.capacity;
     out.purposeMinBookingMin = Number.isInteger(p.minBookingMin) ? p.minBookingMin : null;
     out.guestPricing = p.guestPricing || null;
+    out.fullDayDiscountPct = Number.isInteger(p.fullDayDiscountPct) ? p.fullDayDiscountPct : null;
     // пакеты — свои у цели (0056); без своего списка — пакеты пространства
     if(Array.isArray(p.packages)) out.packages = p.packages;
     return out;
@@ -2876,6 +2890,12 @@ var PF = (function(){
 
   // Ставка минуты с учётом правил цены зала (по времени суток / дню недели).
   // Зеркало server: lib/rules.js minuteRate — первое подходящее правило.
+  // «Целый день»: скидка цели на аренду и гостей при брони от 8 часов. Зеркало
+  // lib/rules.js fullDayDiscountFor.
+  function fullDayPct(hall, hours){
+    var p = hall && hall.fullDayDiscountPct;
+    return Number.isInteger(p) && p > 0 && p <= 100 && hours >= 8 - 1e-9 ? p : 0;
+  }
   function minuteRate(hall, rules, dow, minute){
     for(const r of rules){
       if(Array.isArray(r.dow) && r.dow.length && !r.dow.includes(dow)) continue;
@@ -2930,7 +2950,9 @@ var PF = (function(){
     return gpCharge(hall.guestPricing, state.people, hours);
   }
   function computePrice(){
-    const base = baseRoomPrice() + guestPrice();
+    let base = baseRoomPrice() + guestPrice();
+    // Пакет — фиксированная цена; иначе от 8 часов действует скидка «Целый день».
+    if(state.packageHours == null) base = base * (100 - fullDayPct(pricingHall(), state.durationHours)) / 100;
     if(state.packageHours == null && lastMinuteActive()){
       return +(base * (100 - STUDIO_LASTMINUTE.pct) / 100).toFixed(2);
     }
@@ -3591,6 +3613,24 @@ var PF = (function(){
     if(HALL_PROPS.ceilingCm && hall.ceilingCm) extra.push('потолок '+(hall.ceilingCm/100).toFixed(1).replace('.0','')+' м');
     if(HALL_PROPS.floor && Number.isInteger(hall.floor)) extra.push(hall.floor<=0 ? 'цокольный этаж' : hall.floor+'-й этаж');
     document.getElementById('hallFactsExtra').textContent = extra.join(' · ');
+    // Видео-тур и 3D-тур: ссылки показываем, только если владелец их заполнил
+    // (и это обычная http(s)-ссылка); нет — блока нет вовсе.
+    var tours = document.getElementById('hallTours');
+    if(tours){
+      var links = [['videoTourUrl', 'Видео-тур', '<path d="M8 5v14l11-7z"/>'],
+                   ['tour3dUrl', '3D-тур', '<path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 12l9-5M12 12v10M12 12L3 7"/>']]
+        .filter(function(x){ return /^https?:\/\/\S+$/i.test((hall[x[0]] || '').trim()); });
+      tours.innerHTML = links.map(function(x){
+        return '<a class="hall-tour" href="' + esc(hall[x[0]].trim()) + '" target="_blank" rel="noopener noreferrer" data-tour="' + x[0] + '">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + x[2] + '</svg>' + x[1] + '</a>';
+      }).join('');
+      tours.hidden = !links.length;
+      tours.querySelectorAll('a').forEach(function(a){
+        a.addEventListener('click', function(e){
+          if(tg && tg.openLink){ e.preventDefault(); try{ tg.openLink(a.href); }catch(_){ window.open(a.href, '_blank'); } }
+        });
+      });
+    }
     // Стиль интерьера («Лофт», «Минимализм») клиенту пока не показываем: в кабинете
     // поле остаётся, место для показа — позже. Чипы возвращаются заполнением #hallChips.
     var cw = document.getElementById('hallChips');
@@ -5027,6 +5067,21 @@ var PF = (function(){
       ${b.address ? '<div class="booking-address">'+esc(b.address)+'</div>' : ''}
       <div class="booking-meta">${esc(hall)}${b.purpose && HALL_PURPOSE_RU[b.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[b.purpose]) : ''} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} ${CUR}</div>
     `;
+    // Wi-Fi пространства: сервер отдаёт его только владельцу подтверждённой брони.
+    if(b.wifiSsid){
+      const w=document.createElement('div');
+      w.className='booking-wifi';
+      w.innerHTML='<div><small>Wi-Fi</small><b>'+esc(b.wifiSsid)+'</b></div>'+
+        (b.wifiPassword ? '<div><small>Пароль</small><b>'+esc(b.wifiPassword)+'</b></div>'+
+          '<button type="button" class="booking-wifi-copy">Скопировать</button>' : '');
+      const cp=w.querySelector('.booking-wifi-copy');
+      if(cp) cp.addEventListener('click', ()=>{
+        haptic('light');
+        const done=()=>{ cp.textContent='Скопировано'; setTimeout(()=>{ cp.textContent='Скопировать'; }, 1500); };
+        try{ navigator.clipboard.writeText(b.wifiPassword).then(done, ()=>{}); }catch(e){}
+      });
+      card.appendChild(w);
+    }
     const row=document.createElement('div');
     row.className='booking-card-actions';
     const rep=document.createElement('button');
@@ -5443,6 +5498,7 @@ var PF = (function(){
       }
     }
     total += gpCharge(ph.guestPricing, b.people || 1, hours);
+    total = total * (100 - fullDayPct(ph, hours)) / 100;
     (Array.isArray(b.equipment) ? b.equipment : []).forEach(eq => { total += eq.unit === 'hour' ? eq.price * hours : eq.price; });
     total = +total.toFixed(2);
     const lm = RS.cfg && RS.cfg.lastminute;
