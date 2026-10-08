@@ -1143,7 +1143,13 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 .acc-text + .feat-grid{margin-top:12px;}
 .acc-fact{font-size:var(--fs-sm);color:var(--text-2);line-height:1.4;}
 .studio-map-addr{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:6px;}
-.studio-map{width:100%;aspect-ratio:1/1;border-radius:var(--r-md);overflow:hidden;background:var(--surface-2);border:1px solid var(--line);}
+.studio-map{width:100%;aspect-ratio:16/10;border-radius:var(--r-md);overflow:hidden;background:var(--surface-2);border:1px solid var(--line);}
+/* Ночная тема: плитки Яндекс.Карт инвертируем (у API 2.1 своей тёмной темы нет);
+   метки и элементы управления лежат в других слоях и остаются как есть. */
+:root[data-theme="dark"] .studio-map [class*="ground-pane"],
+:root[data-theme="dark"] .catalog-map [class*="ground-pane"]{
+  filter:invert(100%) hue-rotate(180deg) brightness(.82) contrast(.9) saturate(.8);
+}
 .studio-map-actions{display:flex;gap:8px;margin-top:10px;}
 .map-action{flex:1;padding:11px 8px;border-radius:var(--r-md);border:1px solid var(--line-strong);
   background:var(--surface);color:var(--text);font-family:var(--f);font-size:var(--fs-sm);font-weight:600;cursor:pointer;}
@@ -3934,7 +3940,7 @@ var PF = (function(){
       map.behaviors.disable('scrollZoom');
       map.geoObjects.add(new ymaps.Placemark([T.lat, T.lon],
         { balloonContent: esc(T.address || '') }, { preset: 'islands#redDotIcon' }));
-      // Контейнер квадратный (aspect-ratio); на момент создания карты его
+      // Контейнер задан aspect-ratio; на момент создания карты его
       // размер иногда ещё не устоялся — пересчитываем на следующий тик.
       setTimeout(() => map.container.fitToViewport(), 0);
       hideMapOpenPromo(mapEl);
