@@ -3486,7 +3486,16 @@ var PF = (function(){
   // ---- Ввод: только тап (по клетке или по соседней) ----
   gridEl.addEventListener('click', (e)=>{
     const el = e.target && e.target.closest ? e.target.closest('.grid-cell') : null;
-    if(!el || el.dataset.state !== 'free') return;
+    // Тап мимо свободной клетки (занятая, прошедшая, закрытая, подпись времени,
+    // промежуток между столбцами) — снимает выбор.
+    if(!el || el.dataset.state !== 'free'){
+      if(hasSelection()){
+        clearSelection();
+        haptic('light');
+        renderGrid(); renderPeople(); renderSummary();
+      }
+      return;
+    }
     if(tapCell(el.dataset.col, Number(el.dataset.slot))){
       haptic('light');
       renderGrid(); renderPeople(); renderSummary();
