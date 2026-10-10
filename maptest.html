@@ -9,6 +9,8 @@ button{padding:8px 12px}
 /* MP:BEGIN — карты (_dev/maps.css) */
 .pmap-dot{width:18px;height:18px;border-radius:50%;background:#ff4d3d;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);transform:translate(-50%,-50%);}
 .pmap-pin{transform:translate(-50%,-50%);}
+/* «Открыть Яндекс Карты» (необязательный промо-блок; обязательные © и «Условия использования» не трогаем). */
+.ymaps3--controls_bottom.ymaps3--controls_left{display:none!important;}
 /* MP:END */
 /* TH:BEGIN — тема интерфейса: ночная/дневная (_dev/theme.css) */
 :root{
@@ -161,10 +163,14 @@ button{padding:8px 12px}
     return load(key).then(function(api){
       el.innerHTML = '';
       var lons = pts.map(function(s){ return s.lon; }), lats = pts.map(function(s){ return s.lat; });
+      var minLon = Math.min.apply(null, lons), maxLon = Math.max.apply(null, lons);
+      var minLat = Math.min.apply(null, lats), maxLat = Math.max.apply(null, lats);
+      // Поля вокруг крайних меток — рамкой расширяем границы (margin у v3 тут не держит).
+      var padLon = Math.max((maxLon - minLon) * 0.25, 0.004), padLat = Math.max((maxLat - minLat) * 0.25, 0.003);
       var loc = pts.length > 1
-        ? { bounds: [[Math.min.apply(null, lons), Math.min.apply(null, lats)], [Math.max.apply(null, lons), Math.max.apply(null, lats)]] }
+        ? { bounds: [[minLon - padLon, minLat - padLat], [maxLon + padLon, maxLat + padLat]] }
         : { center: [pts[0].lon, pts[0].lat], zoom: 14 };
-      var map = baseMap(api, el, loc, { margin: [60, 40, 60, 40] });
+      var map = baseMap(api, el, loc);
       pts.forEach(function(s){
         var pin = document.createElement('div');
         pin.className = 'map-pin pmap-pin';
