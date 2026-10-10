@@ -247,7 +247,7 @@ body{
   flex-direction:column;
   background:var(--bg);
   position:relative;
-  padding-bottom:120px;
+  padding-bottom:140px;
 }
 
 /* ---------- Header ---------- */
@@ -1261,7 +1261,7 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 .acc-text + .feat-grid{margin-top:12px;}
 .acc-fact{font-size:var(--fs-sm);color:var(--text-2);line-height:1.4;}
 .studio-map-addr{font-size:var(--fs-sm);color:var(--text-2);margin-bottom:6px;}
-.studio-map{width:100%;aspect-ratio:16/10;border-radius:var(--r-md);overflow:hidden;background:var(--surface-2);border:1px solid var(--line);}
+.studio-map{position:relative;z-index:0;isolation:isolate;width:100%;aspect-ratio:16/10;border-radius:var(--r-md);overflow:hidden;background:var(--surface-2);border:1px solid var(--line);}
 /* Ночная тема: плитки Яндекс.Карт инвертируем (у API 2.1 своей тёмной темы нет);
    метки и элементы управления лежат в других слоях и остаются как есть. */
 :root[data-theme="dark"] .studio-map [class*="ground-pane"],
@@ -1455,7 +1455,8 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
   width:100%;max-width:430px;z-index:20;
   background:var(--surface);border-top:1px solid var(--line);
   box-shadow:0 -6px 20px rgba(20,22,28,.06);
-  padding:10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  /* Плашка выше на ~20% (было 10px сверху и снизу). */
+  padding:16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
   display:flex;align-items:center;gap:10px;
 }
 .sb-guests{flex:none;display:flex;align-items:center;gap:2px;touch-action:manipulation;-webkit-user-select:none;user-select:none;}
