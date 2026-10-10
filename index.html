@@ -5322,6 +5322,7 @@ var PF = (function(){
     bookingsView.dataset.visible='false';
     if(bookingsOrigin==='catalog'){
       document.getElementById('catalogView').dataset.visible='true';
+      restoreCatalogScroll();
     } else {
       document.getElementById('mainView').dataset.hidden='false';
       document.getElementById('summaryBar').style.display='flex';
@@ -6581,9 +6582,12 @@ var PF = (function(){
 
   // Где был список, когда «провалились» в студию: страница студии прокручивает
   // окно наверх, а назад к списку надо вернуться на то же место.
+  // Запоминаем на любом уходе со списка (студия, «Мои брони», вход).
   let catalogScrollY = 0;
-  function chooseStudio(id){
+  window.addEventListener('scroll', () => {
     if(catalogView.dataset.visible === 'true') catalogScrollY = window.scrollY;
+  }, { passive:true });
+  function chooseStudio(id){
     TENANT_ID = id;
     cameFromCatalog = true;
     if(catalogMapShown) setCatalogMap(false);
@@ -6598,7 +6602,10 @@ var PF = (function(){
     document.getElementById('bookingsView').dataset.visible='false';
     document.getElementById('successView').dataset.visible='false';
     showCatalog();   // каталог сохраняет выбранный город и список — возвращаемся как было
-    // Список снова в потоке страницы только после отрисовки — восстанавливаем позицию следующим кадром.
+    restoreCatalogScroll();
+  }
+  // Список снова в потоке страницы только после отрисовки — восстанавливаем позицию следующим кадром.
+  function restoreCatalogScroll(){
     const y = catalogScrollY;
     requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
   }
