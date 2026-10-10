@@ -146,7 +146,38 @@
       return map;
     });
   }
-  window.PMaps = { load: load, studio: studio, catalog: catalog };
+  // Карта выбора точки (кабинет): клик ставит метку, метку можно перетащить.
+  // p — {lat, lon} или null (центр по умолчанию), o.onChange(lat, lon) — новая точка.
+  function picker(key, el, p, o){
+    return load(key).then(function(api){
+      el.innerHTML = '';
+      var has = p && p.lat != null && p.lon != null;
+      var map = baseMap(api, el,
+        { center: has ? [p.lon, p.lat] : (o.center || [27.5590, 53.9006]), zoom: has ? 16 : 11 },
+        { behaviors: ['drag', 'scrollZoom', 'pinchZoom', 'dblClick'] });
+      var marker = null;
+      function setPin(lat, lon){
+        if(marker){ marker.update({ coordinates: [lon, lat] }); return; }
+        var dot = document.createElement('div');
+        dot.className = 'pmap-dot';
+        marker = new api.y.YMapMarker({
+          coordinates: [lon, lat], draggable: true,
+          onDragEnd: function(c){ o.onChange(c[1], c[0]); },
+        }, dot);
+        map.addChild(marker);
+      }
+      if(has) setPin(p.lat, p.lon);
+      map.addChild(new api.y.YMapListener({
+        layer: 'any',
+        onClick: function(obj, ev){ var c = ev.coordinates; setPin(c[1], c[0]); o.onChange(c[1], c[0]); },
+      }));
+      return {
+        setPin: setPin,
+        center: function(lat, lon, zoom){ map.setLocation({ center: [lon, lat], zoom: zoom || 16 }); },
+      };
+    });
+  }
+  window.PMaps = { load: load, studio: studio, catalog: catalog, picker: picker };
 })();
 /* MP:END */
 </script>
