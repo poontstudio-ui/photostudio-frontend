@@ -6579,7 +6579,11 @@ var PF = (function(){
   // ?tenant=). От этого зависит, показывать ли «назад к списку» в шапке студии.
   let cameFromCatalog = false;
 
+  // Где был список, когда «провалились» в студию: страница студии прокручивает
+  // окно наверх, а назад к списку надо вернуться на то же место.
+  let catalogScrollY = 0;
   function chooseStudio(id){
+    if(catalogView.dataset.visible === 'true') catalogScrollY = window.scrollY;
     TENANT_ID = id;
     cameFromCatalog = true;
     if(catalogMapShown) setCatalogMap(false);
@@ -6594,6 +6598,9 @@ var PF = (function(){
     document.getElementById('bookingsView').dataset.visible='false';
     document.getElementById('successView').dataset.visible='false';
     showCatalog();   // каталог сохраняет выбранный город и список — возвращаемся как было
+    // Список снова в потоке страницы только после отрисовки — восстанавливаем позицию следующим кадром.
+    const y = catalogScrollY;
+    requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
   }
 
   document.getElementById('studioBackBtn').addEventListener('click', ()=>{
