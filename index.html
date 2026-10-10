@@ -131,7 +131,9 @@
       var minLat = Math.min.apply(null, lats), maxLat = Math.max.apply(null, lats);
       // Поля вокруг крайних меток — рамкой расширяем границы (margin у v3 тут не держит).
       var padLon = Math.max((maxLon - minLon) * 0.3, 0.004), padLat = Math.max((maxLat - minLat) * 0.3, 0.003);
-      var loc = pts.length > 1
+      // o.view — {center:[lon,lat], zoom}: вернуть карту туда, где её оставили.
+      var loc = o.view && o.view.center ? { center: o.view.center, zoom: o.view.zoom }
+        : pts.length > 1
         ? { bounds: [[minLon - padLon, minLat - padLat], [maxLon + padLon, maxLat + padLat]] }
         : { center: [pts[0].lon, pts[0].lat], zoom: 14 };
       // zoomRounding 'auto' — без привязки к целому масштабу: иначе границы «подрезаются» и крайние метки у края.
@@ -4447,7 +4449,8 @@ var PF = (function(){
     window.scrollTo(0, _savedScrollY);
   }
   new MutationObserver(()=>{
-    if(overlay.dataset.open === 'true') lockScroll(); else unlockScroll();
+    // Под окном может быть открыта карта каталога — она держит свою блокировку прокрутки.
+    if(overlay.dataset.open === 'true') lockScroll(); else if(!catalogMapShown) unlockScroll();
   }).observe(overlay, { attributes:true, attributeFilter:['data-open'] });
 
   // Буфер режется из конца брони: клиент снимает до endMinutes − буфер,
@@ -6475,6 +6478,7 @@ var PF = (function(){
   let catalogStudios = [];        // последний загруженный список (для карты)
   let catalogMapShown = false;
   let _catMap = null;
+  let _catView = null;            // где оставили карту каталога (центр/масштаб) — для возврата из студии
   function studiosWithGeo(){ return catalogStudios.filter(s => Number.isFinite(s.lat) && Number.isFinite(s.lon)); }
   function updateMapBtn(){
     const btn = document.getElementById('catalogMapBtn');
@@ -6482,6 +6486,9 @@ var PF = (function(){
     if(btn.hidden && catalogMapShown) setCatalogMap(false);
   }
   function setCatalogMap(on){
+    // Сначала запоминаем позицию списка (lockScroll), потом прячем список —
+    // иначе страница схлопывается и запоминается ноль.
+    if(on) lockScroll();
     catalogMapShown = on;
     document.getElementById('catalogMap').hidden = !on;
     catalogList.style.display = on ? 'none' : '';
@@ -6490,7 +6497,7 @@ var PF = (function(){
     btn.dataset.on = on ? 'true' : 'false';
     // Карта теперь на весь экран (position:fixed) — без блокировки скролла
     // страница за ней ещё могла прокручиваться под фиксированным слоем.
-    if(on){ lockScroll(); drawCatalogMap(); } else { unlockScroll(); }
+    if(on){ drawCatalogMap(); } else { unlockScroll(); }
   }
   // Булавка показывает цену «от» (или, если у студии нет ни одного активного
   // зала, просто имя — ставить нечего). openBalloonOnClick:false — открываем
@@ -6505,7 +6512,9 @@ var PF = (function(){
     if(!pts.length) return;
     const el = document.getElementById('catalogMap');
     if(_catMap){ try{ _catMap.destroy(); }catch(e){} _catMap = null; }
+    const view = _catView; _catView = null;
     PMaps.catalog(PLATFORM.yandexMapsKey, el, pts, {
+      view: view,
       label: catalogPinLabel,
       onPick: s => { haptic('medium'); openStudioPreview(s); },
     }).then(map => { _catMap = map; }).catch(() => setCatalogMap(false));
@@ -6585,9 +6594,15 @@ var PF = (function(){
   // Запоминаем на любом уходе со списка (студия, «Мои брони», вход).
   let catalogScrollY = 0;
   window.addEventListener('scroll', () => {
-    if(catalogView.dataset.visible === 'true') catalogScrollY = window.scrollY;
+    if(catalogView.dataset.visible === 'true' && !catalogMapShown) catalogScrollY = window.scrollY;
   }, { passive:true });
+  // Ушли в студию с карты — назад вернёмся на карту, туда же, где она была.
+  let returnToMap = false;
   function chooseStudio(id){
+    returnToMap = catalogMapShown;
+    if(catalogMapShown && _catMap){
+      try{ _catView = { center: _catMap.center, zoom: _catMap.zoom }; }catch(e){ _catView = null; }
+    }
     TENANT_ID = id;
     cameFromCatalog = true;
     if(catalogMapShown) setCatalogMap(false);
@@ -6602,6 +6617,13 @@ var PF = (function(){
     document.getElementById('bookingsView').dataset.visible='false';
     document.getElementById('successView').dataset.visible='false';
     showCatalog();   // каталог сохраняет выбранный город и список — возвращаемся как было
+    if(returnToMap && studiosWithGeo().length){
+      returnToMap = false;
+      window.scrollTo(0, catalogScrollY);   // под картой — список на своём месте
+      setCatalogMap(true);
+      return;
+    }
+    returnToMap = false;
     restoreCatalogScroll();
   }
   // Список снова в потоке страницы только после отрисовки — восстанавливаем позицию следующим кадром.
