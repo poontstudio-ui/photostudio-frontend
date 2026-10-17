@@ -1504,9 +1504,11 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 .grid-cell[data-state="past"],
 .grid-cell[data-state="closed"]{
   cursor:not-allowed;
+  /* Штриховка — токенами темы, как в кабинете: в ночной теме тёмные полосы
+     на тёмном фоне не видны, и прошедшее время выглядело пустотой. */
   background:repeating-linear-gradient(-45deg,
-    rgba(20,22,28,0.05), rgba(20,22,28,0.05) 5px,
-    rgba(20,22,28,0.015) 5px, rgba(20,22,28,0.015) 10px);
+    var(--stripe), var(--stripe) 5px,
+    var(--stripe-2) 5px, var(--stripe-2) 10px);
 }
 .grid-cell[data-sel="true"]{background:var(--sel-fill);
   /* Выбранное время — «ручка»: его можно тащить пальцем, страница под ним не листается. */
