@@ -595,6 +595,7 @@ body{
 /* Узкий экран вне Telegram: «Мои брони», «Выйти» и тема делят шапку с названием
    студии — чуть компактнее, чтобы название не сжималось в столбик. */
 @media (max-width:430px){
+  .head-actions{gap:6px;}
   .header{gap:6px;padding-left:16px;padding-right:16px;}
   .header .header-link{padding:7px 10px;}
   .header .icon-btn{margin-left:2px;width:32px;height:32px;}
@@ -861,6 +862,22 @@ body{
   display:flex;align-items:center;justify-content:space-between;
   padding:22px 20px 0;
 }
+.head-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex:none;}
+.head-actions .icon-btn{margin-left:0;}
+/* Профиль клиента: список пунктов в нижней панели */
+.profile-who{text-align:center;color:var(--text-2);font-size:var(--fs-md);line-height:1.4;margin:6px 0 18px;}
+.profile-who b{display:block;color:var(--text);font-size:var(--fs-lg);margin-bottom:2px;}
+.profile-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;margin-bottom:14px;}
+.profile-item{display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;background:var(--surface);border:none;border-top:1px solid var(--line);
+  color:var(--text);font:inherit;font-size:var(--fs-md);text-align:left;cursor:pointer;}
+.profile-item:first-child{border-top:none;}
+.profile-item[hidden]{display:none;}
+.profile-item:hover{background:var(--surface-2);}
+.profile-item svg{width:20px;height:20px;flex:none;color:var(--text-2);}
+.profile-item span{flex:1;}
+.profile-item i{font-style:normal;color:var(--text-3);}
+.profile-item.danger{color:var(--red);}
+.profile-item.danger svg{color:var(--red);}
 .catalog-head-title{font-family:var(--f);font-weight:700;font-size:var(--fs-xl);}
 .catalog-topbar{padding:12px 20px 6px;}
 .city-select{position:relative;}
@@ -1913,9 +1930,10 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   <div class="catalog-view" id="catalogView">
     <div class="catalog-head">
       <div class="catalog-head-title">Студии</div>
-      <button class="header-link" id="catalogMyBookingsBtn" type="button">Мои брони</button>
-      <button class="header-link" id="catalogAuthBtn" type="button" hidden>Войти</button>
-      <button class="icon-btn theme-btn" data-theme-toggle type="button"></button>
+      <div class="head-actions">
+        <button class="icon-btn theme-btn" data-theme-toggle type="button"></button>
+        <button class="icon-btn" data-profile-open type="button" aria-label="Профиль" title="Профиль"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7"/></svg></button>
+      </div>
     </div>
     <div class="catalog-topbar">
       <div class="city-select" id="citySelect" data-open="false">
@@ -1931,7 +1949,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       </div>
       <input type="text" id="studioSearch" class="catalog-search" placeholder="Поиск студии по названию" autocomplete="off" spellcheck="false">
       <div class="catalog-links">
-        <button class="catalog-mode-toggle" id="favFilterBtn" type="button" data-on="false">♥ Избранное</button>
+        <button class="catalog-mode-toggle" id="favFilterBtn" type="button" data-on="false" hidden>← Все студии</button>
         <button class="catalog-mode-toggle" id="searchModeToggle" type="button">Найти по времени →</button>
       </div>
       <div class="time-search" id="timeSearch" hidden>
@@ -1964,15 +1982,16 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
         <div class="brand-name">ВСЁ ВКЛЮЧЕНО</div>
         <div class="brand-sub">Бронь репетиционной точки</div>
       </div>
-      <button class="header-link" id="myBookingsBtn" type="button">Мои брони</button>
-      <button class="header-link" id="authBtn" type="button" hidden>Войти</button>
+      <div class="head-actions">
       <button class="icon-btn theme-btn" data-theme-toggle type="button"></button>
+      <button class="icon-btn" data-profile-open type="button" aria-label="Профиль" title="Профиль"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7"/></svg></button>
       <button class="icon-btn" id="ownerBtn" type="button" aria-label="Кабинет владельца" title="Кабинет владельца" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
         </svg>
       </button>
+      </div>
     </div>
 
     <div class="section" id="hallCardsSection">
@@ -2164,7 +2183,28 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   <button class="btn-ghost" id="botLoginBackBtn">Назад</button>
 </div>
 
-<!-- Вход/выход вне брони — кнопка в шапке (см. authBtn/catalogAuthBtn).
+<!-- Профиль клиента: открывается человечком в шапке (каталог и студия). -->
+<div class="panel" id="profilePanel">
+  <div class="panel-title auth-title">Профиль</div>
+  <div class="profile-who" id="profileWho"></div>
+  <div class="profile-list">
+    <button class="profile-item" id="pfBookings" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      <span>Мои брони</span><i>›</i></button>
+    <button class="profile-item" id="pfFavorites" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+      <span>Избранное</span><i>›</i></button>
+    <button class="profile-item" id="pfLogin" type="button" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+      <span>Войти</span><i>›</i></button>
+    <button class="profile-item danger" id="pfLogout" type="button" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      <span>Выйти</span></button>
+  </div>
+  <button class="btn-ghost" id="pfCloseBtn">Закрыть</button>
+</div>
+
+<!-- Вход/выход вне брони — пункты профиля «Войти»/«Выйти».
      Тот же код подтверждения (verifyPanel), просто источник номера — это
      поле, а не форма брони. -->
 <div class="panel" id="loginPanel">
@@ -4511,8 +4551,7 @@ var PF = (function(){
   const loginSendBtn=document.getElementById('loginSendBtn');
   const loginError=document.getElementById('loginError');
   const loginCancelBtn=document.getElementById('loginCancelBtn');
-  const authBtn=document.getElementById('authBtn');
-  const catalogAuthBtn=document.getElementById('catalogAuthBtn');
+  const profilePanel=document.getElementById('profilePanel');
   const linkTelegramPromptBtn=document.getElementById('linkTelegramPromptBtn');
 
   // Блокировка прокрутки фона, пока открыта любая модалка (overlay). iOS/Telegram
@@ -5175,11 +5214,7 @@ var PF = (function(){
   function updateAuthUI(){
     const show = !(tg && tg.initData);
     const loggedIn = !!getPhoneToken();
-    [authBtn, catalogAuthBtn].forEach(btn=>{
-      if(!btn) return;
-      btn.hidden = !show;
-      btn.textContent = loggedIn ? 'Выйти' : 'Войти';
-    });
+    renderProfile();
     // Привязать Telegram есть смысл предлагать, только пока сам номер уже
     // подтверждён (иначе нечего привязывать) и мы вне Telegram (иначе он и
     // так уже канал по умолчанию — привязывать нечего).
@@ -5255,20 +5290,63 @@ var PF = (function(){
     showVerifyStep(verifyPurpose, PF.e164(loginPhoneInput));
   });
 
-  function handleAuthClick(){
-    haptic('light');
-    if(getPhoneToken()){
-      clearPhoneToken();
-      clearBookingDraft();
-      updateAuthUI();
-      favForget();
+  // ---- Профиль клиента (человечек в шапке): «Мои брони», «Избранное», «Войти»/«Выйти» ----
+  // В Telegram вход автоматический — выходить не из чего, пункта «Выйти» нет.
+  function renderProfile(){
+    const inTg = !!(tg && tg.initData);
+    const phone = !!getPhoneToken();
+    const who = document.getElementById('profileWho');
+    const u = inTg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+    if(inTg){
+      who.innerHTML = '<b>' + esc((u && [u.first_name, u.last_name].filter(Boolean).join(' ')) || 'Вы') + '</b>Вход через Telegram';
+    } else if(phone){
+      who.innerHTML = '<b>Вы вошли</b>По номеру телефона';
     } else {
-      openLoginPanel();
+      who.innerHTML = '<b>Вы не вошли</b>Войдите, чтобы видеть брони и избранное на всех устройствах';
     }
+    document.getElementById('pfLogin').hidden = inTg || phone;
+    document.getElementById('pfLogout').hidden = inTg || !phone;
   }
-  authBtn.addEventListener('click', handleAuthClick);
-  catalogAuthBtn.addEventListener('click', handleAuthClick);
-  overlay.addEventListener('click', ()=>{ hideVerifyStep(); hideBotLogin(); closeLoginPanel(); });
+  function openProfile(){
+    haptic('light');
+    renderProfile();
+    overlay.dataset.open = 'true';
+    profilePanel.dataset.open = 'true';
+  }
+  function closeProfile(){
+    profilePanel.dataset.open = 'false';
+    overlay.dataset.open = 'false';
+  }
+  document.querySelectorAll('[data-profile-open]').forEach(b => b.addEventListener('click', openProfile));
+  document.getElementById('pfCloseBtn').addEventListener('click', ()=>{ haptic('light'); closeProfile(); });
+  document.getElementById('pfBookings').addEventListener('click', ()=>{
+    closeProfile();
+    openMyBookings(catalogView.dataset.visible === 'true' ? 'catalog' : 'studio');
+  });
+  document.getElementById('pfFavorites').addEventListener('click', async ()=>{
+    haptic('light');
+    closeProfile();
+    if(catalogView.dataset.visible !== 'true'){
+      // Из студии (в т.ч. открытой по прямой ссылке, без каталога) — уходим в каталог.
+      await bootCatalog({ quiet:true });
+      backToCatalog();
+    }
+    setFavMode(true);
+    window.scrollTo(0, 0);
+  });
+  document.getElementById('pfLogin').addEventListener('click', ()=>{
+    profilePanel.dataset.open = 'false';
+    openLoginPanel();
+  });
+  document.getElementById('pfLogout').addEventListener('click', ()=>{
+    haptic('light');
+    clearPhoneToken();
+    clearBookingDraft();
+    updateAuthUI();
+    favForget();
+    closeProfile();
+  });
+  overlay.addEventListener('click', ()=>{ hideVerifyStep(); hideBotLogin(); closeLoginPanel(); closeProfile(); });
 
   // «Привязать Telegram» (Ф2): дёргаем /api/link-telegram/start своей же
   // телефонной Bearer-сессией (authHeaders её уже подставит), получаем
@@ -5424,8 +5502,6 @@ var PF = (function(){
       document.getElementById('summaryBar').style.display='flex';
     }
   }
-  document.getElementById('myBookingsBtn').addEventListener('click', ()=> openMyBookings('studio'));
-  document.getElementById('catalogMyBookingsBtn').addEventListener('click', ()=> openMyBookings('catalog'));
   document.getElementById('bookingsBackBtn').addEventListener('click', closeMyBookings);
 
   // ---- «Повторить бронь» ----
@@ -6234,7 +6310,7 @@ var PF = (function(){
   function setFavMode(on){
     favMode = on;
     const btn = document.getElementById('favFilterBtn');
-    btn.textContent = on ? '← Все студии' : '♥ Избранное';
+    btn.hidden = !on;          // вход в «Избранное» — из профиля; здесь только «назад»
     btn.dataset.on = on ? 'true' : 'false';
     document.getElementById('studioSearch').style.display = on ? 'none' : (searchMode ? 'none' : '');
     document.getElementById('searchModeToggle').style.display = on ? 'none' : '';
@@ -6827,6 +6903,14 @@ var PF = (function(){
     // там он по-прежнему нужен, и грузится параллельно со списком городов.
     if(TENANT_ID){ await bootStudio(); await maybeApplyRepeatParam(); return; }
     showCatalog();
+    await bootCatalog();
+  }
+  // Каталог (города, конфиг платформы, избранное) — один раз. quiet: только
+  // выбрать город, список не грузить (зашли из студии сразу в «Избранное»).
+  let _catalogBooted = false;
+  async function bootCatalog(opts){
+    if(_catalogBooted) return;
+    _catalogBooted = true;
     await Promise.all([loadPlatformConfig(), loadCities()]);
     favSync();
     loadSpaceTypes();
@@ -6835,6 +6919,10 @@ var PF = (function(){
     try{ last = localStorage.getItem(LAST_CITY_KEY); }catch(e){}
     const initial = (last && ALL_CITIES.some(c=>c.city===last)) ? last
                   : (ALL_CITIES.length ? ALL_CITIES[0].city : null);
+    if(opts && opts.quiet){
+      if(initial){ selectedCity = initial; citySelectValue.textContent = initial; }
+      return;
+    }
     if(initial){ selectCity(initial); } else { renderStudios(null); }
   }
   if(LINK_TOKEN && tg && tg.initData){ completeTelegramLink(); } else { boot(); }
