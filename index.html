@@ -2821,7 +2821,17 @@ var PF = (function(){
   let HALLS = [], EQUIPMENT = [], WEEK_HOURS;   // EQUIPMENT — только для кабинета владельца
   let STUDIO_TZ = 'Europe/Minsk';   // IANA-таймзона студии, приходит в /config
   let STUDIO_BUFFER_MIN = 0;        // буфер после брони, режется из времени клиента (/config)
-  let SLOT_MIN = 60;               // шаг выбора времени студии: 15, 30 или 60 (/config). Строки сетки — по часу.
+  let SLOT_MIN = 60;               // строка сетки: шаг открытого пространства, в обзоре — самый мелкий из шагов
+  let STUDIO_STEP = 60;            // шаг студии (/config.slotStep): 15, 30 или 60
+  // Шаг пространства (0061): свой или студийный.
+  function hallStepMin(h){ return h && [15, 30, 60].indexOf(h.slotStepMin) >= 0 ? h.slotStepMin : STUDIO_STEP; }
+  // Пересчитываем при смене режима сетки (открыли / закрыли пространство, загрузили студию).
+  function refreshSlotMin(){
+    const hs = openHallId ? HALLS.filter(h => h.id === openHallId) : HALLS;
+    SLOT_MIN = hs.length ? Math.min.apply(null, hs.map(hallStepMin)) : STUDIO_STEP;
+  }
+  // Во сколько строк укладывается шаг пространства этого столбца (60/15 = 4 и т.п.).
+  function colStepK(col){ return Math.max(1, Math.round(hallStepMin(col && col.hall) / SLOT_MIN)); }
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
   let HALL_PROPS = { hallType:true, areaM2:true, ceilingCm:true, floor:true, styles:true,
@@ -2937,13 +2947,14 @@ var PF = (function(){
 
   function applyTenantConfig(cfg){
     HALLS = (cfg.halls || []).slice();
+    STUDIO_STEP = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : 60;
     EQUIPMENT = (cfg.equipment || []).slice();
     HALLS.forEach(h => { allHallsById[h.id] = h; });
     if(!HALLS.some(h => h.id === state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
     WEEK_HOURS = normalizeWeekHours(cfg);
     STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
     STUDIO_BUFFER_MIN = Number.isInteger(cfg.bufferMin) ? cfg.bufferMin : 0;
-    SLOT_MIN = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : 60;
+    STUDIO_STEP = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : 60;
     // Валюта студии: подставляем и в динамические подписи (через CUR), и в
     // статические ярлыки в разметке.
     if(typeof cfg.currency === 'string' && cfg.currency){
@@ -2982,6 +2993,7 @@ var PF = (function(){
     // только заставлял делать лишний тап. Два и больше — обзор студии.
     openHallId = HALLS.length === 1 ? HALLS[0].id : null;
     clearSelection();
+    refreshSlotMin();
     document.title = cfg.name + ' — Бронирование';
     document.querySelector('.brand-name').textContent = cfg.name;
     document.querySelector('.brand-sub').textContent = cfg.subtitle;
@@ -3661,10 +3673,12 @@ var PF = (function(){
   function tapCell(colKey, slot){
     const col = gridColumns().find(c => c.key === colKey);
     if(!col) return false;
+    const k = colStepK(col);                     // у пространства шаг крупнее строки — выравниваем
+    slot = Math.floor(slot / k) * k;
     const keep = hasSelection() ? sel.end - sel.start : 0;
-    const want = Math.max(keep, targetSlotsAt(col, slot));
+    const want = Math.ceil(Math.max(keep, targetSlotsAt(col, slot)) / k) * k;
     const { end:hi } = gridSlotRange();
-    for(let n = Math.min(want, hi - slot); n >= 1; n--){
+    for(let n = Math.min(want, Math.floor((hi - slot) / k) * k); n >= k; n -= k){
       if(setSel(colKey, slot, slot + n)) return true;
     }
     return false;
@@ -3673,11 +3687,13 @@ var PF = (function(){
   function setSelEnd(end){
     if(!hasSelection()) return false;
     const { end:hi } = gridSlotRange();
-    const b = Math.max(sel.start + 1, Math.min(end, sel.start + maxSlots(), hi));
+    const k = colStepK(gridColumns().find(c => c.key === sel.key));
+    let b = Math.max(sel.start + k, Math.min(Math.ceil(end / k) * k, sel.start + maxSlots(), hi));
+    b = sel.start + Math.floor((b - sel.start) / k) * k;
     if(b === sel.end) return false;
     if(b > sel.end){
       // растягиваем до первой помехи
-      for(let t = b; t > sel.end; t--) if(setSel(sel.key, sel.start, t)) return true;
+      for(let t = b; t > sel.end; t -= k) if(setSel(sel.key, sel.start, t)) return true;
       return false;
     }
     return setSel(sel.key, sel.start, b);
@@ -3890,8 +3906,9 @@ var PF = (function(){
       return;
     }
     const { start:lo, end:hi } = gridSlotRange();
-    let a = hit.slot - drag.grab;
-    a = Math.max(lo, Math.min(a, hi - drag.len));
+    const k = colStepK(hit.col);
+    let a = Math.floor((hit.slot - drag.grab) / k) * k;
+    a = Math.max(Math.ceil(lo / k) * k, Math.min(a, hi - drag.len));
     if(hit.col.key === sel.key && a === sel.start) return;
     if(setSel(hit.col.key, a, a + drag.len)){
       haptic('light');
@@ -4547,6 +4564,7 @@ var PF = (function(){
 
   function openHall(id, purpose){
     openHallId = id;
+    refreshSlotMin();
     // Время по умолчанию не выбрано, а цену и вместимость плашка берёт у
     // state.hallId — без этого до первого тапа по сетке считалось бы по
     // первому пространству студии, а не по открытому.
@@ -4564,6 +4582,7 @@ var PF = (function(){
   function closeHall(){
     const rh=document.getElementById('repeatHint'); if(rh) rh.hidden=true;
     openHallId = null;
+    refreshSlotMin();
     state.purpose = null;
     gridScrollEl.scrollLeft = 0;
     clearSelection();
@@ -6153,6 +6172,8 @@ var PF = (function(){
       RS.minBookingMin = Number.isInteger(cfg.minBookingMin) ? cfg.minBookingMin : 60;
       // Шаг ровно тот, что примет сервер при переносе (server.js: reschedule, slotStepOf).
       RS.step = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : (RS.minBookingMin === 30 ? 30 : 60);
+      { const hh = (cfg.halls || []).find(h => h.id === booking.hallId);
+        if(hh && [15, 30, 60].indexOf(hh.slotStepMin) >= 0) RS.step = hh.slotStepMin; }   // свой шаг пространства
       RS.hall = (cfg.halls || []).find(h => h.id === booking.hallId) || null;
       if(RS.hall) RS.hours = hallHoursOf(cfg, RS.hall);
       // Платность переноса определяет, насколько поздно о нём просят (по СТАРОМУ времени).
