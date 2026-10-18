@@ -1550,13 +1550,6 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 .grid[data-dragging="true"] .grid-sel{background:var(--accent-dim);}
 .grid-hint{font-size:var(--fs-sm);color:var(--text-2);margin:-4px 0 10px;}
 .grid-hint[hidden]{display:none;}
-.sb-dur{flex-basis:100%;display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);color:var(--text-2);margin:-4px 0 2px;}
-.sb-dur[hidden]{display:none;}
-.sb-dur b{color:var(--text);font-variant-numeric:tabular-nums;min-width:64px;text-align:center;}
-.sb-dur button{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--accent);
-  font-size:18px;line-height:1;cursor:pointer;touch-action:manipulation;}
-.sb-dur button:disabled{opacity:.35;cursor:not-allowed;}
-.sb-dur .sb-dur-time{margin-left:auto;font-family:var(--f-mono);font-size:var(--fs-xs);color:var(--text-3);}
 .grid-busy{
   position:relative;
   z-index:1;
@@ -2154,13 +2147,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   <!-- Нижняя плашка: гости, стоимость и одна кнопка. Пока время не выбрано —
        «Выбрать время» (ведёт к сетке), выбрано — «Забронировать». -->
   <div class="summary-bar" id="summaryBar">
-    <div class="sb-dur" id="sbDur" hidden>
-      <span>Длительность</span>
-      <button id="durMinus" type="button" aria-label="Короче">−</button>
-      <b id="durVal">1 ч</b>
-      <button id="durPlus" type="button" aria-label="Длиннее">+</button>
-      <span class="sb-dur-time" id="durTime"></span>
-    </div>
     <div class="sb-guests" role="group" aria-label="Сколько гостей">
       <button id="peopleMinus" type="button" aria-label="Меньше гостей">−</button>
       <span class="sb-guests-n"><b id="peopleCount">1</b><small id="peopleWord">гость</small></span>
@@ -3814,9 +3800,11 @@ var PF = (function(){
     if(dragJustEnded){ dragJustEnded = false; return; }   // это был конец перетаскивания, не тап
     if(e.target && e.target.closest && e.target.closest('.grid-sel')) return;   // тап по самому выбору — ничего
     const hit = slotAtPoint(e.clientX, e.clientY);
-    // Тап мимо свободного времени (занятое, прошедшее, закрытое, подпись часа,
-    // промежуток между столбцами) — снимает выбор.
-    if(!hit || cellState(hit.col, hit.slot) !== 'free'){
+    // Тап по недоступному времени (занято, прошло, студия закрыта) — ничего не
+    // делает: выбор остаётся. Снимает его только тап мимо сетки (подписи часов,
+    // промежутки).
+    if(hit && cellState(hit.col, hit.slot) !== 'free') return;
+    if(!hit){
       if(hasSelection()){
         clearSelection();
         haptic('light');
@@ -4593,29 +4581,7 @@ var PF = (function(){
   // Нижняя плашка: гости, стоимость и одна кнопка. Время по умолчанию не
   // выбрано: кнопка «Выбрать время» ведёт к сетке, рядом — цена за час.
   // Выбрал — итог за выбранное время и «Забронировать».
-  function renderDuration(){
-    const box = document.getElementById('sbDur');
-    if(!box) return;
-    box.hidden = !hasSelection();
-    if(box.hidden) return;
-    const m = (sel.end - sel.start) * SLOT_MIN, h = Math.floor(m / 60), r = m % 60;
-    document.getElementById('durVal').textContent = r ? (h ? h + ' ч ' + r + ' мин' : r + ' мин') : h + ' ч';
-    document.getElementById('durTime').textContent = minutesToLabel(sel.start * SLOT_MIN) + '–' + minutesToLabel(sel.end * SLOT_MIN);
-    const { end:hi } = gridSlotRange();
-    const col = gridColumns().find(c => c.key === sel.key);
-    document.getElementById('durMinus').disabled = sel.end - sel.start <= 1;
-    document.getElementById('durPlus').disabled = sel.end - sel.start >= maxSlots() || sel.end >= hi ||
-      !col || cellState(col, sel.end) !== 'free';
-  }
-  ['durMinus', 'durPlus'].forEach(function(id){
-    document.getElementById(id).addEventListener('click', function(){
-      if(setSelEnd(sel.end + (id === 'durPlus' ? 1 : -1))){
-        haptic('light'); renderGrid(); renderPeople(); renderSummary();
-      }
-    });
-  });
   function renderSummary(){
-    renderDuration();
     const cap = document.getElementById('summaryRow');
     const total = document.getElementById('summaryTotal');
     const btn = document.getElementById('recBtn');
