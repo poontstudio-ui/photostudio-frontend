@@ -1566,6 +1566,10 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
   padding-bottom:2px;cursor:ns-resize;touch-action:none;}
 .grid-sel-handle::before{content:'';width:20px;height:4px;border-radius:2px;background:var(--accent);}
 .grid[data-dragging="true"] .grid-sel{background:var(--accent-dim);}
+.drag-tip{position:fixed;z-index:60;pointer-events:none;padding:4px 8px;border-radius:var(--r-pill);
+  background:var(--accent);color:var(--on-solid);font-family:var(--f-mono);font-size:var(--fs-sm);font-weight:700;
+  white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.25);font-variant-numeric:tabular-nums;}
+.drag-tip[hidden]{display:none;}
 .grid-hint{font-size:var(--fs-sm);color:var(--text-2);margin:-4px 0 10px;}
 .grid-hint[hidden]{display:none;}
 .grid-busy{
@@ -3890,6 +3894,35 @@ var PF = (function(){
     const h = document.getElementById('gridHint'); if(h) h.hidden = seen;
   })();
 
+  // ---- Подсказка под пальцем при перетаскивании ----
+  // Палец закрывает блок, поэтому время показываем рядом: при переносе — время
+  // начала на шкале часов слева, на уровне верха блока; при растягивании —
+  // длительность сбоку от нижнего края, с той стороны, где есть место.
+  let dragTipEl = null;
+  function durText(min){
+    const h = Math.floor(min / 60), m = min % 60;
+    return (h ? h + ' ч' : '') + (h && m ? ' ' : '') + (m ? m + ' мин' : '');
+  }
+  function showDragTip(blockEl, scrollerEl, mode, startMin, endMin){
+    if(!blockEl) return hideDragTip();
+    if(!dragTipEl){ dragTipEl = document.createElement('div'); dragTipEl.className = 'drag-tip'; document.body.appendChild(dragTipEl); }
+    const r = blockEl.getBoundingClientRect();
+    dragTipEl.hidden = false;
+    if(mode === 'move'){
+      dragTipEl.textContent = minutesToLabel(startMin);
+      const sr = scrollerEl.getBoundingClientRect();
+      dragTipEl.style.left = (sr.left + 2) + 'px';
+      dragTipEl.style.top = Math.max(sr.top, r.top - dragTipEl.offsetHeight / 2) + 'px';
+    } else {
+      dragTipEl.textContent = durText(endMin - startMin);
+      const w = dragTipEl.offsetWidth, h = dragTipEl.offsetHeight;
+      const left = (r.left - w - 8 >= 4) ? r.left - w - 8 : Math.min(window.innerWidth - w - 4, r.right + 8);
+      dragTipEl.style.left = left + 'px';
+      dragTipEl.style.top = (r.bottom - h - 6) + 'px';
+    }
+  }
+  function hideDragTip(){ if(dragTipEl) dragTipEl.hidden = true; }
+
   // ---- Перетаскивание выбранного времени ----
   // Палец (или мышь) на выбранном времени и сдвиг — выбор едет целиком той же
   // длины: вверх/вниз по часам и в стороны на другие дни (в обзоре студии — на
@@ -3931,17 +3964,23 @@ var PF = (function(){
     if(!hit) return;           // промежуток между клетками — остаёмся где были
     if(drag.mode === 'resize'){
       if(setSelEnd(hit.slot + 1)){ haptic('light'); renderGrid(); renderPeople(); renderSummary(); }
+      mainDragTip();
       return;
     }
     const { start:lo, end:hi } = gridSlotRange();
     const k = colStepK(hit.col);
     let a = Math.floor((hit.slot - drag.grab) / k) * k;
     a = Math.max(Math.ceil(lo / k) * k, Math.min(a, hi - drag.len));
-    if(hit.col.key === sel.key && a === sel.start) return;
+    if(hit.col.key === sel.key && a === sel.start){ mainDragTip(); return; }
     if(setSel(hit.col.key, a, a + drag.len)){
       haptic('light');
       renderGrid(); renderPeople(); renderSummary();
     }
+    mainDragTip();
+  }
+  function mainDragTip(){
+    if(!drag || !drag.moved || !hasSelection()) return hideDragTip();
+    showDragTip(gridEl.querySelector('.grid-sel'), gridScrollEl, drag.mode, sel.start * SLOT_MIN, sel.end * SLOT_MIN);
   }
   function dragAutoScroll(){
     if(!drag || !drag.moved) return;
@@ -3973,6 +4012,7 @@ var PF = (function(){
       if(Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < (drag.mode === 'resize' ? 4 : 8)) return;
       drag.moved = true;
       gridEl.dataset.dragging = 'true';
+      mainDragTip();
       haptic('medium');
       requestAnimationFrame(dragAutoScroll);
     }
@@ -3984,6 +4024,7 @@ var PF = (function(){
     const moved = drag.moved;
     drag = null;
     delete gridEl.dataset.dragging;
+    hideDragTip();
     if(moved){
       // Следом браузер пришлёт click — он не должен сработать как тап.
       dragJustEnded = true;
@@ -6157,11 +6198,12 @@ var PF = (function(){
       if(a !== RS.sel.start) changed = rsSetSel(a, a + rsDrag.len);
     }
     if(changed){ haptic('light'); rsRenderGrid(); }
+    showDragTip(rsGridEl.querySelector('.grid-sel'), rsGridEl, rsDrag.mode, RS.sel.start * RS.step, RS.sel.end * RS.step);
   }, { passive:false });
   function rsEndDrag(e){
     if(!rsDrag || (e && e.pointerId !== rsDrag.id)) return;
     const moved = rsDrag.moved;
-    rsDrag = null; delete rsGridEl.dataset.dragging;
+    rsDrag = null; delete rsGridEl.dataset.dragging; hideDragTip();
     if(moved){ rsDragEnded = true; setTimeout(() => { rsDragEnded = false; }, 60); rsRenderGrid(); }
   }
   window.addEventListener('pointerup', rsEndDrag);
