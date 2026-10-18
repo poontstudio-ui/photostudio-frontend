@@ -1566,9 +1566,16 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
   padding-bottom:2px;cursor:ns-resize;touch-action:none;}
 .grid-sel-handle::before{content:'';width:20px;height:4px;border-radius:2px;background:var(--accent);}
 .grid[data-dragging="true"] .grid-sel{background:var(--accent-dim);}
-.drag-tip{position:fixed;z-index:60;pointer-events:none;padding:4px 8px;border-radius:var(--r-pill);
-  background:var(--accent);color:var(--on-solid);font-family:var(--f-mono);font-size:var(--fs-sm);font-weight:700;
-  white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.25);font-variant-numeric:tabular-nums;}
+.drag-tip{position:fixed;z-index:60;pointer-events:none;box-sizing:border-box;padding:3px 0;border-radius:6px;
+  background:var(--surface);color:var(--accent-dark);border:1px solid var(--accent);
+  font-family:var(--f-mono);font-size:var(--fs-xs);font-weight:600;line-height:1.2;text-align:center;
+  white-space:nowrap;font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(0,0,0,.12);}
+/* Пока тащим блок, подписи часов приглушены — метка начала читается поверх них. */
+#grid[data-drag-mode="move"] .grid-hour,#rsGrid[data-drag-mode="move"] .grid-hour{color:transparent;text-shadow:0 0 0 rgba(128,128,128,.35);}
+/* Время начала — метка на шкале часов, ровно по ширине колонки подписей. */
+.drag-tip.start{width:38px;}
+/* Длительность — постоянной ширины («8 ч 45 мин» помещается), чтобы не прыгала. */
+.drag-tip.dur{width:84px;}
 .drag-tip[hidden]{display:none;}
 .grid-hint{font-size:var(--fs-sm);color:var(--text-2);margin:-4px 0 10px;}
 .grid-hint[hidden]{display:none;}
@@ -3908,10 +3915,12 @@ var PF = (function(){
     if(!dragTipEl){ dragTipEl = document.createElement('div'); dragTipEl.className = 'drag-tip'; document.body.appendChild(dragTipEl); }
     const r = blockEl.getBoundingClientRect();
     dragTipEl.hidden = false;
+    dragTipEl.className = 'drag-tip ' + (mode === 'move' ? 'start' : 'dur');
+    const gridOf = blockEl.closest('.grid'); if(gridOf) gridOf.dataset.dragMode = mode;
     if(mode === 'move'){
       dragTipEl.textContent = minutesToLabel(startMin);
       const sr = scrollerEl.getBoundingClientRect();
-      dragTipEl.style.left = (sr.left + 2) + 'px';
+      dragTipEl.style.left = (sr.left + 1) + 'px';
       dragTipEl.style.top = Math.max(sr.top, r.top - dragTipEl.offsetHeight / 2) + 'px';
     } else {
       dragTipEl.textContent = durText(endMin - startMin);
@@ -3921,7 +3930,10 @@ var PF = (function(){
       dragTipEl.style.top = (r.bottom - h - 6) + 'px';
     }
   }
-  function hideDragTip(){ if(dragTipEl) dragTipEl.hidden = true; }
+  function hideDragTip(){
+    if(dragTipEl) dragTipEl.hidden = true;
+    document.querySelectorAll('.grid[data-drag-mode]').forEach(g => { delete g.dataset.dragMode; });
+  }
 
   // ---- Перетаскивание выбранного времени ----
   // Палец (или мышь) на выбранном времени и сдвиг — выбор едет целиком той же
