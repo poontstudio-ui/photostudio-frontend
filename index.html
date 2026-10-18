@@ -1523,6 +1523,16 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
    растянуты на свои строки. Занятость, недоступное время и выбор — блоки поверх
    клеток с точностью до шага. 4 px снизу у часа — «зазор» между часами. */
 #grid{row-gap:0;}
+/* Подписи часов липнут слева — выше любых блоков (выбор, занятость), иначе при
+   горизонтальной прокрутке блок наезжает на колонку времени. */
+#grid .grid-hour{z-index:6;}
+/* Справа — мягкое затухание: последний столбец «выглядывает», можно листать.
+   У конца прокрутки затухание убираем. */
+.grid-scroll,.grid-head-wrap{
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),rgba(0,0,0,.15) 100%);
+          mask-image:linear-gradient(to right,#000 calc(100% - 36px),rgba(0,0,0,.15) 100%);
+}
+.grid-scroll[data-end="true"],.grid-head-wrap[data-end="true"]{-webkit-mask-image:none;mask-image:none;}
 #grid .grid-hour,#grid .grid-cell{align-self:start;height:38px;}
 #grid .grid-busy,#grid .grid-off,#grid .grid-sel{margin-bottom:4px;}
 #grid .grid-busy.flush,#grid .grid-off.flush,#grid .grid-sel.flush{margin-bottom:0;}
@@ -3300,6 +3310,7 @@ var PF = (function(){
     return (hi > lo ? 'от ' : '') + lo + ' ' + CUR + '/ч';
   }
   const DAY_NAMES = ['ВС','ПН','ВТ','СР','ЧТ','ПТ','СБ'];
+  const GRID_VISIBLE = 4.6;         // столько дней-столбцов видно сразу: 4 целых и край пятого — намёк, что дальше есть ещё
   const GRID_DAYS = 7;               // дней, помещающихся в экран без прокрутки (режим одного пространства)
   const DURATION_MAX_MIN = 8 * 60;   // максимум брони
   function maxSlots(){ return DURATION_MAX_MIN / SLOT_MIN; }
@@ -3673,7 +3684,12 @@ var PF = (function(){
   const gridScrollEl = document.getElementById('gridScroll');
   // Шапка живёт вне горизонтального скроллера (чтобы липнуть к верху экрана),
   // поэтому её горизонтальное положение ведём за сеткой вручную.
+  function markGridEnd(){
+    const end = gridScrollEl.scrollLeft + gridScrollEl.clientWidth >= gridScrollEl.scrollWidth - 2;
+    gridScrollEl.dataset.end = gridHeadWrap.dataset.end = end ? 'true' : 'false';
+  }
   gridScrollEl.addEventListener('scroll', ()=>{
+    markGridEnd();
     gridHeadWrap.scrollLeft = gridScrollEl.scrollLeft;
   }, { passive:true });
   // Ширину шапки (режим 'halls') держим равной телу и при ресайзе — поворот
@@ -3722,7 +3738,7 @@ var PF = (function(){
     let colW = '76px';
     if(days){
       const avail = gridScrollEl.clientWidth;
-      colW = (avail ? Math.max(36, Math.floor((avail - 40 - GRID_DAYS*4) / GRID_DAYS)) : 44) + 'px';
+      colW = (avail ? Math.max(44, Math.floor((avail - 40 - Math.ceil(GRID_VISIBLE)*4) / GRID_VISIBLE)) : 60) + 'px';
     }
     const tpl = days
       ? `40px repeat(${cols.length}, ${colW})`
@@ -3790,6 +3806,7 @@ var PF = (function(){
     // тогда колонки совпадают пиксель в пиксель.
     gridHeadEl.style.width = gridEl.getBoundingClientRect().width + 'px';
     gridHeadWrap.scrollLeft = gridScrollEl.scrollLeft;
+    markGridEnd();
   }
 
   // ---- Ввод: только тап (по клетке или по соседней) ----
@@ -5677,7 +5694,7 @@ var PF = (function(){
     // дата из поиска дальше этих первых 7 — выделенная клетка осталась бы за
     // краем экрана. Пересобираем окно ТОЧНО на дату брони: тогда она —
     // самый первый день и видна сразу, без пролистывания.
-    if(state.dates.slice(0, GRID_DAYS).findIndex(d => dateKey(d) === ps.date) < 0){
+    if(state.dates.slice(0, Math.floor(GRID_VISIBLE)).findIndex(d => dateKey(d) === ps.date) < 0){
       state.dates = buildDatesForMonthWindow(new Date(ps.date + 'T00:00:00'));
     }
     // Назначение, под которое поиск нашёл окно: у него своя вместимость, минимум и цена.
