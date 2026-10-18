@@ -3954,10 +3954,9 @@ var PF = (function(){
     else gridEl.insertAdjacentHTML('beforeend', selBlockHtml(sp));
   }
 
-  // ---- Ввод: только тап (по клетке или по соседней) ----
-  gridEl.addEventListener('click', (e)=>{
-    if(dragJustEnded){ dragJustEnded = false; return; }   // это был конец перетаскивания, не тап
-    if(e.target && e.target.closest && e.target.closest('.grid-sel')) return;   // тап по самому выбору — ничего
+  // ---- Тап по сетке (по клетке или рядом с ней) ----
+  // Тап по самому выбору сюда не приходит — это начало перетаскивания (см. bindGridGesture).
+  function tapGridAt(e){
     const hit = slotAtPoint(e.clientX, e.clientY);
     // Тап по недоступному времени (занято, прошло, студия закрыта) — ничего не
     // делает: выбор остаётся. Снимает его только тап мимо сетки (подписи часов,
@@ -3976,7 +3975,7 @@ var PF = (function(){
       gridHintSeen();
       renderSel(true); renderPeople(); renderSummary();
     }
-  });
+  }
   // Подсказка над сеткой — пока человек ни разу не выбрал время.
   function gridHintSeen(){
     try{ localStorage.setItem('poont.gridHint', '1'); }catch(e){}
@@ -4031,14 +4030,57 @@ var PF = (function(){
     document.querySelectorAll('.grid[data-drag-mode]').forEach(g => { delete g.dataset.dragMode; });
   }
 
+  // ---- Жест на сетке: тап, перенос и растягивание выбора — один обработчик ----
+  // Опустили палец или мышь — смотрим куда. На блоке выбора его можно тащить,
+  // а за ручку снизу — тянуть. В остальных местах это тап, если отпустили почти
+  // там же, где нажали; сдвиг — это прокрутка страницы, тап отменяется (на
+  // сенсоре браузер к тому же присылает pointercancel). Всё на событиях указателя,
+  // без click: конец перетаскивания не может сработать как тап — флаги не нужны.
+  // h: start(g, e) — нажали на блок; begin(g) — блок сдвинулся с места;
+  //    move(g, e); end(g) — отпустили блок; tap(e) — тап мимо блока.
+  function bindGridGesture(el, h){
+    const TAP_SLOP = 10;
+    let g = null;   // { id, mode:'tap'|'move'|'resize', x0, y0, x, y, moved }
+    el.addEventListener('pointerdown', (e)=>{
+      if(e.button > 0 || g) return;
+      const blk = e.target.closest && e.target.closest('.grid-sel');
+      const mode = blk ? (e.target.closest('.grid-sel-handle') ? 'resize' : 'move') : 'tap';
+      g = { id:e.pointerId, mode, x0:e.clientX, y0:e.clientY, x:e.clientX, y:e.clientY, moved:false };
+      if(mode !== 'tap') h.start(g, e);
+    });
+    window.addEventListener('pointermove', (e)=>{
+      if(!g || e.pointerId !== g.id) return;
+      g.x = e.clientX; g.y = e.clientY;
+      const d = Math.hypot(g.x - g.x0, g.y - g.y0);
+      if(g.mode === 'tap'){ if(d > TAP_SLOP) g = null; return; }
+      if(!g.moved){
+        if(d < (g.mode === 'resize' ? 4 : 8)) return;
+        g.moved = true;
+        el.dataset.dragging = 'true';
+        haptic('medium');
+        if(h.begin) h.begin(g);
+      }
+      e.preventDefault();
+      h.move(g, e);
+    }, { passive:false });
+    const end = (e)=>{
+      if(!g || e.pointerId !== g.id) return;
+      const done = g; g = null;
+      if(done.mode === 'tap'){ if(e.type === 'pointerup') h.tap(e); return; }
+      delete el.dataset.dragging;
+      hideDragTip();
+      h.end(done);
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  }
+
   // ---- Перетаскивание выбранного времени ----
   // Палец (или мышь) на выбранном времени и сдвиг — выбор едет целиком той же
   // длины: вверх/вниз по часам и в стороны на другие дни (в обзоре студии — на
   // другие пространства). Встаёт только туда, где всё время свободно; у края
-  // сетки и экрана она сама прокручивается. Короткое касание без сдвига — по-
-  // прежнему тап (см. tapCell).
-  let drag = null;            // { id, mode:'move'|'resize', grab, len, x0, y0, x, y, moved }
-  let dragJustEnded = false;
+  // сетки и экрана она сама прокручивается.
+  let drag = null;            // жест на блоке: { mode:'move'|'resize', grab, len, x, y, moved }
   // Слот под точкой: часовая клетка + доля её высоты (4 слота в часе при шаге 15).
   // Считаем по геометрии сетки, а не по клетке под пальцем: так и зазоры между
   // часами и столбцами относятся к ближайшему времени, а строка = шаг студии.
@@ -4096,45 +4138,19 @@ var PF = (function(){
     if(moved) dragTo(drag.x, drag.y);
     requestAnimationFrame(dragAutoScroll);
   }
-  gridEl.addEventListener('pointerdown', (e)=>{
-    if(e.button > 0 || !hasSelection()) return;
-    const blk = e.target && e.target.closest ? e.target.closest('.grid-sel') : null;
-    if(!blk) return;
-    const resize = !!e.target.closest('.grid-sel-handle');
-    const hit = slotAtPoint(e.clientX, e.clientY);
-    drag = { id:e.pointerId, mode: resize ? 'resize' : 'move',
-             grab: hit ? Math.max(0, Math.min(hit.slot - sel.start, sel.end - sel.start - 1)) : 0,
-             len:sel.end - sel.start, x0:e.clientX, y0:e.clientY, x:e.clientX, y:e.clientY, moved:false };
+  bindGridGesture(gridEl, {
+    start(g, e){
+      if(!hasSelection()) return;
+      const hit = slotAtPoint(e.clientX, e.clientY);
+      g.grab = hit ? Math.max(0, Math.min(hit.slot - sel.start, sel.end - sel.start - 1)) : 0;
+      g.len = sel.end - sel.start;
+      drag = g;
+    },
+    begin(){ mainDragTip(); requestAnimationFrame(dragAutoScroll); },
+    move(g, e){ if(drag) dragTo(e.clientX, e.clientY); },
+    end(g){ drag = null; if(g.moved) gridHintSeen(); },
+    tap: tapGridAt,
   });
-  window.addEventListener('pointermove', (e)=>{
-    if(!drag || e.pointerId !== drag.id) return;
-    drag.x = e.clientX; drag.y = e.clientY;
-    if(!drag.moved){
-      if(Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < (drag.mode === 'resize' ? 4 : 8)) return;
-      drag.moved = true;
-      gridEl.dataset.dragging = 'true';
-      mainDragTip();
-      haptic('medium');
-      requestAnimationFrame(dragAutoScroll);
-    }
-    e.preventDefault();
-    dragTo(e.clientX, e.clientY);
-  }, { passive:false });
-  function endDrag(e){
-    if(!drag || (e && e.pointerId !== drag.id)) return;
-    const moved = drag.moved;
-    drag = null;
-    delete gridEl.dataset.dragging;
-    hideDragTip();
-    if(moved){
-      // Следом браузер пришлёт click — он не должен сработать как тап.
-      dragJustEnded = true;
-      setTimeout(() => { dragJustEnded = false; }, 60);
-      gridHintSeen();
-    }
-  }
-  window.addEventListener('pointerup', endDrag);
-  window.addEventListener('pointercancel', endDrag);
 
   // Сетка длиннее экрана: автовыбор берёт первую свободную клетку по всему
   // месяцу, и она может оказаться правее видимой части — подводим её в кадр.
@@ -6267,27 +6283,26 @@ var PF = (function(){
     const k = Math.floor((y - r.top + rsGridEl.scrollTop) / (42 / Math.max(1, Math.round(60 / RS.step))));
     return (k < 0 || k >= end - start) ? null : start + k;
   }
-  let rsDrag = null, rsDragEnded = false;
-  rsGridEl.addEventListener('click', (e)=>{
-    if(rsDragEnded){ rsDragEnded = false; return; }
-    if(e.target.closest && (e.target.closest('.grid-sel') || e.target.closest('.grid-hour'))) return;
-    const slot = rsSlotAtPoint(e.clientY);
-    if(slot == null || rsCellState(slot) !== 'free') return;
-    if(rsTap(slot)){ haptic('light'); rsRenderSel(true); }
+  let rsDrag = null;   // жест на блоке: { mode:'move'|'resize', grab, len, moved }
+  bindGridGesture(rsGridEl, {
+    start(g, e){
+      if(!rsHasSel()) return;
+      const slot = rsSlotAtPoint(e.clientY);
+      g.grab = slot == null ? 0 : Math.max(0, Math.min(slot - RS.sel.start, RS.sel.end - RS.sel.start - 1));
+      g.len = RS.sel.end - RS.sel.start;
+      rsDrag = g;
+    },
+    move(g, e){ if(rsDrag) rsDragTo(e); },
+    end(){ rsDrag = null; },
+    // Тап по подписи часа — ничего; по недоступному времени — ничего, выбор остаётся.
+    tap(e){
+      if(e.target.closest && e.target.closest('.grid-hour')) return;
+      const slot = rsSlotAtPoint(e.clientY);
+      if(slot == null || rsCellState(slot) !== 'free') return;
+      if(rsTap(slot)){ haptic('light'); rsRenderSel(true); }
+    },
   });
-  rsGridEl.addEventListener('pointerdown', (e)=>{
-    if(e.button > 0 || !rsHasSel()) return;
-    const blk = e.target.closest && e.target.closest('.grid-sel');
-    if(!blk) return;
-    const slot = rsSlotAtPoint(e.clientY);
-    rsDrag = { id:e.pointerId, mode: e.target.closest('.grid-sel-handle') ? 'resize' : 'move',
-               grab: slot == null ? 0 : Math.max(0, Math.min(slot - RS.sel.start, RS.sel.end - RS.sel.start - 1)),
-               len: RS.sel.end - RS.sel.start, y0:e.clientY, moved:false };
-  });
-  window.addEventListener('pointermove', (e)=>{
-    if(!rsDrag || e.pointerId !== rsDrag.id) return;
-    if(!rsDrag.moved){ if(Math.abs(e.clientY - rsDrag.y0) < 4) return; rsDrag.moved = true; rsGridEl.dataset.dragging = 'true'; }
-    e.preventDefault();
+  function rsDragTo(e){
     // у краёв окошка сетки — прокручиваем его
     const r = rsGridEl.getBoundingClientRect();
     if(e.clientY < r.top + 24) rsGridEl.scrollTop -= 8; else if(e.clientY > r.bottom - 24) rsGridEl.scrollTop += 8;
@@ -6303,15 +6318,7 @@ var PF = (function(){
     }
     if(changed){ haptic('light'); rsRenderSel(rsDrag.mode === 'move'); }
     showDragTip(rsGridEl.querySelector('.grid-sel'), rsGridEl, rsDrag.mode, RS.sel.start * RS.step, RS.sel.end * RS.step);
-  }, { passive:false });
-  function rsEndDrag(e){
-    if(!rsDrag || (e && e.pointerId !== rsDrag.id)) return;
-    const moved = rsDrag.moved;
-    rsDrag = null; delete rsGridEl.dataset.dragging; hideDragTip();
-    if(moved){ rsDragEnded = true; setTimeout(() => { rsDragEnded = false; }, 60); }
   }
-  window.addEventListener('pointerup', rsEndDrag);
-  window.addEventListener('pointercancel', rsEndDrag);
 
   // Занятость зала на всё окно дат одним запросом. Собственная бронь для
   // самой себя препятствием не является — вычитаем её из занятости.
