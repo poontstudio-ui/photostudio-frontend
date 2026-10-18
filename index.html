@@ -1545,12 +1545,18 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
    горизонтальной прокрутке блок наезжает на колонку времени. */
 #grid .grid-hour{z-index:6;}
 /* Справа — мягкое затухание: последний столбец «выглядывает», можно листать.
-   У конца прокрутки затухание убираем. */
-.grid-scroll,.grid-head-wrap{
-  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),rgba(0,0,0,.15) 100%);
-          mask-image:linear-gradient(to right,#000 calc(100% - 36px),rgba(0,0,0,.15) 100%);
-}
-.grid-scroll[data-end="true"],.grid-head-wrap[data-end="true"]{-webkit-mask-image:none;mask-image:none;}
+   Это полоса цвета фона поверх края, а не маска: маска на прокручиваемом блоке
+   перерисовывается на каждом кадре прокрутки. У конца прокрутки — гаснет. */
+.grid-fade{position:relative;}
+.grid-fade::after,.grid-head-wrap::after{content:"";position:absolute;top:0;right:0;bottom:0;width:36px;z-index:7;
+  pointer-events:none;background:linear-gradient(to right,transparent,var(--bg));opacity:.85;transition:opacity .2s;}
+.grid-fade[data-end="true"]::after,.grid-head-wrap[data-end="true"]::after{opacity:0;}
+/* Шапка дней едет за сеткой сдвигом (transform), а не прокруткой: так полоса
+   затухания у шапки стоит на месте, а сдвиг не заставляет пересчитывать раскладку. */
+#gridHead{will-change:transform;}
+/* Блок выбора переезжает на новое место плавно (см. moveSelBlock). */
+.grid-sel{transition:transform .09s ease-out;}
+@media (prefers-reduced-motion:reduce){ .grid-sel{transition:none;} }
 #grid .grid-hour,#grid .grid-cell{align-self:start;height:38px;}
 #grid .grid-busy,#grid .grid-off,#grid .grid-sel{margin-bottom:4px;}
 #grid .grid-busy.flush,#grid .grid-off.flush,#grid .grid-sel.flush{margin-bottom:0;}
@@ -2112,8 +2118,10 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       <div class="grid-head-wrap" id="gridHeadWrap">
         <div class="grid" id="gridHead"></div>
       </div>
-      <div class="grid-scroll" id="gridScroll">
-        <div class="grid" id="grid"></div>
+      <div class="grid-fade" id="gridFade">
+        <div class="grid-scroll" id="gridScroll">
+          <div class="grid" id="grid"></div>
+        </div>
       </div>
       <div class="timeline-legend">
         <span><span class="timeline-legend-dot" style="background:var(--red-bg)"></span>занято</span>
@@ -3073,15 +3081,25 @@ var PF = (function(){
 
   // «Сейчас» считаем в ТАЙМЗОНЕ СТУДИИ (STUDIO_TZ), а не по tz устройства и без
   // захардкоженного UTC+3. Стенные часы студии: { date:'YYYY-MM-DD', minutes }.
-  function studioWallClock(){
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: STUDIO_TZ, hourCycle:'h23',
+  // Сетка спрашивает «сейчас» для каждой клетки: создавать форматтер на каждый
+  // вызов — самое дорогое место отрисовки. Форматтер — один на таймзону, ответ
+  // живёт секунду (точность «сейчас» у сетки — минута).
+  const WALL_FMT = {}, WALL_MEMO = {};
+  function wallClockIn(tz){
+    const t = Date.now(), m = WALL_MEMO[tz];
+    if(m && t - m.at < 1000) return m.v;
+    const fmt = WALL_FMT[tz] || (WALL_FMT[tz] = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, hourCycle:'h23',
       year:'numeric', month:'2-digit', day:'2-digit',
       hour:'2-digit', minute:'2-digit',
-    }).formatToParts(new Date());
-    const g = t => parts.find(p => p.type === t).value;
-    return { date:`${g('year')}-${g('month')}-${g('day')}`, minutes:Number(g('hour'))*60 + Number(g('minute')) };
+    }));
+    const parts = fmt.formatToParts(new Date(t));
+    const g = k => parts.find(p => p.type === k).value;
+    const v = { date:`${g('year')}-${g('month')}-${g('day')}`, minutes:Number(g('hour'))*60 + Number(g('minute')) };
+    WALL_MEMO[tz] = { at:t, v };
+    return v;
   }
+  function studioWallClock(){ return wallClockIn(STUDIO_TZ); }
   function businessNowMinutes(){ return studioWallClock().minutes; }
   // «Сегодня в студии» как локальная полночь: у такой даты getDate/getDay/
   // toLocaleDateString дают нужный календарный день без ухода в UTC.
@@ -3560,6 +3578,9 @@ var PF = (function(){
   // Столбцы: если залов несколько — залы на выбранную дату; если зал один —
   // дни (до конца месяца). Строки — целые часы. Клетка = 1 час.
   const gridEl = document.getElementById('grid');
+  // Границы столбцов относительно сетки — [{key, l, r}] для попадания пальцем
+  // (slotAtPoint); сбрасываются при отрисовке и смене размеров.
+  let colGeom = null;
 
   // Открытая страница зала: null — обзор студии, иначе сетка только этого зала.
   let openHallId = null;
@@ -3574,26 +3595,36 @@ var PF = (function(){
   }
 
   // [{key, hall, date, label, sub, today}] — key уникален в пределах сетки.
+  // Нужны почти каждой функции выбора, поэтому собираем один раз на набор
+  // входных данных (режим, пространство, даты, сегодня) и отдаём готовыми.
+  let colsMemo = null;
   function gridColumns(){
     if(!HALLS.length) return [];
-    if(gridMode()==='halls'){
+    const mode = gridMode();
+    const todayKey = dateKey(businessToday());
+    const sig = mode + '|' + openHallId + '|' + (mode === 'halls' ? dateKey(currentDate()) : '') + '|' + todayKey;
+    if(colsMemo && colsMemo.sig === sig && colsMemo.halls === HALLS && colsMemo.dates === state.dates) return colsMemo.list;
+    let list = [];
+    if(mode==='halls'){
       const d = currentDate();
-      return HALLS.map(h => ({
+      list = HALLS.map(h => ({
         key:h.id, hall:h, date:d,
         label:h.name, sub:hallRateLabel(h), today:false,
       }));
+    } else {
+      const hall = gridHall();
+      // today — фактическое сегодня, а не «первый видимый столбец»: при
+      // прыжке слайдером месяцев на будущий месяц первый столбец — 1 число,
+      // не сегодня (было i===0, ломалось именно на этом сценарии).
+      if(hall) list = state.dates.map((d) => ({
+        key:dateKey(d), hall, date:d,
+        label:DAY_NAMES[d.getDay()], sub:String(d.getDate()), today:dateKey(d)===todayKey,
+      }));
     }
-    const hall = gridHall();
-    if(!hall) return [];
-    // today — фактическое сегодня, а не «первый видимый столбец»: при
-    // прыжке слайдером месяцев на будущий месяц первый столбец — 1 число,
-    // не сегодня (было i===0, ломалось именно на этом сценарии).
-    const todayKey = dateKey(businessToday());
-    return state.dates.map((d) => ({
-      key:dateKey(d), hall, date:d,
-      label:DAY_NAMES[d.getDay()], sub:String(d.getDate()), today:dateKey(d)===todayKey,
-    }));
+    colsMemo = { sig, halls:HALLS, dates:state.dates, list, byKey:new Map(list.map(c => [c.key, c])) };
+    return list;
   }
+  function colByKey(key){ gridColumns(); return (colsMemo && colsMemo.byKey.get(key)) || null; }
 
   // Ось Y — объединение рабочих окон всех показанных дат: у разных дней недели
   // часы работы разные, «лишние» клетки станут closed.
@@ -3653,7 +3684,7 @@ var PF = (function(){
 
   // Ставит выделение, если весь отрезок свободен. Возвращает успех.
   function setSel(colKey, a, b){
-    const col = gridColumns().find(c => c.key === colKey);
+    const col = colByKey(colKey);
     if(!col || !spanFree(col, a, b)) return false;
     sel.key = colKey; sel.start = a; sel.end = b;
     syncStateFromSel();
@@ -3662,7 +3693,7 @@ var PF = (function(){
 
   // Выделение — источник истины; state держим синхронным для цены и брони.
   function syncStateFromSel(){
-    const col = gridColumns().find(c => c.key === sel.key);
+    const col = colByKey(sel.key);
     if(!col) return;
     state.hallId = col.hall.id;
     if(gridMode()==='days'){
@@ -3680,7 +3711,7 @@ var PF = (function(){
 
   function selectionValid(){
     if(!hasSelection()) return false;
-    const col = gridColumns().find(c => c.key === sel.key);
+    const col = colByKey(sel.key);
     if(!col || !spanFree(col, sel.start, sel.end)) return false;
     // Не короче минимума окна и ровно «минимум + N шагов длительности» (0062).
     const len = sel.end - sel.start, m = minSlotsAt(col, sel.start);
@@ -3691,7 +3722,7 @@ var PF = (function(){
   // это одиночная отмеченная клетка, ждущая второй точки промежутка.
   function selectionPending(){
     if(!hasSelection()) return false;
-    const col = gridColumns().find(c => c.key === sel.key);
+    const col = colByKey(sel.key);
     return !!col && spanFree(col, sel.start, sel.end) && (sel.end - sel.start) < minSlotsAt(col, sel.start);
   }
 
@@ -3700,7 +3731,7 @@ var PF = (function(){
   // Не помещается (дальше занято или студия закрывается) — блок короче, до
   // помехи; если он короче минимума, сетка и плашка это покажут.
   function tapCell(colKey, slot){
-    const col = gridColumns().find(c => c.key === colKey);
+    const col = colByKey(colKey);
     if(!col) return false;
     const k = colStepK(col);                     // начало — по шагу начала пространства
     slot = Math.floor(slot / k) * k;
@@ -3723,7 +3754,7 @@ var PF = (function(){
   function setSelEnd(end){
     if(!hasSelection()) return false;
     const { end:hi } = gridSlotRange();
-    const col = gridColumns().find(c => c.key === sel.key);
+    const col = colByKey(sel.key);
     const m = minSlotsAt(col, sel.start), d = colDurK(col);
     // длина — минимум + N шагов длительности, не длиннее максимума и конца дня
     let len = fitLen(col, sel.start, end - sel.start);
@@ -3741,21 +3772,32 @@ var PF = (function(){
   const gridHeadEl = document.getElementById('gridHead');
   const gridHeadWrap = document.getElementById('gridHeadWrap');
   const gridScrollEl = document.getElementById('gridScroll');
+  const gridFadeEl = document.getElementById('gridFade');
   // Шапка живёт вне горизонтального скроллера (чтобы липнуть к верху экрана),
   // поэтому её горизонтальное положение ведём за сеткой вручную.
   function markGridEnd(){
     const end = gridScrollEl.scrollLeft + gridScrollEl.clientWidth >= gridScrollEl.scrollWidth - 2;
-    gridScrollEl.dataset.end = gridHeadWrap.dataset.end = end ? 'true' : 'false';
+    const v = end ? 'true' : 'false';
+    if(gridFadeEl.dataset.end !== v) gridFadeEl.dataset.end = gridHeadWrap.dataset.end = v;
+  }
+  // Угол над колонкой часов липнул к краю прокрутки шапки; шапка теперь едет
+  // сдвигом, поэтому угол сдвигаем обратно — он стоит на месте и закрывает дни.
+  function syncGridHead(){
+    const x = gridScrollEl.scrollLeft;
+    gridHeadEl.style.transform = 'translateX(' + (-x) + 'px)';
+    const corner = gridHeadEl.firstElementChild;
+    if(corner) corner.style.transform = 'translateX(' + x + 'px)';
   }
   gridScrollEl.addEventListener('scroll', ()=>{
+    syncGridHead();
     markGridEnd();
-    gridHeadWrap.scrollLeft = gridScrollEl.scrollLeft;
   }, { passive:true });
   // Ширину шапки (режим 'halls') держим равной телу и при ресайзе — поворот
   // экрана, изменение вьюпорта Telegram: иначе после сужения шапка оставалась
   // прежней ширины и подписи залов уезжали от своих колонок.
   if(window.ResizeObserver){
     new ResizeObserver(()=>{
+      colGeom = null;
       if(gridEl.dataset.fit === 'true') return;
       const w = gridEl.getBoundingClientRect().width;
       if(w) gridHeadEl.style.width = w + 'px';
@@ -3847,25 +3889,69 @@ var PF = (function(){
       });
     });
     // Выбор — один блок с временем и ручкой снизу.
-    if(hasSelection()){
-      const ci = cols.findIndex(c => c.key === sel.key);
-      const a = Math.max(sel.start, start), b = Math.min(sel.end, end);
-      if(ci >= 0 && b > a){
-        html += `<div class="grid-sel${flush(b)}" data-short="${!selectionValid()}" style="grid-column:${ci+2};grid-row:${a-start+1} / ${b-start+1}">`
-          // Узкий столбец: начало сверху, конец второй строкой — если блок достаточно высокий.
-          + `<span class="grid-sel-time">${minutesToLabel(sel.start * SLOT_MIN)}`
-          + ((b - a) * 42 / SPR >= 46 ? `<br>${minutesToLabel(sel.end * SLOT_MIN)}` : '') + `</span>`
-          + `<span class="grid-sel-handle" role="slider" aria-label="Длительность брони"></span></div>`;
-      }
-    }
+    const ss = selSpec();
+    if(ss) html += selBlockHtml(ss);
     gridEl.dataset.slotmin = String(SLOT_MIN);
     gridEl.innerHTML = html;
+    colGeom = null;
     // Шапка и тело — разные гриды, и max-content считает их по-разному
     // (в шапке есть текст, в клетках — нет). Приводим шапку к ширине тела,
     // тогда колонки совпадают пиксель в пиксель.
     gridHeadEl.style.width = gridEl.getBoundingClientRect().width + 'px';
-    gridHeadWrap.scrollLeft = gridScrollEl.scrollLeft;
+    syncGridHead();
     markGridEnd();
+  }
+
+  // ---- Блок выбора ----
+  // Выбор меняется часто (тап, каждый шаг перетаскивания), а клетки, занятость и
+  // штриховка — только с данными. Поэтому выбор рисуется отдельно: блок
+  // переставляется на месте, сетка не пересобирается.
+  // Где стоит блок: колонка и строки грида (конец не включается), подписи.
+  function selSpec(){
+    if(!hasSelection()) return null;
+    const { start, end } = gridSlotRange();
+    const cols = gridColumns(), ci = cols.findIndex(c => c.key === sel.key);
+    const a = Math.max(sel.start, start), b = Math.min(sel.end, end);
+    if(ci < 0 || b <= a) return null;
+    const SPR = Math.max(1, Math.round(60 / SLOT_MIN));
+    return { col:ci + 2, rowA:a - start + 1, rowB:b - start + 1,
+      flush: b % SPR !== 0,                // блок кончается не на границе часа — без нижнего «зазора»
+      short: !selectionValid(),
+      // Узкий столбец: начало сверху, конец второй строкой — если блок достаточно высокий.
+      time: minutesToLabel(sel.start * SLOT_MIN) + ((b - a) * 42 / SPR >= 46 ? '<br>' + minutesToLabel(sel.end * SLOT_MIN) : ''),
+      handle: true };
+  }
+  function selBlockHtml(sp){
+    return `<div class="grid-sel${sp.flush ? ' flush' : ''}" data-short="${sp.short}" style="grid-column:${sp.col};grid-row:${sp.rowA} / ${sp.rowB}">`
+      + `<span class="grid-sel-time">${sp.time}</span>`
+      + (sp.handle ? '<span class="grid-sel-handle" role="slider" aria-label="Длительность брони"></span>' : '') + '</div>';
+  }
+  const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  // Переставляет готовый блок. animate — плавный сдвиг из старого положения
+  // (FLIP: запомнили, где был, переставили, сдвинули обратно и отпустили).
+  function moveSelBlock(el, sp, animate){
+    const before = animate && !REDUCED_MOTION ? el.getBoundingClientRect() : null;
+    el.style.gridColumn = String(sp.col);
+    el.style.gridRow = sp.rowA + ' / ' + sp.rowB;
+    el.classList.toggle('flush', sp.flush);
+    el.dataset.short = String(sp.short);
+    const t = el.querySelector('.grid-sel-time');
+    if(t && t.innerHTML !== sp.time) t.innerHTML = sp.time;
+    if(!before) return;
+    const after = el.getBoundingClientRect();
+    const dx = before.left - after.left, dy = before.top - after.top;
+    if(!dx && !dy) return;
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px,${dy}px)`;
+    void el.offsetWidth;
+    el.style.transition = '';
+    el.style.transform = '';
+  }
+  function renderSel(animate){
+    const el = gridEl.querySelector('.grid-sel'), sp = selSpec();
+    if(!sp){ if(el) el.remove(); return; }
+    if(el) moveSelBlock(el, sp, animate);
+    else gridEl.insertAdjacentHTML('beforeend', selBlockHtml(sp));
   }
 
   // ---- Ввод: только тап (по клетке или по соседней) ----
@@ -3881,14 +3967,14 @@ var PF = (function(){
       if(hasSelection()){
         clearSelection();
         haptic('light');
-        renderGrid(); renderPeople(); renderSummary();
+        renderSel(); renderPeople(); renderSummary();
       }
       return;
     }
     if(tapCell(hit.col.key, hit.slot)){
       haptic('light');
       gridHintSeen();
-      renderGrid(); renderPeople(); renderSummary();
+      renderSel(true); renderPeople(); renderSummary();
     }
   });
   // Подсказка над сеткой — пока человек ни разу не выбрал время.
@@ -3913,7 +3999,12 @@ var PF = (function(){
   function showDragTip(blockEl, scrollerEl, mode, startMin, endMin){
     if(!blockEl) return hideDragTip();
     if(!dragTipEl){ dragTipEl = document.createElement('div'); dragTipEl.className = 'drag-tip'; document.body.appendChild(dragTipEl); }
-    const r = blockEl.getBoundingClientRect();
+    let r = blockEl.getBoundingClientRect();
+    const tf = getComputedStyle(blockEl).transform;
+    if(tf && tf !== 'none' && window.DOMMatrixReadOnly){
+      const m = new DOMMatrixReadOnly(tf);
+      r = { left:r.left - m.m41, right:r.right - m.m41, top:r.top - m.m42, bottom:r.bottom - m.m42 };
+    }
     dragTipEl.hidden = false;
     dragTipEl.className = 'drag-tip ' + (mode === 'move' ? 'start' : 'dur');
     const gridOf = blockEl.closest('.grid'); if(gridOf) gridOf.dataset.dragMode = mode;
@@ -3948,14 +4039,6 @@ var PF = (function(){
   // прежнему тап (см. tapCell).
   let drag = null;            // { id, mode:'move'|'resize', grab, len, x0, y0, x, y, moved }
   let dragJustEnded = false;
-  function cellAtPoint(x, y){
-    // Поверх занятых клеток лежат .grid-busy — берём клетку под ними.
-    const list = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
-    for(const n of list){
-      if(n && n.classList && n.classList.contains('grid-cell') && gridEl.contains(n)) return n;
-    }
-    return null;
-  }
   // Слот под точкой: часовая клетка + доля её высоты (4 слота в часе при шаге 15).
   // Считаем по геометрии сетки, а не по клетке под пальцем: так и зазоры между
   // часами и столбцами относятся к ближайшему времени, а строка = шаг студии.
@@ -3966,21 +4049,22 @@ var PF = (function(){
     const rowH = 42 / Math.max(1, Math.round(60 / SLOT_MIN));
     const k = Math.floor((y - gr.top) / rowH);
     if(k < 0 || k >= end - start) return null;
-    const firstRow = gridEl.querySelectorAll('.grid-cell[data-slot="' + start + '"]');
-    let hitCell = null;
-    for(const c of firstRow){
-      const r = c.getBoundingClientRect();
-      if(x >= r.left && x < r.right + 4){ hitCell = c; break; }   // +4 — зазор справа от столбца
+    if(!colGeom){
+      colGeom = [];
+      gridEl.querySelectorAll('.grid-cell[data-slot="' + start + '"]').forEach(c => {
+        const r = c.getBoundingClientRect();
+        colGeom.push({ key:c.dataset.col, l:r.left - gr.left, r:r.right - gr.left + 4 });   // +4 — зазор справа от столбца
+      });
     }
-    if(!hitCell) return null;
-    const col = gridColumns().find(c => c.key === hitCell.dataset.col);
+    const xr = x - gr.left, hit = colGeom.find(g => xr >= g.l && xr < g.r);
+    const col = hit && colByKey(hit.key);
     return col ? { col, slot: start + k } : null;
   }
   function dragTo(x, y){
     const hit = slotAtPoint(x, y);
     if(!hit) return;           // промежуток между клетками — остаёмся где были
     if(drag.mode === 'resize'){
-      if(setSelEnd(hit.slot + 1)){ haptic('light'); renderGrid(); renderPeople(); renderSummary(); }
+      if(setSelEnd(hit.slot + 1)){ haptic('light'); renderSel(); renderPeople(); renderSummary(); }
       mainDragTip();
       return;
     }
@@ -3991,7 +4075,7 @@ var PF = (function(){
     if(hit.col.key === sel.key && a === sel.start){ mainDragTip(); return; }
     if(setSel(hit.col.key, a, a + drag.len)){
       haptic('light');
-      renderGrid(); renderPeople(); renderSummary();
+      renderSel(true); renderPeople(); renderSummary();
     }
     mainDragTip();
   }
@@ -4047,7 +4131,6 @@ var PF = (function(){
       dragJustEnded = true;
       setTimeout(() => { dragJustEnded = false; }, 60);
       gridHintSeen();
-      renderGrid();
     }
   }
   window.addEventListener('pointerup', endDrag);
@@ -4068,7 +4151,7 @@ var PF = (function(){
     // Время по умолчанию не выбираем — клиент выбирает сам. Если выбранное
     // за это время заняли, выбор снимаем, а не подставляем другое.
     if(hasSelection()){
-      const col = gridColumns().find(c => c.key === sel.key);
+      const col = colByKey(sel.key);
       if(!col || !spanFree(col, sel.start, sel.end)) clearSelection();
     }
     renderGrid();
@@ -4728,14 +4811,14 @@ var PF = (function(){
       const r = barRate();
       total.innerHTML = r.big === '—' ? '—' : esc(r.big).replace(/^от /, '<small>от</small> ') + ' <small>' + esc(CUR) + '</small>';
       if(selectionPending()){
-        const col = gridColumns().find(c => c.key === sel.key);
+        const col = colByKey(sel.key);
         cap.textContent = 'Минимум ' + minLabel(col ? minSlotsAt(col, sel.start) * SLOT_MIN : SLOT_MIN) + ' — потяните край вниз';
       } else if(state.packageHours != null){
         cap.textContent = 'Пакет ' + pkgHoursLabel(state.packageHours) + ' — выберите начало';
       } else cap.textContent = r.cap;
       return;
     }
-    const col = gridColumns().find(c => c.key === sel.key);
+    const col = colByKey(sel.key);
     const time = `${minutesToLabel(sel.start*SLOT_MIN)}–${minutesToLabel(sel.end*SLOT_MIN)}`;
     const where = (gridMode()==='halls' && HALLS.length > 1)
       ? col.hall.name
@@ -5923,14 +6006,7 @@ var PF = (function(){
     sel:{ start:null, end:null },
   };
 
-  function rsWallClock(){
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: RS.tz, hourCycle:'h23',
-      year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit',
-    }).formatToParts(new Date());
-    const g = t => parts.find(p => p.type === t).value;
-    return { date:`${g('year')}-${g('month')}-${g('day')}`, minutes:Number(g('hour'))*60 + Number(g('minute')) };
-  }
+  function rsWallClock(){ return wallClockIn(RS.tz); }
   function rsToday(){
     const [y,m,d] = rsWallClock().date.split('-').map(Number);
     return new Date(y, m-1, d);
@@ -6098,15 +6174,26 @@ var PF = (function(){
         if(!on && rs >= 0){ html += `<div class="${cls}${flush(start + k)}" style="grid-column:2;grid-row:${rs+1} / ${k+1}"></div>`; rs = -1; }
       }
     });
-    if(rsHasSel()){
-      const a = Math.max(RS.sel.start, start), b = Math.min(RS.sel.end, end);
-      if(b > a){
-        html += `<div class="grid-sel${flush(b)}" data-short="${!rsSelValid()}" style="grid-column:2;grid-row:${a-start+1} / ${b-start+1}">`
-          + `<span class="grid-sel-time">${minutesToLabel(RS.sel.start * RS.step)}–${minutesToLabel(RS.sel.end * RS.step)}</span>`
-          + (RS.pkgSlots ? '' : '<span class="grid-sel-handle" role="slider" aria-label="Длительность"></span>') + '</div>';
-      }
-    }
+    const ss = rsSelSpec();
+    if(ss) html += selBlockHtml(ss);
     wrap.innerHTML = html;
+    rsRenderSum();
+  }
+  // Блок выбора переноса — как в основной сетке: переставляется на месте (см. renderSel).
+  function rsSelSpec(){
+    if(!rsHasSel()) return null;
+    const { start, end } = rsSlotRange();
+    const a = Math.max(RS.sel.start, start), b = Math.min(RS.sel.end, end);
+    if(b <= a) return null;
+    const SPR = Math.max(1, Math.round(60 / RS.step));
+    return { col:2, rowA:a - start + 1, rowB:b - start + 1, flush: b % SPR !== 0, short: !rsSelValid(),
+      time: minutesToLabel(RS.sel.start * RS.step) + '–' + minutesToLabel(RS.sel.end * RS.step), handle: !RS.pkgSlots };
+  }
+  function rsRenderSel(animate){
+    const el = rsGridEl.querySelector('.grid-sel'), sp = rsSelSpec();
+    if(!sp){ if(el) el.remove(); }
+    else if(el) moveSelBlock(el, sp, animate);
+    else rsGridEl.insertAdjacentHTML('beforeend', selBlockHtml(sp));
     rsRenderSum();
   }
   // Стоимость брони на новом времени — как считает сервер (тарифы по минутам, гости,
@@ -6186,7 +6273,7 @@ var PF = (function(){
     if(e.target.closest && (e.target.closest('.grid-sel') || e.target.closest('.grid-hour'))) return;
     const slot = rsSlotAtPoint(e.clientY);
     if(slot == null || rsCellState(slot) !== 'free') return;
-    if(rsTap(slot)){ haptic('light'); rsRenderGrid(); }
+    if(rsTap(slot)){ haptic('light'); rsRenderSel(true); }
   });
   rsGridEl.addEventListener('pointerdown', (e)=>{
     if(e.button > 0 || !rsHasSel()) return;
@@ -6214,14 +6301,14 @@ var PF = (function(){
       const a = Math.max(Math.ceil(lo / sk) * sk, Math.min(Math.floor((slot - rsDrag.grab) / sk) * sk, hi - rsDrag.len));
       if(a !== RS.sel.start) changed = rsSetSel(a, a + rsDrag.len);
     }
-    if(changed){ haptic('light'); rsRenderGrid(); }
+    if(changed){ haptic('light'); rsRenderSel(rsDrag.mode === 'move'); }
     showDragTip(rsGridEl.querySelector('.grid-sel'), rsGridEl, rsDrag.mode, RS.sel.start * RS.step, RS.sel.end * RS.step);
   }, { passive:false });
   function rsEndDrag(e){
     if(!rsDrag || (e && e.pointerId !== rsDrag.id)) return;
     const moved = rsDrag.moved;
     rsDrag = null; delete rsGridEl.dataset.dragging; hideDragTip();
-    if(moved){ rsDragEnded = true; setTimeout(() => { rsDragEnded = false; }, 60); rsRenderGrid(); }
+    if(moved){ rsDragEnded = true; setTimeout(() => { rsDragEnded = false; }, 60); }
   }
   window.addEventListener('pointerup', rsEndDrag);
   window.addEventListener('pointercancel', rsEndDrag);
