@@ -3031,8 +3031,10 @@ var PF = (function(){
   // Каталог оснащения (0055) — подписи и порядок групп; без него подписи
   // берутся из HALL_EQUIPMENT_RU выше (старые коды) или показывается код.
   var EQ_LABEL = {}, EQ_ORDER = {};
+  var _eqCatalogP = null;
   function loadEqCatalog(){
-    return fetch(API_BASE + '/api/equipment-catalog').then(function(r){ return r.ok ? r.json() : []; }).then(function(groups){
+    if(_eqCatalogP) return _eqCatalogP;
+    return _eqCatalogP = fetch(API_BASE + '/api/equipment-catalog').then(function(r){ return r.ok ? r.json() : []; }).then(function(groups){
       var k = 0;
       (Array.isArray(groups) ? groups : []).forEach(function(g){ (g.items || []).forEach(function(it){ EQ_LABEL[it.code] = it.label; EQ_ORDER[it.code] = k++; }); });
       // каталог пришёл позже страницы — перерисуем подписи открытого пространства
@@ -4074,6 +4076,7 @@ var PF = (function(){
       .concat(cur && typeof cur.includes === 'string'
         ? cur.includes.split('\n').map(function(x){ return x.trim(); }).filter(Boolean).map(function(l){ return { label:l }; }) : []);
     box.hidden = !lines.length;
+    box.dataset.collapsed = 'false';   // маска — только когда есть «Показать всё» (ставит apply ниже)
     if(!lines.length){ box.innerHTML = ''; return; }
     var hiddenN = lines.length - INCLUDED_COLLAPSED;
     box.innerHTML = '<div class="section-label">Оснащение для ' + esc(HALL_PURPOSE_GEN[cur.code] || 'аренды') + '</div>' +
@@ -4148,6 +4151,7 @@ var PF = (function(){
       .concat(STUDIO_INCLUDED_LIST.map(function(x){ return { label:x.label, on:!!a[x.f] }; }))
       .filter(function(it){ return it.on; });
     box.hidden = !items.length;
+    box.dataset.collapsed = 'false';
     if(!items.length){ box.innerHTML = ''; return; }
     var hidden = items.length - INCLUDED_COLLAPSED;
     box.innerHTML = '<div class="section-label">Пространство и удобства</div>' +
@@ -6909,7 +6913,12 @@ var PF = (function(){
     // В ветке студии платформенный конфиг не запрашиваем: ключ карт приходит
     // в /t/:id/config (см. applyTenantConfig). В каталоге тенанта нет —
     // там он по-прежнему нужен, и грузится параллельно со списком городов.
-    if(TENANT_ID){ await bootStudio(); await maybeApplyRepeatParam(); return; }
+    if(TENANT_ID){
+      // Подписи оснащения и типов пространства нужны и при входе по прямой ссылке
+      // на студию (без каталога) — иначе вместо «Bluetooth-колонка» видно код.
+      loadEqCatalog(); loadSpaceTypes();
+      await bootStudio(); await maybeApplyRepeatParam(); return;
+    }
     showCatalog();
     await bootCatalog();
   }
