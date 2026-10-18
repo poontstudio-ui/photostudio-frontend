@@ -268,6 +268,374 @@
 })();
 /* MP:END */
 </script>
+<script>
+/* TG:BEGIN — сетка выбора времени: выбор, блок, жест, подсказки (_dev/timegrid.js) */
+(function(){
+  // Общая часть трёх сеток: основная в мини-аппе, перенос брони в мини-аппе,
+  // быстрая бронь в кабинете. Здесь — модель выбора (тап, перенос, растягивание),
+  // блок выбора, попадание пальцем, жест и подсказки. Что рисовать в клетках,
+  // какие часы свободны, минимумы, шаги и пакеты — знает страница и передаёт
+  // сюда функциями (см. create).
+
+  // ---- «Сейчас» в таймзоне студии ----
+  // Сетка спрашивает «сейчас» для каждой клетки: создавать форматтер на каждый
+  // вызов — самое дорогое место отрисовки. Форматтер — один на таймзону, ответ
+  // живёт секунду (точность «сейчас» у сетки — минута).
+  var WALL_FMT = {}, WALL_MEMO = {};
+  function wallClock(tz){
+    var t = Date.now(), m = WALL_MEMO[tz];
+    if(m && t - m.at < 1000) return m.v;
+    var fmt = WALL_FMT[tz] || (WALL_FMT[tz] = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, hourCycle:'h23',
+      year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit',
+    }));
+    var parts = fmt.formatToParts(new Date(t));
+    var g = function(k){ return parts.find(function(p){ return p.type === k; }).value; };
+    var v = { date: g('year') + '-' + g('month') + '-' + g('day'), minutes: Number(g('hour')) * 60 + Number(g('minute')) };
+    WALL_MEMO[tz] = { at:t, v:v };
+    return v;
+  }
+  function pad(n){ return String(n).padStart(2, '0'); }
+  function hm(min){ return pad(Math.floor(min / 60)) + ':' + pad(min % 60); }
+  // Длительность без слов: «1:30», «4:00».
+  function dur(min){ return Math.floor(min / 60) + ':' + pad(min % 60); }
+
+  var REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  // ---- Подсказка под пальцем при перетаскивании ----
+  // Палец закрывает блок, поэтому время показываем рядом: при переносе — время
+  // начала на шкале часов слева, на уровне текста подписи часа; при растягивании —
+  // длительность сбоку от нижнего края, с той стороны, где есть место.
+  // Вид — класс .drag-tip в CSS страницы.
+  var tipEl = null;
+  function showTip(blockEl, scrollerEl, hourSel, mode, startMin, endMin){
+    if(!blockEl) return hideTip();
+    if(!tipEl){ tipEl = document.createElement('div'); tipEl.className = 'drag-tip'; document.body.appendChild(tipEl); }
+    // Положение блока без текущего сдвига анимации — там, где он встанет.
+    var r = blockEl.getBoundingClientRect();
+    var tf = getComputedStyle(blockEl).transform;
+    if(tf && tf !== 'none' && window.DOMMatrixReadOnly){
+      var mx = new DOMMatrixReadOnly(tf);
+      r = { left:r.left - mx.m41, right:r.right - mx.m41, top:r.top - mx.m42, bottom:r.bottom - mx.m42 };
+    }
+    tipEl.hidden = false;
+    tipEl.className = 'drag-tip ' + (mode === 'move' ? 'start' : 'dur');
+    var gridOf = blockEl.parentElement;
+    if(gridOf) gridOf.dataset.dragMode = mode;
+    var w, h;
+    if(mode === 'move'){
+      tipEl.textContent = hm(startMin);
+      var sr = scrollerEl.getBoundingClientRect();
+      var hourEl = gridOf && gridOf.querySelector(hourSel);
+      var hr = hourEl ? hourEl.getBoundingClientRect() : { top:0, right: sr.left + 40 };
+      // где по высоте стоит текст подписи внутри её строки
+      var textMid = 8;
+      if(hourEl){ var rg = document.createRange(); rg.selectNodeContents(hourEl); var tr = rg.getBoundingClientRect(); textMid = (tr.top + tr.bottom) / 2 - hr.top; }
+      w = tipEl.offsetWidth; h = tipEl.offsetHeight;
+      tipEl.style.left = (hr.right - w) + 'px';
+      tipEl.style.top = Math.max(sr.top, r.top + textMid - h / 2) + 'px';
+    } else {
+      tipEl.textContent = dur(endMin - startMin);
+      w = tipEl.offsetWidth; h = tipEl.offsetHeight;
+      var left = (r.left - w - 8 >= 4) ? r.left - w - 8 : Math.min(window.innerWidth - w - 4, r.right + 8);
+      tipEl.style.left = left + 'px';
+      tipEl.style.top = (r.bottom - h - 6) + 'px';
+    }
+  }
+  function hideTip(){
+    if(tipEl) tipEl.hidden = true;
+    document.querySelectorAll('[data-drag-mode]').forEach(function(g){ delete g.dataset.dragMode; });
+  }
+
+  // ---- Сетка ----
+  // o — описание сетки от страницы:
+  //   el           — элемент грида (столбец 1 — подписи часов, столбцы 2… — o.cols());
+  //   cls          — префикс классов: 'grid' → .grid-sel, .grid-sel-time, .grid-sel-handle, .grid-cell;
+  //   hourSel      — селектор подписи часа (для подсказки начала);
+  //   hourPx       — высота часа в пикселях;
+  //   slotMin()    — минут в строке; range() — {start, end} строки окна (в слотах);
+  //   cols()       — ключи столбцов по порядку; free(key, slot) — слот свободен;
+  //   oneCol       — столбец один: попадание только по высоте;
+  //   startK(key), durK(key) — шаги начала и длительности в строках;
+  //   minSlots(key, slot), maxSlots() — минимум и максимум брони в строках;
+  //   defaultLen(key, slot) — длина нового выбора, когда выбора ещё нет;
+  //   fixedLen()   — длина пакета (или null); fixedExact — пакет только целиком;
+  //   lockCol()    — столбец, за который выбор не уходит (или null);
+  //   label(sel, a, b, spr) — подпись в блоке; handle() — есть ли ручка;
+  //   afterSet()   — выбор поменялся (страница обновляет своё состояние);
+  //   onChange(kind) — после отрисовки: 'tap' | 'move' | 'resize' | 'clear';
+  //   beforeTap(e) — вернуть false, чтобы тап не трогал выбор (бронь в кабинете);
+  //   clearOnMiss  — тап мимо клеток снимает выбор;
+  //   onDragEnd()  — блок отпустили после перетаскивания;
+  //   tip          — показывать подсказки: { scroller() };
+  //   autoScroll   — прокрутка у краёв: { x(), y(), insets() → {top, bottom} };
+  //   haptic(style).
+  function create(o){
+    var el = o.el, cls = o.cls;
+    var sel = { key:null, start:null, end:null, want:null };   // end не включается
+    var haptic = o.haptic || function(){};
+    var fixedLen = o.fixedLen || function(){ return null; };
+    var lockCol = o.lockCol || function(){ return null; };
+
+    function spr(){ return Math.max(1, Math.round(60 / o.slotMin())); }
+    function has(){ return sel.key !== null && sel.start !== null; }
+    function clear(){ sel.key = null; sel.start = null; sel.end = null; sel.want = null; }
+    function spanFree(key, a, b){
+      if(b - a < 1 || b - a > o.maxSlots()) return false;
+      for(var i = a; i < b; i++) if(!o.free(key, i)) return false;
+      return true;
+    }
+    // Ставит выбор, если весь отрезок свободен. Возвращает успех.
+    function set(key, a, b){
+      if(!spanFree(key, a, b)) return false;
+      sel.key = key; sel.start = a; sel.end = b;
+      if(o.afterSet) o.afterSet();
+      return true;
+    }
+    // Длина по правилу «минимум + N шагов длительности» — ближайшая допустимая.
+    function fit(key, start, len){
+      if(fixedLen() != null) return len;                 // пакет — своя фиксированная длина
+      var m = o.minSlots(key, start), d = o.durK(key);
+      return len <= m ? m : m + Math.round((len - m) / d) * d;
+    }
+    function valid(){
+      if(!has() || !spanFree(sel.key, sel.start, sel.end)) return false;
+      var len = sel.end - sel.start, fixed = fixedLen();
+      if(fixed != null && o.fixedExact) return len === fixed;
+      var m = o.minSlots(sel.key, sel.start);
+      if(len < m) return false;
+      return fixed != null || (len - m) % o.durK(sel.key) === 0;
+    }
+    // Свободно, но короче минимума — отмеченное начало, ждущее растягивания.
+    function pending(){
+      return has() && spanFree(sel.key, sel.start, sel.end) && (sel.end - sel.start) < o.minSlots(sel.key, sel.start);
+    }
+
+    // Тап — начало брони. Блок встаёт с этого места длиной, до которой человек
+    // сам растягивал выбор (want), иначе — длиной текущего выбора, а без выбора —
+    // o.defaultLen. Не помещается (дальше занято или день кончается) — блок
+    // короче, до помехи; короче минимума — сетка подсветит. Пакет при
+    // fixedExact ставится только целиком.
+    function tap(key, slot){
+      var k = o.startK(key);
+      slot = Math.floor(slot / k) * k;                   // начало — по шагу начала столбца
+      var fixed = fixedLen();
+      if(fixed != null && o.fixedExact) return set(key, slot, slot + fixed);
+      var keep = !has() ? o.defaultLen(key, slot)
+        : (sel.want != null && fixed == null) ? Math.round(sel.want / o.slotMin()) : sel.end - sel.start;
+      var len = fit(key, slot, Math.max(keep, fixed != null ? 1 : o.minSlots(key, slot)));
+      var hi = o.range().end, m = o.minSlots(key, slot), d = fixed != null ? len : o.durK(key), n;
+      // допустимые длины: len, len - шаг, … до минимума
+      for(n = len; n >= m; n -= d){ if(slot + n <= hi && set(key, slot, slot + n)) return true; if(d <= 0) break; }
+      // не помещается даже минимум — ставим сколько влезает (подсветится «коротко»)
+      for(n = Math.min(m - 1, hi - slot); n >= 1; n--) if(set(key, slot, slot + n)) return true;
+      return false;
+    }
+    // Конец выбора (ручка): начало на месте, длина — минимум + N шагов, до первой помехи.
+    function resizeTo(end){
+      if(!has() || (fixedLen() != null && o.fixedExact)) return false;
+      var hi = o.range().end, key = sel.key, start = sel.start;
+      var m = o.minSlots(key, start), d = o.durK(key);
+      var len = fit(key, start, end - start);
+      while(len > m && (len > o.maxSlots() || start + len > hi)) len -= d;
+      var b = start + len, ok = false;
+      if(b === sel.end) return false;
+      if(b > sel.end){ for(var t = b; t > sel.end; t -= d) if(set(key, start, t)){ ok = true; break; } }
+      else ok = set(key, start, b);
+      if(ok) sel.want = (sel.end - sel.start) * o.slotMin();
+      return ok;
+    }
+    // Перенос целиком: та же длина, начало — по шагу столбца, в пределах окна.
+    function moveTo(key, slot, grab, len){
+      var lock = lockCol(); if(lock != null) key = lock;
+      var r = o.range(), k = o.startK(key);
+      var a = Math.floor((slot - grab) / k) * k;
+      a = Math.max(Math.ceil(r.start / k) * k, Math.min(a, r.end - len));
+      if(key === sel.key && a === sel.start) return false;
+      return set(key, a, a + len);
+    }
+
+    // ---- Блок выбора ----
+    // Выбор меняется часто (тап, каждый шаг перетаскивания), а клетки и занятость —
+    // только с данными. Поэтому блок переставляется на месте, сетка не пересобирается.
+    function spec(){
+      if(!has()) return null;
+      var r = o.range(), ci = o.cols().indexOf(sel.key);
+      var a = Math.max(sel.start, r.start), b = Math.min(sel.end, r.end);
+      if(ci < 0 || b <= a) return null;
+      var s = spr();
+      return { col:ci + 2, rowA:a - r.start + 1, rowB:b - r.start + 1,
+        flush: b % s !== 0,                  // кончается не на границе часа — без нижнего «зазора»
+        short: !valid(), time: o.label(sel, a, b, s), handle: o.handle ? o.handle() : true };
+    }
+    function handleHtml(){ return '<span class="' + cls + '-sel-handle" role="slider" aria-label="Длительность"></span>'; }
+    function blockHtml(){
+      var sp = spec();
+      if(!sp) return '';
+      return '<div class="' + cls + '-sel' + (sp.flush ? ' flush' : '') + '" data-short="' + sp.short + '" style="grid-column:' + sp.col + ';grid-row:' + sp.rowA + ' / ' + sp.rowB + '">'
+        + '<span class="' + cls + '-sel-time">' + sp.time + '</span>' + (sp.handle ? handleHtml() : '') + '</div>';
+    }
+    function blockEl(){ return el.querySelector('.' + cls + '-sel'); }
+    // animate — плавный сдвиг из старого положения (FLIP: запомнили, где был,
+    // переставили, сдвинули обратно и отпустили — CSS-переход по transform).
+    function renderBlock(animate){
+      var b = blockEl(), sp = spec();
+      if(!sp){ if(b) b.remove(); return; }
+      if(!b){ el.insertAdjacentHTML('beforeend', blockHtml()); return; }
+      var before = animate && !REDUCED_MOTION ? b.getBoundingClientRect() : null;
+      b.style.gridColumn = String(sp.col);
+      b.style.gridRow = sp.rowA + ' / ' + sp.rowB;
+      b.classList.toggle('flush', sp.flush);
+      b.dataset.short = String(sp.short);
+      var t = b.querySelector('.' + cls + '-sel-time');
+      if(t && t.innerHTML !== sp.time) t.innerHTML = sp.time;
+      var hd = b.querySelector('.' + cls + '-sel-handle');
+      if(sp.handle && !hd) b.insertAdjacentHTML('beforeend', handleHtml());
+      if(!sp.handle && hd) hd.remove();
+      if(!before) return;
+      var after = b.getBoundingClientRect(), dx = before.left - after.left, dy = before.top - after.top;
+      if(!dx && !dy) return;
+      b.style.transition = 'none';
+      b.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      void b.offsetWidth;
+      b.style.transition = '';
+      b.style.transform = '';
+    }
+
+    // ---- Попадание пальцем ----
+    // Слот под точкой — по геометрии сетки, а не по элементу под пальцем: так и
+    // зазоры между часами и столбцами относятся к ближайшему времени, и поверх
+    // клеток может лежать что угодно (занятость, брони, выбор). Границы столбцов
+    // (относительно сетки) считаем один раз; сбрасываются при перерисовке и смене размеров.
+    var geom = null;
+    if(window.MutationObserver) new MutationObserver(function(){ geom = null; }).observe(el, { childList:true });
+    if(window.ResizeObserver) new ResizeObserver(function(){ geom = null; }).observe(el);
+    function slotAt(x, y){
+      var r = o.range();
+      if(r.end <= r.start) return null;
+      var gr = el.getBoundingClientRect();
+      var k = Math.floor((y - gr.top + el.scrollTop) / (o.hourPx / spr()));
+      if(k < 0 || k >= r.end - r.start) return null;
+      if(o.oneCol) return { key:o.cols()[0], slot:r.start + k };   // один столбец — по горизонтали не важно
+      if(!geom){
+        geom = [];
+        el.querySelectorAll('.' + cls + '-cell[data-slot="' + r.start + '"]').forEach(function(c){
+          var cr = c.getBoundingClientRect();
+          geom.push({ key:c.dataset.col, l:cr.left - gr.left + el.scrollLeft, r:cr.right - gr.left + el.scrollLeft + 4 });   // +4 — зазор справа
+        });
+      }
+      var xr = x - gr.left + el.scrollLeft;
+      for(var i = 0; i < geom.length; i++) if(xr >= geom[i].l && xr < geom[i].r) return { key:geom[i].key, slot:r.start + k };
+      return null;
+    }
+
+    // ---- Жест: тап, перенос и растягивание — один обработчик ----
+    // Опустили палец или мышь — смотрим куда. На блоке выбора его можно тащить,
+    // а за ручку снизу — тянуть. В остальных местах это тап, если отпустили почти
+    // там же, где нажали; сдвиг — это прокрутка, тап отменяется (на сенсоре браузер
+    // к тому же присылает pointercancel). Всё на событиях указателя, без click:
+    // конец перетаскивания не может сработать как тап — флаги не нужны.
+    var TAP_SLOP = 10;
+    var g = null;   // { id, mode:'tap'|'move'|'resize', x0, y0, x, y, grab, len, moved }
+    function tip(){
+      if(!o.tip || !g || !g.moved || !has()) return hideTip();
+      var m = o.slotMin();
+      showTip(blockEl(), o.tip.scroller(), o.hourSel, g.mode, sel.start * m, sel.end * m);
+    }
+    function dragStep(){
+      var hit = slotAt(g.x, g.y);
+      if(hit){
+        if(g.mode === 'resize'){
+          if(resizeTo(hit.slot + 1)){ haptic('light'); renderBlock(); if(o.onChange) o.onChange('resize'); }
+        } else if(moveTo(hit.key, hit.slot, g.grab, g.len)){
+          haptic('light'); renderBlock(true); if(o.onChange) o.onChange('move');
+        }
+      }
+      tip();
+    }
+    // У края сетки и экрана сетка прокручивается сама, пока палец там.
+    function autoScroll(){
+      if(!g || !g.moved || !o.autoScroll) return;
+      var EDGE = 32, STEP = 10, moved = false, sx = o.autoScroll.x && o.autoScroll.x(), sy = o.autoScroll.y && o.autoScroll.y();
+      if(sx){
+        var r = sx.getBoundingClientRect(), before = sx.scrollLeft;
+        if(g.x < r.left + EDGE) sx.scrollLeft -= STEP; else if(g.x > r.right - EDGE) sx.scrollLeft += STEP;
+        moved = sx.scrollLeft !== before;
+      }
+      if(sy){
+        var ins = o.autoScroll.insets ? o.autoScroll.insets() : { top:0, bottom:0 };
+        var win = sy === window, top = (win ? 0 : sy.getBoundingClientRect().top) + ins.top;
+        var bottom = (win ? window.innerHeight : sy.getBoundingClientRect().bottom) - ins.bottom;
+        var y0 = win ? window.scrollY : sy.scrollTop, dy = g.y < top + EDGE ? -STEP : g.y > bottom - EDGE ? STEP : 0;
+        if(dy){ if(win) window.scrollBy(0, dy); else sy.scrollTop += dy; }
+        moved = moved || (win ? window.scrollY : sy.scrollTop) !== y0;
+      }
+      if(moved) dragStep();
+      requestAnimationFrame(autoScroll);
+    }
+    function tapAt(e){
+      if(o.beforeTap && o.beforeTap(e) === false) return;
+      var hit = slotAt(e.clientX, e.clientY);
+      if(!hit){
+        if(o.clearOnMiss && has()){ clear(); haptic('light'); renderBlock(); if(o.onChange) o.onChange('clear'); }
+        return;
+      }
+      // Тап по недоступному времени (занято, прошло, закрыто) — выбор остаётся.
+      if(!o.free(hit.key, hit.slot)) return;
+      var lock = lockCol(); if(lock != null && hit.key !== lock) return;
+      if(tap(hit.key, hit.slot)){ haptic('light'); renderBlock(true); if(o.onChange) o.onChange('tap'); }
+    }
+    el.addEventListener('pointerdown', function(e){
+      if(e.button > 0 || g) return;
+      var onBlock = has() && e.target.closest && e.target.closest('.' + cls + '-sel');
+      g = { id:e.pointerId, mode:'tap', x0:e.clientX, y0:e.clientY, x:e.clientX, y:e.clientY, grab:0, len:0, moved:false };
+      if(onBlock){
+        g.mode = e.target.closest('.' + cls + '-sel-handle') ? 'resize' : 'move';
+        var hit = slotAt(e.clientX, e.clientY);
+        g.len = sel.end - sel.start;
+        g.grab = hit ? Math.max(0, Math.min(hit.slot - sel.start, g.len - 1)) : 0;
+      }
+    });
+    window.addEventListener('pointermove', function(e){
+      if(!g || e.pointerId !== g.id) return;
+      g.x = e.clientX; g.y = e.clientY;
+      var d = Math.hypot(g.x - g.x0, g.y - g.y0);
+      if(g.mode === 'tap'){ if(d > TAP_SLOP) g = null; return; }
+      if(!g.moved){
+        if(d < (g.mode === 'resize' ? 4 : 8)) return;
+        g.moved = true;
+        el.dataset.dragging = 'true';
+        haptic('medium');
+        tip();
+        requestAnimationFrame(autoScroll);
+      }
+      e.preventDefault();
+      dragStep();
+    }, { passive:false });
+    function end(e){
+      if(!g || e.pointerId !== g.id) return;
+      var done = g; g = null;
+      if(done.mode === 'tap'){ if(e.type === 'pointerup') tapAt(e); return; }
+      delete el.dataset.dragging;
+      if(o.tip) hideTip();
+      if(done.moved && o.onDragEnd) o.onDragEnd();
+    }
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+
+    return {
+      sel: sel, has: has, clear: clear, set: set, spanFree: spanFree, fit: fit,
+      valid: valid, pending: pending, tap: tap, resizeTo: resizeTo, moveTo: moveTo,
+      blockHtml: blockHtml, renderBlock: renderBlock, slotAt: slotAt,
+      // Жест на блоке отменяется (например, долгий тап по брони стал её переносом).
+      cancelGesture: function(){ g = null; },
+    };
+  }
+
+  window.PGrid = { create: create, wallClock: wallClock, hm: hm, dur: dur };
+})();
+/* TG:END */
+</script>
 <style>
 
 /* ============================================================
@@ -1555,7 +1923,7 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 /* Шапка дней едет за сеткой сдвигом (transform), а не прокруткой: так полоса
    затухания у шапки стоит на месте, а сдвиг не заставляет пересчитывать раскладку. */
 #gridHead{will-change:transform;}
-/* Блок выбора переезжает на новое место плавно (см. moveSelBlock). */
+/* Блок выбора переезжает на новое место плавно (FLIP в PGrid.renderBlock). */
 .grid-sel{transition:transform .09s ease-out;}
 @media (prefers-reduced-motion:reduce){ .grid-sel{transition:none;} }
 #grid .grid-hour,#grid .grid-cell{align-self:start;height:38px;}
@@ -2862,12 +3230,6 @@ var PF = (function(){
   // Во сколько строк укладывается шаг начала / длительности столбца (60/15 = 4 и т.п.).
   function colStepK(col){ return Math.max(1, Math.round(hallStepMin(col && col.hall) / SLOT_MIN)); }
   function colDurK(col){ return Math.max(1, Math.round(hallDurStep(col && col.hall) / SLOT_MIN)); }
-  // Длина брони по правилу «минимум + N шагов длительности» — ближайшая допустимая.
-  function fitLen(col, start, len){
-    if(state.packageHours != null) return len;           // пакет — своя фиксированная длина
-    const m = minSlotsAt(col, start), d = colDurK(col);
-    return len <= m ? m : m + Math.round((len - m) / d) * d;
-  }
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
   let HALL_PROPS = { hallType:true, areaM2:true, ceilingCm:true, floor:true, styles:true,
@@ -3082,25 +3444,8 @@ var PF = (function(){
 
   // «Сейчас» считаем в ТАЙМЗОНЕ СТУДИИ (STUDIO_TZ), а не по tz устройства и без
   // захардкоженного UTC+3. Стенные часы студии: { date:'YYYY-MM-DD', minutes }.
-  // Сетка спрашивает «сейчас» для каждой клетки: создавать форматтер на каждый
-  // вызов — самое дорогое место отрисовки. Форматтер — один на таймзону, ответ
-  // живёт секунду (точность «сейчас» у сетки — минута).
-  const WALL_FMT = {}, WALL_MEMO = {};
-  function wallClockIn(tz){
-    const t = Date.now(), m = WALL_MEMO[tz];
-    if(m && t - m.at < 1000) return m.v;
-    const fmt = WALL_FMT[tz] || (WALL_FMT[tz] = new Intl.DateTimeFormat('en-CA', {
-      timeZone: tz, hourCycle:'h23',
-      year:'numeric', month:'2-digit', day:'2-digit',
-      hour:'2-digit', minute:'2-digit',
-    }));
-    const parts = fmt.formatToParts(new Date(t));
-    const g = k => parts.find(p => p.type === k).value;
-    const v = { date:`${g('year')}-${g('month')}-${g('day')}`, minutes:Number(g('hour'))*60 + Number(g('minute')) };
-    WALL_MEMO[tz] = { at:t, v };
-    return v;
-  }
-  function studioWallClock(){ return wallClockIn(STUDIO_TZ); }
+  // Форматтер и кэш на секунду — в модуле сетки (PGrid.wallClock).
+  function studioWallClock(){ return PGrid.wallClock(STUDIO_TZ); }
   function businessNowMinutes(){ return studioWallClock().minutes; }
   // «Сегодня в студии» как локальная полночь: у такой даты getDate/getDay/
   // toLocaleDateString дают нужный календарный день без ухода в UTC.
@@ -3579,9 +3924,6 @@ var PF = (function(){
   // Столбцы: если залов несколько — залы на выбранную дату; если зал один —
   // дни (до конца месяца). Строки — целые часы. Клетка = 1 час.
   const gridEl = document.getElementById('grid');
-  // Границы столбцов относительно сетки — [{key, l, r}] для попадания пальцем
-  // (slotAtPoint); сбрасываются при отрисовке и смене размеров.
-  let colGeom = null;
 
   // Открытая страница зала: null — обзор студии, иначе сетка только этого зала.
   let openHallId = null;
@@ -3671,29 +4013,41 @@ var PF = (function(){
     return busy.some(b => s0 < b.end && e0 > b.start) ? 'busy' : 'free';
   }
 
-  // ---- Выделение: непрерывный отрезок часов в ОДНОМ столбце ----
-  // end не включается. want — длительность (мин), до которой человек сам растянул
-  // блок: если на новом месте она не влезла и блок укоротился, следующий тап туда,
-  // где места хватает, вернёт именно её, а не укороченную.
-  const sel = { key:null, start:null, end:null, want:null };
-
-  function clearSelection(){ sel.key=null; sel.start=null; sel.end=null; sel.want=null; }
-  function hasSelection(){ return sel.key !== null && sel.start !== null; }
-
-  function spanFree(col, a, b){
-    if(b - a < 1 || b - a > maxSlots()) return false;
-    for(let i=a; i<b; i++) if(cellState(col, i) !== 'free') return false;
-    return true;
-  }
-
+  // ---- Выделение: непрерывный отрезок времени в ОДНОМ столбце ----
+  // Модель выбора (тап, перенос, растягивание, «запомненная» длительность), блок,
+  // жест и подсказки — общий модуль сетки PGrid (_dev/timegrid.js). Здесь — то,
+  // что знает только мини-апп: столбцы, занятость, минимумы, шаги и пакеты.
+  const G = PGrid.create({
+    el: gridEl, cls: 'grid', hourSel: '.grid-hour', hourPx: 42,
+    slotMin: () => SLOT_MIN,
+    range: gridSlotRange,
+    cols: () => gridColumns().map(c => c.key),
+    free: (key, slot) => { const col = colByKey(key); return !!col && cellState(col, slot) === 'free'; },
+    startK: key => colStepK(colByKey(key)),
+    durK: key => colDurK(colByKey(key)),
+    minSlots: (key, slot) => minSlotsAt(colByKey(key), slot),
+    maxSlots,
+    defaultLen: (key, slot) => targetSlotsAt(colByKey(key), slot),
+    // Пакет — фиксированная длина; растянули вручную — пакет сбрасывается (syncStateFromSel).
+    fixedLen: () => state.packageHours != null ? Math.max(1, Math.round(state.packageHours * 60 / SLOT_MIN)) : null,
+    // Узкий столбец: начало сверху, конец второй строкой — если блок достаточно высокий.
+    label: (s, a, b, spr) => minutesToLabel(s.start * SLOT_MIN) + ((b - a) * 42 / spr >= 46 ? '<br>' + minutesToLabel(s.end * SLOT_MIN) : ''),
+    afterSet: syncStateFromSel,
+    onChange(kind){ if(kind === 'tap') gridHintSeen(); renderPeople(); renderSummary(); },
+    clearOnMiss: true,          // тап мимо клеток (подписи часов, промежутки) снимает выбор
+    onDragEnd: gridHintSeen,
+    tip: { scroller: () => gridScrollEl },
+    autoScroll: {
+      x: () => gridScrollEl, y: () => window,
+      insets(){ const bar = document.getElementById('summaryBar'); return { top:40, bottom: bar && bar.offsetParent !== null ? bar.offsetHeight : 0 }; },
+    },
+    haptic,
+  });
+  const sel = G.sel;   // { key, start, end, want } — end не включается
+  function clearSelection(){ G.clear(); }
+  function hasSelection(){ return G.has(); }
   // Ставит выделение, если весь отрезок свободен. Возвращает успех.
-  function setSel(colKey, a, b){
-    const col = colByKey(colKey);
-    if(!col || !spanFree(col, a, b)) return false;
-    sel.key = colKey; sel.start = a; sel.end = b;
-    syncStateFromSel();
-    return true;
-  }
+  function setSel(colKey, a, b){ return G.set(colKey, a, b); }
 
   // Выделение — источник истины; state держим синхронным для цены и брони.
   function syncStateFromSel(){
@@ -3713,66 +4067,10 @@ var PF = (function(){
     if(state.people > pricingHall().capacity) state.people = pricingHall().capacity;
   }
 
-  function selectionValid(){
-    if(!hasSelection()) return false;
-    const col = colByKey(sel.key);
-    if(!col || !spanFree(col, sel.start, sel.end)) return false;
-    // Не короче минимума окна и ровно «минимум + N шагов длительности» (0062).
-    const len = sel.end - sel.start, m = minSlotsAt(col, sel.start);
-    if(len < m) return false;
-    return state.packageHours != null || (len - m) % colDurK(col) === 0;
-  }
-  // Выделение свободно и правильной длины, но короче минимума окна — значит
-  // это одиночная отмеченная клетка, ждущая второй точки промежутка.
-  function selectionPending(){
-    if(!hasSelection()) return false;
-    const col = colByKey(sel.key);
-    return !!col && spanFree(col, sel.start, sel.end) && (sel.end - sel.start) < minSlotsAt(col, sel.start);
-  }
-
-  // Тап — начало брони. Блок встаёт с этого места: длиной как текущий выбор
-  // (повторный тап переносит его), а если выбора нет — минимум окна или пакет.
-  // Не помещается (дальше занято или студия закрывается) — блок короче, до
-  // помехи; если он короче минимума, сетка и плашка это покажут.
-  function tapCell(colKey, slot){
-    const col = colByKey(colKey);
-    if(!col) return false;
-    const k = colStepK(col);                     // начало — по шагу начала пространства
-    slot = Math.floor(slot / k) * k;
-    const keep = !hasSelection() ? 0
-      : (sel.want != null && state.packageHours == null) ? Math.round(sel.want / SLOT_MIN) : sel.end - sel.start;
-    const want = fitLen(col, slot, Math.max(keep, targetSlotsAt(col, slot)));
-    const { end:hi } = gridSlotRange();
-    const m = minSlotsAt(col, slot), d = state.packageHours != null ? want : colDurK(col);
-    // допустимые длины: want, want - шаг, … до минимума
-    for(let n = want; n >= m; n -= d){
-      if(slot + n <= hi && setSel(colKey, slot, slot + n)) return true;
-      if(d <= 0) break;
-    }
-    // не помещается даже минимум — ставим сколько влезает (подсветится как «коротко»)
-    for(let n = Math.min(m - 1, hi - slot); n >= 1; n--){
-      if(setSel(colKey, slot, slot + n)) return true;
-    }
-    return false;
-  }
-  // Длительность ±шаг (кнопки в плашке и ручка): конец двигается, начало на месте.
-  function setSelEnd(end){
-    if(!hasSelection()) return false;
-    const { end:hi } = gridSlotRange();
-    const col = colByKey(sel.key);
-    const m = minSlotsAt(col, sel.start), d = colDurK(col);
-    // длина — минимум + N шагов длительности, не длиннее максимума и конца дня
-    let len = fitLen(col, sel.start, end - sel.start);
-    while(len > m && (len > maxSlots() || sel.start + len > hi)) len -= d;
-    const b = sel.start + len;
-    if(b === sel.end) return false;
-    if(b > sel.end){
-      // растягиваем до первой помехи
-      for(let t = b; t > sel.end; t -= d) if(setSel(sel.key, sel.start, t)) return true;
-      return false;
-    }
-    return setSel(sel.key, sel.start, b);
-  }
+  // Не короче минимума окна и ровно «минимум + N шагов длительности» (0062); пакет — своей длины.
+  function selectionValid(){ return G.valid(); }
+  // Свободно, но короче минимума окна — отмеченное начало, ждущее растягивания.
+  function selectionPending(){ return G.pending(); }
 
   const gridHeadEl = document.getElementById('gridHead');
   const gridHeadWrap = document.getElementById('gridHeadWrap');
@@ -3802,7 +4100,6 @@ var PF = (function(){
   // прежней ширины и подписи залов уезжали от своих колонок.
   if(window.ResizeObserver){
     new ResizeObserver(()=>{
-      colGeom = null;
       if(gridEl.dataset.fit === 'true') return;
       const w = gridEl.getBoundingClientRect().width;
       if(w) gridHeadEl.style.width = w + 'px';
@@ -3894,11 +4191,9 @@ var PF = (function(){
       });
     });
     // Выбор — один блок с временем и ручкой снизу.
-    const ss = selSpec();
-    if(ss) html += selBlockHtml(ss);
+    html += G.blockHtml();
     gridEl.dataset.slotmin = String(SLOT_MIN);
     gridEl.innerHTML = html;
-    colGeom = null;
     // Шапка и тело — разные гриды, и max-content считает их по-разному
     // (в шапке есть текст, в клетках — нет). Приводим шапку к ширине тела,
     // тогда колонки совпадают пиксель в пиксель.
@@ -3907,80 +4202,6 @@ var PF = (function(){
     markGridEnd();
   }
 
-  // ---- Блок выбора ----
-  // Выбор меняется часто (тап, каждый шаг перетаскивания), а клетки, занятость и
-  // штриховка — только с данными. Поэтому выбор рисуется отдельно: блок
-  // переставляется на месте, сетка не пересобирается.
-  // Где стоит блок: колонка и строки грида (конец не включается), подписи.
-  function selSpec(){
-    if(!hasSelection()) return null;
-    const { start, end } = gridSlotRange();
-    const cols = gridColumns(), ci = cols.findIndex(c => c.key === sel.key);
-    const a = Math.max(sel.start, start), b = Math.min(sel.end, end);
-    if(ci < 0 || b <= a) return null;
-    const SPR = Math.max(1, Math.round(60 / SLOT_MIN));
-    return { col:ci + 2, rowA:a - start + 1, rowB:b - start + 1,
-      flush: b % SPR !== 0,                // блок кончается не на границе часа — без нижнего «зазора»
-      short: !selectionValid(),
-      // Узкий столбец: начало сверху, конец второй строкой — если блок достаточно высокий.
-      time: minutesToLabel(sel.start * SLOT_MIN) + ((b - a) * 42 / SPR >= 46 ? '<br>' + minutesToLabel(sel.end * SLOT_MIN) : ''),
-      handle: true };
-  }
-  function selBlockHtml(sp){
-    return `<div class="grid-sel${sp.flush ? ' flush' : ''}" data-short="${sp.short}" style="grid-column:${sp.col};grid-row:${sp.rowA} / ${sp.rowB}">`
-      + `<span class="grid-sel-time">${sp.time}</span>`
-      + (sp.handle ? '<span class="grid-sel-handle" role="slider" aria-label="Длительность брони"></span>' : '') + '</div>';
-  }
-  const REDUCED_MOTION = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-  // Переставляет готовый блок. animate — плавный сдвиг из старого положения
-  // (FLIP: запомнили, где был, переставили, сдвинули обратно и отпустили).
-  function moveSelBlock(el, sp, animate){
-    const before = animate && !REDUCED_MOTION ? el.getBoundingClientRect() : null;
-    el.style.gridColumn = String(sp.col);
-    el.style.gridRow = sp.rowA + ' / ' + sp.rowB;
-    el.classList.toggle('flush', sp.flush);
-    el.dataset.short = String(sp.short);
-    const t = el.querySelector('.grid-sel-time');
-    if(t && t.innerHTML !== sp.time) t.innerHTML = sp.time;
-    if(!before) return;
-    const after = el.getBoundingClientRect();
-    const dx = before.left - after.left, dy = before.top - after.top;
-    if(!dx && !dy) return;
-    el.style.transition = 'none';
-    el.style.transform = `translate(${dx}px,${dy}px)`;
-    void el.offsetWidth;
-    el.style.transition = '';
-    el.style.transform = '';
-  }
-  function renderSel(animate){
-    const el = gridEl.querySelector('.grid-sel'), sp = selSpec();
-    if(!sp){ if(el) el.remove(); return; }
-    if(el) moveSelBlock(el, sp, animate);
-    else gridEl.insertAdjacentHTML('beforeend', selBlockHtml(sp));
-  }
-
-  // ---- Тап по сетке (по клетке или рядом с ней) ----
-  // Тап по самому выбору сюда не приходит — это начало перетаскивания (см. bindGridGesture).
-  function tapGridAt(e){
-    const hit = slotAtPoint(e.clientX, e.clientY);
-    // Тап по недоступному времени (занято, прошло, студия закрыта) — ничего не
-    // делает: выбор остаётся. Снимает его только тап мимо сетки (подписи часов,
-    // промежутки).
-    if(hit && cellState(hit.col, hit.slot) !== 'free') return;
-    if(!hit){
-      if(hasSelection()){
-        clearSelection();
-        haptic('light');
-        renderSel(); renderPeople(); renderSummary();
-      }
-      return;
-    }
-    if(tapCell(hit.col.key, hit.slot)){
-      haptic('light');
-      gridHintSeen();
-      renderSel(true); renderPeople(); renderSummary();
-    }
-  }
   // Подсказка над сеткой — пока человек ни разу не выбрал время.
   function gridHintSeen(){
     try{ localStorage.setItem('poont.gridHint', '1'); }catch(e){}
@@ -3991,171 +4212,6 @@ var PF = (function(){
     const h = document.getElementById('gridHint'); if(h) h.hidden = seen;
   })();
 
-  // ---- Подсказка под пальцем при перетаскивании ----
-  // Палец закрывает блок, поэтому время показываем рядом: при переносе — время
-  // начала на шкале часов слева, на уровне верха блока; при растягивании —
-  // длительность сбоку от нижнего края, с той стороны, где есть место.
-  let dragTipEl = null;
-  function durText(min){ return Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0'); }
-  function showDragTip(blockEl, scrollerEl, mode, startMin, endMin){
-    if(!blockEl) return hideDragTip();
-    if(!dragTipEl){ dragTipEl = document.createElement('div'); dragTipEl.className = 'drag-tip'; document.body.appendChild(dragTipEl); }
-    let r = blockEl.getBoundingClientRect();
-    const tf = getComputedStyle(blockEl).transform;
-    if(tf && tf !== 'none' && window.DOMMatrixReadOnly){
-      const m = new DOMMatrixReadOnly(tf);
-      r = { left:r.left - m.m41, right:r.right - m.m41, top:r.top - m.m42, bottom:r.bottom - m.m42 };
-    }
-    dragTipEl.hidden = false;
-    dragTipEl.className = 'drag-tip ' + (mode === 'move' ? 'start' : 'dur');
-    const gridOf = blockEl.closest('.grid'); if(gridOf) gridOf.dataset.dragMode = mode;
-    if(mode === 'move'){
-      dragTipEl.textContent = minutesToLabel(startMin);
-      // Метка ложится ровно туда, где стоит подпись часа: по вертикали — на уровень
-      // её текста от верха блока (как «13:00» в своей строке), по горизонтали — в колонку подписей.
-      const sr = scrollerEl.getBoundingClientRect();
-      const hourEl = gridOf && gridOf.querySelector('.grid-hour');
-      const hr = hourEl ? hourEl.getBoundingClientRect() : { top:0, right: sr.left + 40 };
-      // где по высоте стоит текст подписи внутри её строки
-      let textMid = 8;
-      if(hourEl){ const rg = document.createRange(); rg.selectNodeContents(hourEl); const tr = rg.getBoundingClientRect(); textMid = (tr.top + tr.bottom) / 2 - hr.top; }
-      const w = dragTipEl.offsetWidth, h = dragTipEl.offsetHeight;
-      dragTipEl.style.left = (hr.right - w) + 'px';
-      dragTipEl.style.top = Math.max(sr.top, r.top + textMid - h / 2) + 'px';
-    } else {
-      dragTipEl.textContent = durText(endMin - startMin);
-      const w = dragTipEl.offsetWidth, h = dragTipEl.offsetHeight;
-      const left = (r.left - w - 8 >= 4) ? r.left - w - 8 : Math.min(window.innerWidth - w - 4, r.right + 8);
-      dragTipEl.style.left = left + 'px';
-      dragTipEl.style.top = (r.bottom - h - 6) + 'px';
-    }
-  }
-  function hideDragTip(){
-    if(dragTipEl) dragTipEl.hidden = true;
-    document.querySelectorAll('.grid[data-drag-mode]').forEach(g => { delete g.dataset.dragMode; });
-  }
-
-  // ---- Жест на сетке: тап, перенос и растягивание выбора — один обработчик ----
-  // Опустили палец или мышь — смотрим куда. На блоке выбора его можно тащить,
-  // а за ручку снизу — тянуть. В остальных местах это тап, если отпустили почти
-  // там же, где нажали; сдвиг — это прокрутка страницы, тап отменяется (на
-  // сенсоре браузер к тому же присылает pointercancel). Всё на событиях указателя,
-  // без click: конец перетаскивания не может сработать как тап — флаги не нужны.
-  // h: start(g, e) — нажали на блок; begin(g) — блок сдвинулся с места;
-  //    move(g, e); end(g) — отпустили блок; tap(e) — тап мимо блока.
-  function bindGridGesture(el, h){
-    const TAP_SLOP = 10;
-    let g = null;   // { id, mode:'tap'|'move'|'resize', x0, y0, x, y, moved }
-    el.addEventListener('pointerdown', (e)=>{
-      if(e.button > 0 || g) return;
-      const blk = e.target.closest && e.target.closest('.grid-sel');
-      const mode = blk ? (e.target.closest('.grid-sel-handle') ? 'resize' : 'move') : 'tap';
-      g = { id:e.pointerId, mode, x0:e.clientX, y0:e.clientY, x:e.clientX, y:e.clientY, moved:false };
-      if(mode !== 'tap') h.start(g, e);
-    });
-    window.addEventListener('pointermove', (e)=>{
-      if(!g || e.pointerId !== g.id) return;
-      g.x = e.clientX; g.y = e.clientY;
-      const d = Math.hypot(g.x - g.x0, g.y - g.y0);
-      if(g.mode === 'tap'){ if(d > TAP_SLOP) g = null; return; }
-      if(!g.moved){
-        if(d < (g.mode === 'resize' ? 4 : 8)) return;
-        g.moved = true;
-        el.dataset.dragging = 'true';
-        haptic('medium');
-        if(h.begin) h.begin(g);
-      }
-      e.preventDefault();
-      h.move(g, e);
-    }, { passive:false });
-    const end = (e)=>{
-      if(!g || e.pointerId !== g.id) return;
-      const done = g; g = null;
-      if(done.mode === 'tap'){ if(e.type === 'pointerup') h.tap(e); return; }
-      delete el.dataset.dragging;
-      hideDragTip();
-      h.end(done);
-    };
-    window.addEventListener('pointerup', end);
-    window.addEventListener('pointercancel', end);
-  }
-
-  // ---- Перетаскивание выбранного времени ----
-  // Палец (или мышь) на выбранном времени и сдвиг — выбор едет целиком той же
-  // длины: вверх/вниз по часам и в стороны на другие дни (в обзоре студии — на
-  // другие пространства). Встаёт только туда, где всё время свободно; у края
-  // сетки и экрана она сама прокручивается.
-  let drag = null;            // жест на блоке: { mode:'move'|'resize', grab, len, x, y, moved }
-  // Слот под точкой: часовая клетка + доля её высоты (4 слота в часе при шаге 15).
-  // Считаем по геометрии сетки, а не по клетке под пальцем: так и зазоры между
-  // часами и столбцами относятся к ближайшему времени, а строка = шаг студии.
-  function slotAtPoint(x, y){
-    const { start, end } = gridSlotRange();
-    if(end <= start) return null;
-    const gr = gridEl.getBoundingClientRect();
-    const rowH = 42 / Math.max(1, Math.round(60 / SLOT_MIN));
-    const k = Math.floor((y - gr.top) / rowH);
-    if(k < 0 || k >= end - start) return null;
-    if(!colGeom){
-      colGeom = [];
-      gridEl.querySelectorAll('.grid-cell[data-slot="' + start + '"]').forEach(c => {
-        const r = c.getBoundingClientRect();
-        colGeom.push({ key:c.dataset.col, l:r.left - gr.left, r:r.right - gr.left + 4 });   // +4 — зазор справа от столбца
-      });
-    }
-    const xr = x - gr.left, hit = colGeom.find(g => xr >= g.l && xr < g.r);
-    const col = hit && colByKey(hit.key);
-    return col ? { col, slot: start + k } : null;
-  }
-  function dragTo(x, y){
-    const hit = slotAtPoint(x, y);
-    if(!hit) return;           // промежуток между клетками — остаёмся где были
-    if(drag.mode === 'resize'){
-      if(setSelEnd(hit.slot + 1)){ sel.want = (sel.end - sel.start) * SLOT_MIN; haptic('light'); renderSel(); renderPeople(); renderSummary(); }
-      mainDragTip();
-      return;
-    }
-    const { start:lo, end:hi } = gridSlotRange();
-    const k = colStepK(hit.col);
-    let a = Math.floor((hit.slot - drag.grab) / k) * k;
-    a = Math.max(Math.ceil(lo / k) * k, Math.min(a, hi - drag.len));
-    if(hit.col.key === sel.key && a === sel.start){ mainDragTip(); return; }
-    if(setSel(hit.col.key, a, a + drag.len)){
-      haptic('light');
-      renderSel(true); renderPeople(); renderSummary();
-    }
-    mainDragTip();
-  }
-  function mainDragTip(){
-    if(!drag || !drag.moved || !hasSelection()) return hideDragTip();
-    showDragTip(gridEl.querySelector('.grid-sel'), gridScrollEl, drag.mode, sel.start * SLOT_MIN, sel.end * SLOT_MIN);
-  }
-  function dragAutoScroll(){
-    if(!drag || !drag.moved) return;
-    const r = gridScrollEl.getBoundingClientRect(), EDGE = 32, STEP = 10;
-    let moved = false;
-    if(drag.x < r.left + EDGE && gridScrollEl.scrollLeft > 0){ gridScrollEl.scrollLeft -= STEP; moved = true; }
-    else if(drag.x > r.right - EDGE){ const before = gridScrollEl.scrollLeft; gridScrollEl.scrollLeft += STEP; moved = gridScrollEl.scrollLeft !== before; }
-    const bar = document.getElementById('summaryBar');
-    const bottom = window.innerHeight - (bar && bar.offsetParent !== null ? bar.offsetHeight : 0);
-    if(drag.y < EDGE + 40 && window.scrollY > 0){ window.scrollBy(0, -STEP); moved = true; }
-    else if(drag.y > bottom - EDGE){ const before = window.scrollY; window.scrollBy(0, STEP); moved = moved || window.scrollY !== before; }
-    if(moved) dragTo(drag.x, drag.y);
-    requestAnimationFrame(dragAutoScroll);
-  }
-  bindGridGesture(gridEl, {
-    start(g, e){
-      if(!hasSelection()) return;
-      const hit = slotAtPoint(e.clientX, e.clientY);
-      g.grab = hit ? Math.max(0, Math.min(hit.slot - sel.start, sel.end - sel.start - 1)) : 0;
-      g.len = sel.end - sel.start;
-      drag = g;
-    },
-    begin(){ mainDragTip(); requestAnimationFrame(dragAutoScroll); },
-    move(g, e){ if(drag) dragTo(e.clientX, e.clientY); },
-    end(g){ drag = null; if(g.moved) gridHintSeen(); },
-    tap: tapGridAt,
-  });
 
   // Сетка длиннее экрана: автовыбор берёт первую свободную клетку по всему
   // месяцу, и она может оказаться правее видимой части — подводим её в кадр.
@@ -4173,7 +4229,7 @@ var PF = (function(){
     // за это время заняли, выбор снимаем, а не подставляем другое.
     if(hasSelection()){
       const col = colByKey(sel.key);
-      if(!col || !spanFree(col, sel.start, sel.end)) clearSelection();
+      if(!col || !G.spanFree(sel.key, sel.start, sel.end)) clearSelection();
     }
     renderGrid();
     scrollGridToSelection();
@@ -6024,10 +6080,9 @@ var PF = (function(){
     pkgSlots:null,           // пакетная бронь переносится только той же длительностью
     len:1,                   // длина нового блока по умолчанию — как у самой брони (в слотах)
     dates:[], date:'', busy:{},
-    sel:{ start:null, end:null },
   };
 
-  function rsWallClock(){ return wallClockIn(RS.tz); }
+  function rsWallClock(){ return PGrid.wallClock(RS.tz); }
   function rsToday(){
     const [y,m,d] = rsWallClock().date.split('-').map(Number);
     return new Date(y, m-1, d);
@@ -6049,11 +6104,6 @@ var PF = (function(){
     const busy = RS.busy[RS.date] || [];
     return busy.some(b => s0 < b.end && e0 > b.start) ? 'busy' : 'free';
   }
-  function rsSpanFree(a, b){
-    if(b - a < 1 || (b - a) * RS.step > DURATION_MAX_MIN) return false;
-    for(let i=a; i<b; i++) if(rsCellState(i) !== 'free') return false;
-    return true;
-  }
   // Минимум брони в этом слоте: правило цены зала может поднять студийный
   // минимум — тот же расчёт, что у сервера (lib/rules.js minDurationFor).
   function rsMinSlots(slot){
@@ -6070,53 +6120,11 @@ var PF = (function(){
     }
     return Math.max(1, Math.ceil(minMin / RS.step));
   }
-  function rsHasSel(){ return RS.sel.start !== null; }
-  // RS.want — длительность (мин), до которой растянули сами (см. sel.want в основной сетке).
-  function rsClearSel(){ RS.sel = { start:null, end:null }; RS.want = null; }
-  function rsSetSel(a, b){
-    if(!rsSpanFree(a, b)) return false;
-    RS.sel = { start:a, end:b };
-    return true;
-  }
-  // Тап — начало нового времени. Длина — как у текущего выбора (сначала это
-  // длительность самой брони); пакет — только целиком. Не влезает до помехи —
-  // обычную бронь укорачиваем (короче минимума — подсветим), пакет не ставим.
-  function rsFitLen(start, len){
-    const m = rsMinSlots(start), d = RS.durK || 1;
-    return len <= m ? m : m + Math.round((len - m) / d) * d;
-  }
-  function rsTap(slot){
-    const sk = RS.startK || 1;
-    slot = Math.floor(slot / sk) * sk;
-    if(RS.pkgSlots) return rsSetSel(slot, slot + RS.pkgSlots);
-    const len = rsFitLen(slot, !rsHasSel() ? RS.len || 1 : RS.want != null ? Math.round(RS.want / RS.step) : RS.sel.end - RS.sel.start);
-    const { end:hi } = rsSlotRange();
-    const m = rsMinSlots(slot), d = RS.durK || 1;
-    for(let n = len; n >= m; n -= d) if(slot + n <= hi && rsSetSel(slot, slot + n)) return true;
-    for(let n = Math.min(m - 1, hi - slot); n >= 1; n--) if(rsSetSel(slot, slot + n)) return true;
-    return false;
-  }
-  function rsSetEnd(end){
-    if(!rsHasSel() || RS.pkgSlots) return false;
-    const { end:hi } = rsSlotRange();
-    const m = rsMinSlots(RS.sel.start), d = RS.durK || 1;
-    let len = rsFitLen(RS.sel.start, end - RS.sel.start);
-    while(len > m && (len > DURATION_MAX_MIN / RS.step || RS.sel.start + len > hi)) len -= d;
-    const b = RS.sel.start + len;
-    if(b === RS.sel.end) return false;
-    if(b > RS.sel.end){
-      for(let t = b; t > RS.sel.end; t -= d) if(rsSetSel(RS.sel.start, t)) return true;
-      return false;
-    }
-    return rsSetSel(RS.sel.start, b);
-  }
-  function rsSelValid(){
-    if(!rsHasSel() || !rsSpanFree(RS.sel.start, RS.sel.end)) return false;
-    const len = RS.sel.end - RS.sel.start;
-    if(RS.pkgSlots) return len === RS.pkgSlots;
-    const m = rsMinSlots(RS.sel.start);
-    return len >= m && (len - m) % (RS.durK || 1) === 0;
-  }
+  // Выбор переноса — та же модель, что в основной сетке (RG, создаётся у rsGridEl ниже).
+  function rsHasSel(){ return RG.has(); }
+  function rsClearSel(){ RG.clear(); }
+  function rsSetSel(a, b){ return RG.set('rs', a, b); }
+  function rsSelValid(){ return RG.valid(); }
 
   function rsRenderMonths(){
     const row = document.getElementById('rsMonthRow');
@@ -6185,7 +6193,7 @@ var PF = (function(){
       const part = states.slice(i - start, i - start + span);
       const agg = part.every(x => x === part[0]) ? part[0] : 'mixed';
       html += `<div class="grid-hour" style="grid-row:${row} / span ${span};grid-column:1">${minutesToLabel(i * RS.step)}</div>`
-            + `<div class="grid-cell" style="grid-row:${row} / span ${span};grid-column:2" data-slot="${i}" data-span="${span}" data-agg="${agg}"></div>`;
+            + `<div class="grid-cell" style="grid-row:${row} / span ${span};grid-column:2" data-col="rs" data-slot="${i}" data-span="${span}" data-agg="${agg}"></div>`;
     }
     const flush = (slotAbs) => (slotAbs % SPR) ? ' flush' : '';
     [['busy', 'grid-busy'], ['off', 'grid-off']].forEach(([kind, cls])=>{
@@ -6196,26 +6204,8 @@ var PF = (function(){
         if(!on && rs >= 0){ html += `<div class="${cls}${flush(start + k)}" style="grid-column:2;grid-row:${rs+1} / ${k+1}"></div>`; rs = -1; }
       }
     });
-    const ss = rsSelSpec();
-    if(ss) html += selBlockHtml(ss);
+    html += RG.blockHtml();
     wrap.innerHTML = html;
-    rsRenderSum();
-  }
-  // Блок выбора переноса — как в основной сетке: переставляется на месте (см. renderSel).
-  function rsSelSpec(){
-    if(!rsHasSel()) return null;
-    const { start, end } = rsSlotRange();
-    const a = Math.max(RS.sel.start, start), b = Math.min(RS.sel.end, end);
-    if(b <= a) return null;
-    const SPR = Math.max(1, Math.round(60 / RS.step));
-    return { col:2, rowA:a - start + 1, rowB:b - start + 1, flush: b % SPR !== 0, short: !rsSelValid(),
-      time: minutesToLabel(RS.sel.start * RS.step) + '–' + minutesToLabel(RS.sel.end * RS.step), handle: !RS.pkgSlots };
-  }
-  function rsRenderSel(animate){
-    const el = rsGridEl.querySelector('.grid-sel'), sp = rsSelSpec();
-    if(!sp){ if(el) el.remove(); }
-    else if(el) moveSelBlock(el, sp, animate);
-    else rsGridEl.insertAdjacentHTML('beforeend', selBlockHtml(sp));
     rsRenderSum();
   }
   // Стоимость брони на новом времени — как считает сервер (тарифы по минутам, гости,
@@ -6252,13 +6242,13 @@ var PF = (function(){
     const box = document.getElementById('rsSum');
     const btn = document.getElementById('rsConfirmBtn');
     if(rsSelValid()){
-      const mins = (RS.sel.end - RS.sel.start) * RS.step;
+      const mins = (RG.sel.end - RG.sel.start) * RS.step;
       const cur = (RS.cfg && RS.cfg.currency) || CUR;
-      const np = rsNewPrice(RS.date, RS.sel.start * RS.step, RS.sel.end * RS.step);
+      const np = rsNewPrice(RS.date, RG.sel.start * RS.step, RG.sel.end * RS.step);
       const was = Number(RS.booking.price);
       box.dataset.state = 'ready';
       box.innerHTML = 'Новое время<b>' + esc(dateLabelFromISO(RS.date)) + ', '
-        + minutesToLabel(RS.sel.start*RS.step) + '–' + minutesToLabel(RS.sel.end*RS.step)
+        + minutesToLabel(RG.sel.start*RS.step) + '–' + minutesToLabel(RG.sel.end*RS.step)
         + ' · ' + durationLabelOf(mins) + '</b>'
         + (np != null ? '<span class="rs-price">Стоимость:<b>' + esc(gpMoney(np)) + ' ' + esc(cur) + '</b>'
             + (Math.abs(np - was) > 0.004 ? '(сейчас ' + esc(gpMoney(was)) + ')' : '') + '</span>' : '')
@@ -6282,49 +6272,26 @@ var PF = (function(){
   // Сетка переноса — как основная: тап ставит начало, блок тянется за ручку и
   // перетаскивается целиком; тап по недоступному времени ничего не меняет.
   const rsGridEl = document.getElementById('rsGrid');
-  function rsSlotAtPoint(y){
-    const { start, end } = rsSlotRange();
-    if(end <= start) return null;
-    const r = rsGridEl.getBoundingClientRect();
-    const k = Math.floor((y - r.top + rsGridEl.scrollTop) / (42 / Math.max(1, Math.round(60 / RS.step))));
-    return (k < 0 || k >= end - start) ? null : start + k;
-  }
-  let rsDrag = null;   // жест на блоке: { mode:'move'|'resize', grab, len, moved }
-  bindGridGesture(rsGridEl, {
-    start(g, e){
-      if(!rsHasSel()) return;
-      const slot = rsSlotAtPoint(e.clientY);
-      g.grab = slot == null ? 0 : Math.max(0, Math.min(slot - RS.sel.start, RS.sel.end - RS.sel.start - 1));
-      g.len = RS.sel.end - RS.sel.start;
-      rsDrag = g;
-    },
-    move(g, e){ if(rsDrag) rsDragTo(e); },
-    end(){ rsDrag = null; },
-    // Тап по подписи часа — ничего; по недоступному времени — ничего, выбор остаётся.
-    tap(e){
-      if(e.target.closest && e.target.closest('.grid-hour')) return;
-      const slot = rsSlotAtPoint(e.clientY);
-      if(slot == null || rsCellState(slot) !== 'free') return;
-      if(rsTap(slot)){ haptic('light'); rsRenderSel(true); }
-    },
+  const RG = PGrid.create({
+    el: rsGridEl, cls: 'grid', hourSel: '.grid-hour', hourPx: 42, oneCol: true,
+    slotMin: () => RS.step,
+    range: rsSlotRange,
+    cols: () => ['rs'],
+    free: (key, slot) => rsCellState(slot) === 'free',
+    startK: () => RS.startK || 1,
+    durK: () => RS.durK || 1,
+    minSlots: (key, slot) => rsMinSlots(slot),
+    maxSlots: () => DURATION_MAX_MIN / RS.step,
+    defaultLen: () => RS.len || 1,                     // сначала — длительность самой брони
+    fixedLen: () => RS.pkgSlots || null, fixedExact: true,   // пакет — только целиком
+    label: s => minutesToLabel(s.start * RS.step) + '–' + minutesToLabel(s.end * RS.step),
+    handle: () => !RS.pkgSlots,
+    onChange: rsRenderSum,
+    beforeTap: e => !(e.target.closest && e.target.closest('.grid-hour')),   // тап по подписи часа — ничего
+    tip: { scroller: () => rsGridEl },
+    autoScroll: { y: () => rsGridEl },                 // у краёв окошка сетки — прокручиваем его
+    haptic,
   });
-  function rsDragTo(e){
-    // у краёв окошка сетки — прокручиваем его
-    const r = rsGridEl.getBoundingClientRect();
-    if(e.clientY < r.top + 24) rsGridEl.scrollTop -= 8; else if(e.clientY > r.bottom - 24) rsGridEl.scrollTop += 8;
-    const slot = rsSlotAtPoint(e.clientY);
-    if(slot == null) return;
-    let changed = false;
-    if(rsDrag.mode === 'resize'){ changed = rsSetEnd(slot + 1); if(changed) RS.want = (RS.sel.end - RS.sel.start) * RS.step; }
-    else {
-      const { start:lo, end:hi } = rsSlotRange();
-      const sk = RS.startK || 1;
-      const a = Math.max(Math.ceil(lo / sk) * sk, Math.min(Math.floor((slot - rsDrag.grab) / sk) * sk, hi - rsDrag.len));
-      if(a !== RS.sel.start) changed = rsSetSel(a, a + rsDrag.len);
-    }
-    if(changed){ haptic('light'); rsRenderSel(rsDrag.mode === 'move'); }
-    showDragTip(rsGridEl.querySelector('.grid-sel'), rsGridEl, rsDrag.mode, RS.sel.start * RS.step, RS.sel.end * RS.step);
-  }
 
   // Занятость зала на всё окно дат одним запросом. Собственная бронь для
   // самой себя препятствием не является — вычитаем её из занятости.
@@ -6420,8 +6387,8 @@ var PF = (function(){
   document.getElementById('rsConfirmBtn').addEventListener('click', async ()=>{
     if(pendingRescheduleId===null || !rsSelValid()) return;
     const date = RS.date;
-    const start = RS.sel.start * RS.step;
-    const end = RS.sel.end * RS.step;
+    const start = RG.sel.start * RS.step;
+    const end = RG.sel.end * RS.step;
     const err=document.getElementById('rsError');
     err.textContent='';
     const btn=document.getElementById('rsConfirmBtn');
