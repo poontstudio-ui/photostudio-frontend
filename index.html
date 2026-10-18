@@ -445,14 +445,24 @@
       if(ok) sel.want = (sel.end - sel.start) * o.slotMin();
       return ok;
     }
-    // Перенос целиком: та же длина, начало — по шагу столбца, в пределах окна.
+    // Перенос целиком: начало — по шагу столбца, в пределах окна. Длина — та,
+    // до которой человек растягивал выбор (want), если на новом месте она
+    // помещается; нет — ступенями короче, но не короче длины, с которой блок
+    // взяли (len): укороченный тапом блок при переносе в свободное место вырастает.
     function moveTo(key, slot, grab, len){
       var lock = lockCol(); if(lock != null) key = lock;
-      var r = o.range(), k = o.startK(key);
-      var a = Math.floor((slot - grab) / k) * k;
-      a = Math.max(Math.ceil(r.start / k) * k, Math.min(a, r.end - len));
-      if(key === sel.key && a === sel.start) return false;
-      return set(key, a, a + len);
+      var r = o.range(), k = o.startK(key), d = o.durK(key);
+      var top = (fixedLen() == null && sel.want != null) ? Math.max(len, Math.round(sel.want / o.slotMin())) : len;
+      var lens = [];
+      for(var n = top; n > len; n -= d) lens.push(n);
+      lens.push(len);
+      for(var i = 0; i < lens.length; i++){
+        var a = Math.floor((slot - grab) / k) * k;
+        a = Math.max(Math.ceil(r.start / k) * k, Math.min(a, r.end - lens[i]));
+        if(key === sel.key && a === sel.start && lens[i] === sel.end - sel.start) return false;   // уже так стоит
+        if(set(key, a, a + lens[i])) return true;
+      }
+      return false;
     }
 
     // ---- Блок выбора ----
@@ -1923,6 +1933,18 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 /* Шапка дней едет за сеткой сдвигом (transform), а не прокруткой: так полоса
    затухания у шапки стоит на месте, а сдвиг не заставляет пересчитывать раскладку. */
 #gridHead{will-change:transform;}
+/* Сдвиг шапки ведёт сам браузер — анимацией, привязанной к прокрутке сетки
+   (scroll-driven animation): шапка едет ровно в такт, без отставания на кадр,
+   из-за которого дни подрагивали при свайпе. Где браузер так не умеет —
+   сдвигает скрипт (syncGridHead). --gx-max — на сколько пикселей прокручивается сетка. */
+.grid-section{timeline-scope:--gridx;}
+#gridScroll{scroll-timeline:--gridx inline;}
+@supports (animation-timeline: scroll()) and (timeline-scope: none){
+  #gridHead{animation:gridHeadX linear both;animation-timeline:--gridx;}
+  #gridHead .grid-corner{animation:gridCornerX linear both;animation-timeline:--gridx;}
+}
+@keyframes gridHeadX{from{transform:translateX(0);}to{transform:translateX(calc(-1px * var(--gx-max, 0)));}}
+@keyframes gridCornerX{from{transform:translateX(0);}to{transform:translateX(calc(1px * var(--gx-max, 0)));}}
 /* Блок выбора переезжает на новое место плавно (FLIP в PGrid.renderBlock). */
 .grid-sel{transition:transform .09s ease-out;}
 @media (prefers-reduced-motion:reduce){ .grid-sel{transition:none;} }
@@ -2480,7 +2502,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       <div class="date-row" id="dateRow"></div>
     </div>
 
-    <div class="section">
+    <div class="section grid-section" id="gridSection">
       <div class="repeat-hint" id="repeatHint" hidden></div>
       <div class="section-label" id="gridLabel">Время брони</div>
       <div class="grid-hint" id="gridHint" hidden>Нажмите время начала. Потяните нижний край, чтобы изменить длительность, или перетащите бронь целиком.</div>
@@ -4085,7 +4107,14 @@ var PF = (function(){
   }
   // Угол над колонкой часов липнул к краю прокрутки шапки; шапка теперь едет
   // сдвигом, поэтому угол сдвигаем обратно — он стоит на месте и закрывает дни.
+  const HEAD_BY_CSS = !!(window.CSS && CSS.supports && CSS.supports('animation-timeline: scroll()') && CSS.supports('timeline-scope: none'));
+  const gridSectionEl = document.getElementById('gridSection');
+  let gridScrollMax = -1;
   function syncGridHead(){
+    // На сколько пикселей прокручивается сетка — для анимации шапки (см. CSS у #gridHead).
+    const max = Math.max(0, gridScrollEl.scrollWidth - gridScrollEl.clientWidth);
+    if(max !== gridScrollMax){ gridScrollMax = max; gridSectionEl.style.setProperty('--gx-max', String(max)); }
+    if(HEAD_BY_CSS) return;
     const x = gridScrollEl.scrollLeft;
     gridHeadEl.style.transform = 'translateX(' + (-x) + 'px)';
     const corner = gridHeadEl.firstElementChild;
@@ -4103,6 +4132,7 @@ var PF = (function(){
       if(gridEl.dataset.fit === 'true') return;
       const w = gridEl.getBoundingClientRect().width;
       if(w) gridHeadEl.style.width = w + 'px';
+      syncGridHead();
     }).observe(gridEl);
     // Ширину столбца-дня считает renderGrid от ширины скроллера — при её
     // смене (поворот экрана, вьюпорт Telegram, первый показ экрана студии,
@@ -4113,6 +4143,7 @@ var PF = (function(){
       if(!w || w === lastScrollerW) return;
       lastScrollerW = w;
       if(HALLS.length && gridMode()==='days') renderGrid();
+      else syncGridHead();   // длина прокрутки для шапки поменялась
     }).observe(gridScrollEl);
   }
 
