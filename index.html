@@ -1522,7 +1522,15 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 /* Основная сетка: строки — по шагу студии (15/30/60), а клетки — по часу и
    растянуты на свои строки. Занятость, недоступное время и выбор — блоки поверх
    клеток с точностью до шага. 4 px снизу у часа — «зазор» между часами. */
-#grid{row-gap:0;}
+#grid,#rsGrid{row-gap:0;}
+#rsGrid .grid-hour,#rsGrid .grid-cell{align-self:start;height:38px;}
+#rsGrid .grid-busy,#rsGrid .grid-off,#rsGrid .grid-sel{margin-bottom:4px;}
+#rsGrid .grid-busy.flush,#rsGrid .grid-off.flush,#rsGrid .grid-sel.flush{margin-bottom:0;}
+#rsGrid .grid-hour{z-index:6;}
+#rsGrid .grid-cell[data-agg="free"]{cursor:pointer;}
+/* Сетка переноса лежит на панели цвета --surface: клетки — фоном страницы, подписи — цветом панели. */
+#rsGrid .grid-cell{background:var(--bg);}
+#rsGrid .grid-hour{background:var(--surface);box-shadow:4px 0 0 var(--surface),0 -2px 0 var(--surface),0 2px 0 var(--surface);}
 /* Подписи часов липнут слева — выше любых блоков (выбор, занятость), иначе при
    горизонтальной прокрутке блок наезжает на колонку времени. */
 #grid .grid-hour{z-index:6;}
@@ -5784,6 +5792,7 @@ var PF = (function(){
     step:60,                 // шаг сетки = шаг, который примет сервер при переносе
     minBookingMin:60,
     pkgSlots:null,           // пакетная бронь переносится только той же длительностью
+    len:1,                   // длина нового блока по умолчанию — как у самой брони (в слотах)
     dates:[], date:'', busy:{},
     sel:{ start:null, end:null },
   };
@@ -5845,18 +5854,26 @@ var PF = (function(){
     RS.sel = { start:a, end:b };
     return true;
   }
-  // Пакетную бронь двигаем целиком — длительность менять нельзя. Обычную
-  // выбираем двумя тапами, как на главной сетке.
+  // Тап — начало нового времени. Длина — как у текущего выбора (сначала это
+  // длительность самой брони); пакет — только целиком. Не влезает до помехи —
+  // обычную бронь укорачиваем (короче минимума — подсветим), пакет не ставим.
   function rsTap(slot){
-    if(RS.pkgSlots) return rsSetSel(slot, slot + RS.pkgSlots);
-    if(rsHasSel()){
-      if(slot >= RS.sel.start && slot < RS.sel.end) return rsSetSel(slot, slot + 1);
-      // Промежуток до тапнутого часа перекрыт занятым — не оставляем тап без
-      // ответа (выглядит как «кнопка не работает»), а начинаем выбор заново.
-      return rsSetSel(Math.min(RS.sel.start, slot), Math.max(RS.sel.end - 1, slot) + 1)
-        || rsSetSel(slot, slot + 1);
+    const len = RS.pkgSlots || (rsHasSel() ? RS.sel.end - RS.sel.start : RS.len || 1);
+    if(RS.pkgSlots) return rsSetSel(slot, slot + len);
+    const { end:hi } = rsSlotRange();
+    for(let n = Math.min(len, hi - slot); n >= 1; n--) if(rsSetSel(slot, slot + n)) return true;
+    return false;
+  }
+  function rsSetEnd(end){
+    if(!rsHasSel() || RS.pkgSlots) return false;
+    const { end:hi } = rsSlotRange();
+    const b = Math.max(RS.sel.start + 1, Math.min(end, RS.sel.start + DURATION_MAX_MIN / RS.step, hi));
+    if(b === RS.sel.end) return false;
+    if(b > RS.sel.end){
+      for(let t = b; t > RS.sel.end; t--) if(rsSetSel(RS.sel.start, t)) return true;
+      return false;
     }
-    return rsSetSel(slot, slot + 1);
+    return rsSetSel(RS.sel.start, b);
   }
   function rsSelValid(){
     if(!rsHasSel() || !rsSpanFree(RS.sel.start, RS.sel.end)) return false;
@@ -5921,28 +5938,34 @@ var PF = (function(){
       return;
     }
     wrap.style.gridTemplateColumns = '40px 1fr';
+    // Как основная сетка: строки — по шагу, клетки — по часу, всё прочее — блоки.
+    const SPR = Math.max(1, Math.round(60 / RS.step));
+    wrap.style.gridTemplateRows = `repeat(${end - start}, ${42 / SPR}px)`;
     const states = [];
+    for(let i=start; i<end; i++) states.push(rsCellState(i));
     let html = '';
-    for(let i=start; i<end; i++){
-      const row = i - start + 1;
-      const label = minutesToLabel(i * RS.step);
-      const st = rsCellState(i);
-      states.push(st);
-      const on = rsHasSel() && i >= RS.sel.start && i < RS.sel.end;
-      html += `<div class="grid-hour" style="grid-row:${row};grid-column:1">${label}</div>`
-            + `<div class="grid-cell" style="grid-row:${row};grid-column:2" data-slot="${i}" data-state="${st}"`
-            + (on ? ' data-sel="true"' : '')
-            + (on && i===RS.sel.start ? ` data-sel-first="true" data-time="${label}"` : '')
-            + '></div>';
+    for(let i=start; i<end; i+=SPR){
+      const row = i - start + 1, span = Math.min(SPR, end - i);
+      const part = states.slice(i - start, i - start + span);
+      const agg = part.every(x => x === part[0]) ? part[0] : 'mixed';
+      html += `<div class="grid-hour" style="grid-row:${row} / span ${span};grid-column:1">${minutesToLabel(i * RS.step)}</div>`
+            + `<div class="grid-cell" style="grid-row:${row} / span ${span};grid-column:2" data-slot="${i}" data-span="${span}" data-agg="${agg}"></div>`;
     }
-    // занятость — сплошным прямоугольником, как в остальных сетках
-    let runStart = -1;
-    for(let k=0; k<=states.length; k++){
-      const busy = k < states.length && states[k] === 'busy';
-      if(busy && runStart < 0) runStart = k;
-      if(!busy && runStart >= 0){
-        html += `<div class="grid-busy" style="grid-column:2;grid-row:${runStart+1} / ${k+1}"></div>`;
-        runStart = -1;
+    const flush = (slotAbs) => (slotAbs % SPR) ? ' flush' : '';
+    [['busy', 'grid-busy'], ['off', 'grid-off']].forEach(([kind, cls])=>{
+      let rs = -1;
+      for(let k=0; k<=states.length; k++){
+        const on = k < states.length && (kind === 'busy' ? states[k] === 'busy' : (states[k] === 'past' || states[k] === 'closed'));
+        if(on && rs < 0) rs = k;
+        if(!on && rs >= 0){ html += `<div class="${cls}${flush(start + k)}" style="grid-column:2;grid-row:${rs+1} / ${k+1}"></div>`; rs = -1; }
+      }
+    });
+    if(rsHasSel()){
+      const a = Math.max(RS.sel.start, start), b = Math.min(RS.sel.end, end);
+      if(b > a){
+        html += `<div class="grid-sel${flush(b)}" data-short="${!rsSelValid()}" style="grid-column:2;grid-row:${a-start+1} / ${b-start+1}">`
+          + `<span class="grid-sel-time">${minutesToLabel(RS.sel.start * RS.step)}–${minutesToLabel(RS.sel.end * RS.step)}</span>`
+          + (RS.pkgSlots ? '' : '<span class="grid-sel-handle" role="slider" aria-label="Длительность"></span>') + '</div>';
       }
     }
     wrap.innerHTML = html;
@@ -6001,7 +6024,7 @@ var PF = (function(){
       box.dataset.state = '';
       box.textContent = RS.pkgSlots
         ? 'Пакет переносится целиком — выберите начало на сетке'
-        : (rsHasSel() ? 'Слишком короткий промежуток — отметьте вторую точку' : 'Отметьте новое время на сетке');
+        : (rsHasSel() ? 'Слишком коротко — потяните нижний край брони' : 'Нажмите новое время начала на сетке');
       btn.disabled = true;
     }
   }
@@ -6009,11 +6032,59 @@ var PF = (function(){
     const h = Math.floor(m/60), r = m%60;
     return r ? (h ? `${h} ч ${r} мин` : `${r} мин`) : `${h} ч`;
   }
-  document.getElementById('rsGrid').addEventListener('click', (e)=>{
-    const el = e.target && e.target.closest ? e.target.closest('.grid-cell') : null;
-    if(!el || el.dataset.state !== 'free') return;
-    if(rsTap(Number(el.dataset.slot))){ haptic('light'); rsRenderGrid(); }
+  // Сетка переноса — как основная: тап ставит начало, блок тянется за ручку и
+  // перетаскивается целиком; тап по недоступному времени ничего не меняет.
+  const rsGridEl = document.getElementById('rsGrid');
+  function rsSlotAtPoint(y){
+    const { start, end } = rsSlotRange();
+    if(end <= start) return null;
+    const r = rsGridEl.getBoundingClientRect();
+    const k = Math.floor((y - r.top + rsGridEl.scrollTop) / (42 / Math.max(1, Math.round(60 / RS.step))));
+    return (k < 0 || k >= end - start) ? null : start + k;
+  }
+  let rsDrag = null, rsDragEnded = false;
+  rsGridEl.addEventListener('click', (e)=>{
+    if(rsDragEnded){ rsDragEnded = false; return; }
+    if(e.target.closest && (e.target.closest('.grid-sel') || e.target.closest('.grid-hour'))) return;
+    const slot = rsSlotAtPoint(e.clientY);
+    if(slot == null || rsCellState(slot) !== 'free') return;
+    if(rsTap(slot)){ haptic('light'); rsRenderGrid(); }
   });
+  rsGridEl.addEventListener('pointerdown', (e)=>{
+    if(e.button > 0 || !rsHasSel()) return;
+    const blk = e.target.closest && e.target.closest('.grid-sel');
+    if(!blk) return;
+    const slot = rsSlotAtPoint(e.clientY);
+    rsDrag = { id:e.pointerId, mode: e.target.closest('.grid-sel-handle') ? 'resize' : 'move',
+               grab: slot == null ? 0 : Math.max(0, Math.min(slot - RS.sel.start, RS.sel.end - RS.sel.start - 1)),
+               len: RS.sel.end - RS.sel.start, y0:e.clientY, moved:false };
+  });
+  window.addEventListener('pointermove', (e)=>{
+    if(!rsDrag || e.pointerId !== rsDrag.id) return;
+    if(!rsDrag.moved){ if(Math.abs(e.clientY - rsDrag.y0) < 4) return; rsDrag.moved = true; rsGridEl.dataset.dragging = 'true'; }
+    e.preventDefault();
+    // у краёв окошка сетки — прокручиваем его
+    const r = rsGridEl.getBoundingClientRect();
+    if(e.clientY < r.top + 24) rsGridEl.scrollTop -= 8; else if(e.clientY > r.bottom - 24) rsGridEl.scrollTop += 8;
+    const slot = rsSlotAtPoint(e.clientY);
+    if(slot == null) return;
+    let changed = false;
+    if(rsDrag.mode === 'resize') changed = rsSetEnd(slot + 1);
+    else {
+      const { start:lo, end:hi } = rsSlotRange();
+      const a = Math.max(lo, Math.min(slot - rsDrag.grab, hi - rsDrag.len));
+      if(a !== RS.sel.start) changed = rsSetSel(a, a + rsDrag.len);
+    }
+    if(changed){ haptic('light'); rsRenderGrid(); }
+  }, { passive:false });
+  function rsEndDrag(e){
+    if(!rsDrag || (e && e.pointerId !== rsDrag.id)) return;
+    const moved = rsDrag.moved;
+    rsDrag = null; delete rsGridEl.dataset.dragging;
+    if(moved){ rsDragEnded = true; setTimeout(() => { rsDragEnded = false; }, 60); rsRenderGrid(); }
+  }
+  window.addEventListener('pointerup', rsEndDrag);
+  window.addEventListener('pointercancel', rsEndDrag);
 
   // Занятость зала на всё окно дат одним запросом. Собственная бронь для
   // самой себя препятствием не является — вычитаем её из занятости.
@@ -6059,8 +6130,8 @@ var PF = (function(){
       RS.tz = cfg.timezone || 'Europe/Minsk';
       RS.hours = normalizeWeekHours(cfg);
       RS.minBookingMin = Number.isInteger(cfg.minBookingMin) ? cfg.minBookingMin : 60;
-      // Шаг ровно тот, что примет сервер при переносе (server.js: reschedule).
-      RS.step = RS.minBookingMin === 30 ? 30 : 60;
+      // Шаг ровно тот, что примет сервер при переносе (server.js: reschedule, slotStepOf).
+      RS.step = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : (RS.minBookingMin === 30 ? 30 : 60);
       RS.hall = (cfg.halls || []).find(h => h.id === booking.hallId) || null;
       if(RS.hall) RS.hours = hallHoursOf(cfg, RS.hall);
       // Платность переноса определяет, насколько поздно о нём просят (по СТАРОМУ времени).
@@ -6069,6 +6140,8 @@ var PF = (function(){
                  pct: Number.isInteger(cfg.rescheduleFeePct) ? cfg.rescheduleFeePct : 25 };
       RS.pkgSlots = booking.packageHours != null
         ? Math.max(1, Math.round(booking.packageHours * 60 / RS.step)) : null;
+      // Длина нового блока по умолчанию — как у самой брони.
+      RS.len = Math.max(1, Math.round((booking.end - booking.start) / RS.step));
       // Окно дат — от сегодня (или от месяца брони, если она дальше).
       const today = rsToday();
       const own = new Date(String(booking.date).slice(0,10) + 'T00:00:00');
