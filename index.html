@@ -1320,6 +1320,12 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 .hall-included[hidden]{display:none;}
 /* auto-fit, а не жёсткие две колонки: на узком экране длинная подпись
    («Гримёрное зеркало») иначе переносится в три строки внутри своей ячейки. */
+.feat-grid{transition:-webkit-mask-image .2s,mask-image .2s;}
+/* Свёрнутый список: последняя видимая строка гаснет — намёк, что дальше есть ещё. */
+[data-collapsed="true"] .feat-grid{
+  -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 1.9em),rgba(0,0,0,.28) 100%);
+          mask-image:linear-gradient(to bottom,#000 0,#000 calc(100% - 1.9em),rgba(0,0,0,.28) 100%);
+}
 .feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px 12px;margin-top:10px;}
 .feat{display:flex;align-items:baseline;gap:8px;font-size:var(--fs-sm);line-height:1.35;}
 /* без этого display:flex перебивает атрибут hidden и свёрнутые пункты
@@ -4079,6 +4085,7 @@ var PF = (function(){
     var cells = box.querySelectorAll('.feat'), more = box.querySelector('.feat-more'), open = false;
     function apply(){
       cells.forEach(function(el, k){ el.hidden = !open && k >= INCLUDED_COLLAPSED; });
+      box.dataset.collapsed = (!open && cells.length > INCLUDED_COLLAPSED) ? 'true' : 'false';
       if(more) more.textContent = open ? 'Свернуть' : 'Показать всё · ' + lines.length;
     }
     if(more){ apply(); more.addEventListener('click', function(){ open = !open; apply(); haptic('light'); }); }
@@ -4150,6 +4157,7 @@ var PF = (function(){
     var more = box.querySelector('.feat-more');
     function apply(open){
       cells.forEach(function(el, i){ el.hidden = !open && i >= INCLUDED_COLLAPSED; });
+      box.dataset.collapsed = (!open && cells.length > INCLUDED_COLLAPSED) ? 'true' : 'false';
       if(more) more.textContent = open ? 'Свернуть' : 'Показать все';
     }
     if(more){
