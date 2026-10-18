@@ -1595,9 +1595,6 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
    «студия · адрес», цели аренды карточками с ценой, факты и цена на
    подложках. Палитра прежняя, светлая. */
 .hall-hero{position:relative;}
-.hall-hero .back-btn{box-shadow:0 1px 4px rgba(20,22,28,.16);}
-.hall-hero[data-photos="false"] .back-btn{margin-bottom:12px;}
-.hall-hero[data-photos="true"] .back-btn{position:absolute;top:12px;left:12px;z-index:2;}
 .hall-info-head{margin-bottom:14px;}
 .hall-info-main{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;}
 .hall-info-main .amenity-chips{margin-top:0;gap:6px;}
@@ -2472,7 +2469,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
     <div class="section" id="hallInfoSection" style="display:none">
       <div class="hall-hero" id="hallHero" data-photos="false">
-        <button class="back-btn" id="hallBackBtn" type="button" aria-label="Ко всем пространствам">←</button>
         <div class="hall-photos-gallery" id="hallPhotos" hidden></div>
       </div>
       <div class="hall-tours" id="hallTours" hidden></div>
@@ -4856,11 +4852,10 @@ var PF = (function(){
     const on = !!openHallId;
     document.getElementById('hallCardsSection').style.display = on ? 'none' : '';
     document.getElementById('hallInfoSection').style.display = on ? '' : 'none';
-    // Единственный зал открыт сразу, «обзора студии» с карточками у него нет —
-    // возвращаться некуда (стрелка скрыта), а удобства студии остаются на
-    // странице, но под описанием зала: над фото им не место.
+    // Единственный зал открыт сразу, «обзора студии» с карточками у него нет;
+    // удобства студии остаются на странице, но под описанием зала: над фото им не место.
     const single = HALLS.length === 1;
-    document.getElementById('hallBackBtn').style.display = single ? 'none' : '';
+    syncStudioBack();
     // Удобства студии — контекст «обзора студии», при входе в зал прячем.
     var sa = document.getElementById('studioAmenitiesSection');
     if(sa){
@@ -4901,7 +4896,6 @@ var PF = (function(){
     refreshGrid();
     window.scrollTo(0, 0);
   }
-  document.getElementById('hallBackBtn').addEventListener('click', ()=>{ haptic('light'); closeHall(); });
 
   // Цена, пока время не выбрано: ставка за час (у цены «за гостя» — цена с
   // гостя при текущем числе гостей). В обзоре нескольких пространств — самая
@@ -7265,6 +7259,14 @@ var PF = (function(){
     requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, y)));
   }
 
+  // Стрелка «назад» в шапке — одна на всё: из пространства — к обзору студии
+  // (если пространств несколько), из студии — к каталогу (если пришли из него).
+  function syncStudioBack(){
+    const btn = document.getElementById('studioBackBtn');
+    const toStudio = !!openHallId && HALLS.length > 1;
+    btn.style.display = (toStudio || cameFromCatalog) ? 'flex' : 'none';
+    btn.setAttribute('aria-label', toStudio ? 'Ко всем пространствам' : 'К списку студий');
+  }
   document.getElementById('studioBackBtn').addEventListener('click', ()=>{
     haptic('light');
     if(openHallId && HALLS.length > 1) closeHall(); else backToCatalog();
@@ -7286,7 +7288,7 @@ var PF = (function(){
       catalogView.dataset.visible='false';
       document.getElementById('mainView').dataset.hidden='false';
       document.getElementById('summaryBar').style.display='flex';
-      document.getElementById('studioBackBtn').style.display = cameFromCatalog ? 'flex' : 'none';
+      syncStudioBack();
       await contactReady;
       if(pendingSlot){
         const ps = pendingSlot; pendingSlot = null;
