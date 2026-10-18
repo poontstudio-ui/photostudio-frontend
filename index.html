@@ -2823,15 +2823,31 @@ var PF = (function(){
   let STUDIO_BUFFER_MIN = 0;        // буфер после брони, режется из времени клиента (/config)
   let SLOT_MIN = 60;               // строка сетки: шаг открытого пространства, в обзоре — самый мелкий из шагов
   let STUDIO_STEP = 60;            // шаг студии (/config.slotStep): 15, 30 или 60
-  // Шаг пространства (0061): свой или студийный.
+  let STUDIO_DSTEP = null;          // шаг длительности студии (0062), null — как шаг начала
+  // Шаг начала пространства (0061): свой или студийный.
   function hallStepMin(h){ return h && [15, 30, 60].indexOf(h.slotStepMin) >= 0 ? h.slotStepMin : STUDIO_STEP; }
+  // Шаг длительности (0062): свой -> студийный -> шаг начала этого пространства (как на сервере).
+  function hallDurStep(h){
+    if(h && [15, 30, 60].indexOf(h.durationStepMin) >= 0) return h.durationStepMin;
+    return STUDIO_DSTEP || hallStepMin(h);
+  }
+  // Строка сетки — самый мелкий из шагов (начала и длительности) показанных пространств.
   // Пересчитываем при смене режима сетки (открыли / закрыли пространство, загрузили студию).
   function refreshSlotMin(){
     const hs = openHallId ? HALLS.filter(h => h.id === openHallId) : HALLS;
-    SLOT_MIN = hs.length ? Math.min.apply(null, hs.map(hallStepMin)) : STUDIO_STEP;
+    const steps = [];
+    hs.forEach(h => { steps.push(hallStepMin(h), hallDurStep(h)); });
+    SLOT_MIN = steps.length ? Math.min.apply(null, steps) : STUDIO_STEP;
   }
-  // Во сколько строк укладывается шаг пространства этого столбца (60/15 = 4 и т.п.).
+  // Во сколько строк укладывается шаг начала / длительности столбца (60/15 = 4 и т.п.).
   function colStepK(col){ return Math.max(1, Math.round(hallStepMin(col && col.hall) / SLOT_MIN)); }
+  function colDurK(col){ return Math.max(1, Math.round(hallDurStep(col && col.hall) / SLOT_MIN)); }
+  // Длина брони по правилу «минимум + N шагов длительности» — ближайшая допустимая.
+  function fitLen(col, start, len){
+    if(state.packageHours != null) return len;           // пакет — своя фиксированная длина
+    const m = minSlotsAt(col, start), d = colDurK(col);
+    return len <= m ? m : m + Math.round((len - m) / d) * d;
+  }
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
   let HALL_PROPS = { hallType:true, areaM2:true, ceilingCm:true, floor:true, styles:true,
@@ -2948,6 +2964,7 @@ var PF = (function(){
   function applyTenantConfig(cfg){
     HALLS = (cfg.halls || []).slice();
     STUDIO_STEP = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : 60;
+    STUDIO_DSTEP = [15, 30, 60].indexOf(cfg.durationStepMin) >= 0 ? cfg.durationStepMin : null;
     EQUIPMENT = (cfg.equipment || []).slice();
     HALLS.forEach(h => { allHallsById[h.id] = h; });
     if(!HALLS.some(h => h.id === state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
@@ -3654,9 +3671,10 @@ var PF = (function(){
     if(!hasSelection()) return false;
     const col = gridColumns().find(c => c.key === sel.key);
     if(!col || !spanFree(col, sel.start, sel.end)) return false;
-    // Одна отмеченная клетка — ещё не бронь (ждём вторую точку промежутка),
-    // если только одной клетки уже не хватает на минимум окна.
-    return (sel.end - sel.start) >= minSlotsAt(col, sel.start);
+    // Не короче минимума окна и ровно «минимум + N шагов длительности» (0062).
+    const len = sel.end - sel.start, m = minSlotsAt(col, sel.start);
+    if(len < m) return false;
+    return state.packageHours != null || (len - m) % colDurK(col) === 0;
   }
   // Выделение свободно и правильной длины, но короче минимума окна — значит
   // это одиночная отмеченная клетка, ждущая второй точки промежутка.
@@ -3673,12 +3691,19 @@ var PF = (function(){
   function tapCell(colKey, slot){
     const col = gridColumns().find(c => c.key === colKey);
     if(!col) return false;
-    const k = colStepK(col);                     // у пространства шаг крупнее строки — выравниваем
+    const k = colStepK(col);                     // начало — по шагу начала пространства
     slot = Math.floor(slot / k) * k;
     const keep = hasSelection() ? sel.end - sel.start : 0;
-    const want = Math.ceil(Math.max(keep, targetSlotsAt(col, slot)) / k) * k;
+    const want = fitLen(col, slot, Math.max(keep, targetSlotsAt(col, slot)));
     const { end:hi } = gridSlotRange();
-    for(let n = Math.min(want, Math.floor((hi - slot) / k) * k); n >= k; n -= k){
+    const m = minSlotsAt(col, slot), d = state.packageHours != null ? want : colDurK(col);
+    // допустимые длины: want, want - шаг, … до минимума
+    for(let n = want; n >= m; n -= d){
+      if(slot + n <= hi && setSel(colKey, slot, slot + n)) return true;
+      if(d <= 0) break;
+    }
+    // не помещается даже минимум — ставим сколько влезает (подсветится как «коротко»)
+    for(let n = Math.min(m - 1, hi - slot); n >= 1; n--){
       if(setSel(colKey, slot, slot + n)) return true;
     }
     return false;
@@ -3687,13 +3712,16 @@ var PF = (function(){
   function setSelEnd(end){
     if(!hasSelection()) return false;
     const { end:hi } = gridSlotRange();
-    const k = colStepK(gridColumns().find(c => c.key === sel.key));
-    let b = Math.max(sel.start + k, Math.min(Math.ceil(end / k) * k, sel.start + maxSlots(), hi));
-    b = sel.start + Math.floor((b - sel.start) / k) * k;
+    const col = gridColumns().find(c => c.key === sel.key);
+    const m = minSlotsAt(col, sel.start), d = colDurK(col);
+    // длина — минимум + N шагов длительности, не длиннее максимума и конца дня
+    let len = fitLen(col, sel.start, end - sel.start);
+    while(len > m && (len > maxSlots() || sel.start + len > hi)) len -= d;
+    const b = sel.start + len;
     if(b === sel.end) return false;
     if(b > sel.end){
       // растягиваем до первой помехи
-      for(let t = b; t > sel.end; t -= k) if(setSel(sel.key, sel.start, t)) return true;
+      for(let t = b; t > sel.end; t -= d) if(setSel(sel.key, sel.start, t)) return true;
       return false;
     }
     return setSel(sel.key, sel.start, b);
@@ -5897,20 +5925,31 @@ var PF = (function(){
   // Тап — начало нового времени. Длина — как у текущего выбора (сначала это
   // длительность самой брони); пакет — только целиком. Не влезает до помехи —
   // обычную бронь укорачиваем (короче минимума — подсветим), пакет не ставим.
+  function rsFitLen(start, len){
+    const m = rsMinSlots(start), d = RS.durK || 1;
+    return len <= m ? m : m + Math.round((len - m) / d) * d;
+  }
   function rsTap(slot){
-    const len = RS.pkgSlots || (rsHasSel() ? RS.sel.end - RS.sel.start : RS.len || 1);
-    if(RS.pkgSlots) return rsSetSel(slot, slot + len);
+    const sk = RS.startK || 1;
+    slot = Math.floor(slot / sk) * sk;
+    if(RS.pkgSlots) return rsSetSel(slot, slot + RS.pkgSlots);
+    const len = rsFitLen(slot, rsHasSel() ? RS.sel.end - RS.sel.start : RS.len || 1);
     const { end:hi } = rsSlotRange();
-    for(let n = Math.min(len, hi - slot); n >= 1; n--) if(rsSetSel(slot, slot + n)) return true;
+    const m = rsMinSlots(slot), d = RS.durK || 1;
+    for(let n = len; n >= m; n -= d) if(slot + n <= hi && rsSetSel(slot, slot + n)) return true;
+    for(let n = Math.min(m - 1, hi - slot); n >= 1; n--) if(rsSetSel(slot, slot + n)) return true;
     return false;
   }
   function rsSetEnd(end){
     if(!rsHasSel() || RS.pkgSlots) return false;
     const { end:hi } = rsSlotRange();
-    const b = Math.max(RS.sel.start + 1, Math.min(end, RS.sel.start + DURATION_MAX_MIN / RS.step, hi));
+    const m = rsMinSlots(RS.sel.start), d = RS.durK || 1;
+    let len = rsFitLen(RS.sel.start, end - RS.sel.start);
+    while(len > m && (len > DURATION_MAX_MIN / RS.step || RS.sel.start + len > hi)) len -= d;
+    const b = RS.sel.start + len;
     if(b === RS.sel.end) return false;
     if(b > RS.sel.end){
-      for(let t = b; t > RS.sel.end; t--) if(rsSetSel(RS.sel.start, t)) return true;
+      for(let t = b; t > RS.sel.end; t -= d) if(rsSetSel(RS.sel.start, t)) return true;
       return false;
     }
     return rsSetSel(RS.sel.start, b);
@@ -5919,7 +5958,8 @@ var PF = (function(){
     if(!rsHasSel() || !rsSpanFree(RS.sel.start, RS.sel.end)) return false;
     const len = RS.sel.end - RS.sel.start;
     if(RS.pkgSlots) return len === RS.pkgSlots;
-    return len >= rsMinSlots(RS.sel.start);
+    const m = rsMinSlots(RS.sel.start);
+    return len >= m && (len - m) % (RS.durK || 1) === 0;
   }
 
   function rsRenderMonths(){
@@ -6112,7 +6152,8 @@ var PF = (function(){
     if(rsDrag.mode === 'resize') changed = rsSetEnd(slot + 1);
     else {
       const { start:lo, end:hi } = rsSlotRange();
-      const a = Math.max(lo, Math.min(slot - rsDrag.grab, hi - rsDrag.len));
+      const sk = RS.startK || 1;
+      const a = Math.max(Math.ceil(lo / sk) * sk, Math.min(Math.floor((slot - rsDrag.grab) / sk) * sk, hi - rsDrag.len));
       if(a !== RS.sel.start) changed = rsSetSel(a, a + rsDrag.len);
     }
     if(changed){ haptic('light'); rsRenderGrid(); }
@@ -6173,7 +6214,14 @@ var PF = (function(){
       // Шаг ровно тот, что примет сервер при переносе (server.js: reschedule, slotStepOf).
       RS.step = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : (RS.minBookingMin === 30 ? 30 : 60);
       { const hh = (cfg.halls || []).find(h => h.id === booking.hallId);
-        if(hh && [15, 30, 60].indexOf(hh.slotStepMin) >= 0) RS.step = hh.slotStepMin; }   // свой шаг пространства
+        if(hh && [15, 30, 60].indexOf(hh.slotStepMin) >= 0) RS.step = hh.slotStepMin;     // свой шаг начала пространства
+        // шаг длительности (0062): свой -> студийный -> шаг начала
+        const dstep = (hh && [15, 30, 60].indexOf(hh.durationStepMin) >= 0) ? hh.durationStepMin
+          : ([15, 30, 60].indexOf(cfg.durationStepMin) >= 0 ? cfg.durationStepMin : RS.step);
+        // строка сетки — мельчайший из двух шагов; начало и длина выравниваются каждая по своему
+        RS.startK = 1; RS.durK = 1;
+        const row = Math.min(RS.step, dstep);
+        RS.startK = RS.step / row; RS.durK = dstep / row; RS.step = row; }
       RS.hall = (cfg.halls || []).find(h => h.id === booking.hallId) || null;
       if(RS.hall) RS.hours = hallHoursOf(cfg, RS.hall);
       // Платность переноса определяет, насколько поздно о нём просят (по СТАРОМУ времени).
