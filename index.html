@@ -1508,9 +1508,10 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
   box-shadow:4px 0 0 var(--bg), 0 -2px 0 var(--bg), 0 2px 0 var(--bg);
   font-family:var(--f-mono);
   font-size:var(--fs-xs);
+  line-height:1;
   color:var(--text-3);
   display:flex;
-  align-items:center;
+  align-items:flex-start;     /* время — по верху клетки своего часа */
   justify-content:flex-end;
   padding-right:6px;
 }
@@ -1580,8 +1581,8 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 #grid[data-drag-mode="move"] .grid-hour,#rsGrid[data-drag-mode="move"] .grid-hour{color:transparent;text-shadow:0 0 0 rgba(128,128,128,.35);}
 /* Время начала — метка на месте подписи часа: правый край текста совпадает с подписями. */
 .drag-tip.start{padding:3px 5px;}
-/* Длительность — постоянной ширины («8 ч 45 мин» помещается), чтобы не прыгала. */
-.drag-tip.dur{width:84px;}
+/* Длительность («1:30») — постоянной ширины, чтобы не прыгала. */
+.drag-tip.dur{width:48px;}
 .drag-tip[hidden]{display:none;}
 .grid-hint{font-size:var(--fs-sm);color:var(--text-2);margin:-4px 0 10px;}
 .grid-hint[hidden]{display:none;}
@@ -3671,9 +3672,12 @@ var PF = (function(){
   }
 
   // ---- Выделение: непрерывный отрезок часов в ОДНОМ столбце ----
-  const sel = { key:null, start:null, end:null };   // end не включается
+  // end не включается. want — длительность (мин), до которой человек сам растянул
+  // блок: если на новом месте она не влезла и блок укоротился, следующий тап туда,
+  // где места хватает, вернёт именно её, а не укороченную.
+  const sel = { key:null, start:null, end:null, want:null };
 
-  function clearSelection(){ sel.key=null; sel.start=null; sel.end=null; }
+  function clearSelection(){ sel.key=null; sel.start=null; sel.end=null; sel.want=null; }
   function hasSelection(){ return sel.key !== null && sel.start !== null; }
 
   function spanFree(col, a, b){
@@ -3735,7 +3739,8 @@ var PF = (function(){
     if(!col) return false;
     const k = colStepK(col);                     // начало — по шагу начала пространства
     slot = Math.floor(slot / k) * k;
-    const keep = hasSelection() ? sel.end - sel.start : 0;
+    const keep = !hasSelection() ? 0
+      : (sel.want != null && state.packageHours == null) ? Math.round(sel.want / SLOT_MIN) : sel.end - sel.start;
     const want = fitLen(col, slot, Math.max(keep, targetSlotsAt(col, slot)));
     const { end:hi } = gridSlotRange();
     const m = minSlotsAt(col, slot), d = state.packageHours != null ? want : colDurK(col);
@@ -3991,10 +3996,7 @@ var PF = (function(){
   // начала на шкале часов слева, на уровне верха блока; при растягивании —
   // длительность сбоку от нижнего края, с той стороны, где есть место.
   let dragTipEl = null;
-  function durText(min){
-    const h = Math.floor(min / 60), m = min % 60;
-    return (h ? h + ' ч' : '') + (h && m ? ' ' : '') + (m ? m + ' мин' : '');
-  }
+  function durText(min){ return Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0'); }
   function showDragTip(blockEl, scrollerEl, mode, startMin, endMin){
     if(!blockEl) return hideDragTip();
     if(!dragTipEl){ dragTipEl = document.createElement('div'); dragTipEl.className = 'drag-tip'; document.body.appendChild(dragTipEl); }
@@ -4009,14 +4011,17 @@ var PF = (function(){
     const gridOf = blockEl.closest('.grid'); if(gridOf) gridOf.dataset.dragMode = mode;
     if(mode === 'move'){
       dragTipEl.textContent = minutesToLabel(startMin);
-      // Метка ложится ровно туда, где стоит подпись часа: по вертикали — в полосу
-      // первого часа блока (как «13:00» в своей строке), по горизонтали — в колонку подписей.
+      // Метка ложится ровно туда, где стоит подпись часа: по вертикали — на уровень
+      // её текста от верха блока (как «13:00» в своей строке), по горизонтали — в колонку подписей.
       const sr = scrollerEl.getBoundingClientRect();
       const hourEl = gridOf && gridOf.querySelector('.grid-hour');
-      const hr = hourEl ? hourEl.getBoundingClientRect() : { right: sr.left + 40, height: 38 };
+      const hr = hourEl ? hourEl.getBoundingClientRect() : { top:0, right: sr.left + 40 };
+      // где по высоте стоит текст подписи внутри её строки
+      let textMid = 8;
+      if(hourEl){ const rg = document.createRange(); rg.selectNodeContents(hourEl); const tr = rg.getBoundingClientRect(); textMid = (tr.top + tr.bottom) / 2 - hr.top; }
       const w = dragTipEl.offsetWidth, h = dragTipEl.offsetHeight;
       dragTipEl.style.left = (hr.right - w) + 'px';
-      dragTipEl.style.top = Math.max(sr.top, r.top + (hr.height - h) / 2) + 'px';
+      dragTipEl.style.top = Math.max(sr.top, r.top + textMid - h / 2) + 'px';
     } else {
       dragTipEl.textContent = durText(endMin - startMin);
       const w = dragTipEl.offsetWidth, h = dragTipEl.offsetHeight;
@@ -4106,7 +4111,7 @@ var PF = (function(){
     const hit = slotAtPoint(x, y);
     if(!hit) return;           // промежуток между клетками — остаёмся где были
     if(drag.mode === 'resize'){
-      if(setSelEnd(hit.slot + 1)){ haptic('light'); renderSel(); renderPeople(); renderSummary(); }
+      if(setSelEnd(hit.slot + 1)){ sel.want = (sel.end - sel.start) * SLOT_MIN; haptic('light'); renderSel(); renderPeople(); renderSummary(); }
       mainDragTip();
       return;
     }
@@ -6066,7 +6071,8 @@ var PF = (function(){
     return Math.max(1, Math.ceil(minMin / RS.step));
   }
   function rsHasSel(){ return RS.sel.start !== null; }
-  function rsClearSel(){ RS.sel = { start:null, end:null }; }
+  // RS.want — длительность (мин), до которой растянули сами (см. sel.want в основной сетке).
+  function rsClearSel(){ RS.sel = { start:null, end:null }; RS.want = null; }
   function rsSetSel(a, b){
     if(!rsSpanFree(a, b)) return false;
     RS.sel = { start:a, end:b };
@@ -6083,7 +6089,7 @@ var PF = (function(){
     const sk = RS.startK || 1;
     slot = Math.floor(slot / sk) * sk;
     if(RS.pkgSlots) return rsSetSel(slot, slot + RS.pkgSlots);
-    const len = rsFitLen(slot, rsHasSel() ? RS.sel.end - RS.sel.start : RS.len || 1);
+    const len = rsFitLen(slot, !rsHasSel() ? RS.len || 1 : RS.want != null ? Math.round(RS.want / RS.step) : RS.sel.end - RS.sel.start);
     const { end:hi } = rsSlotRange();
     const m = rsMinSlots(slot), d = RS.durK || 1;
     for(let n = len; n >= m; n -= d) if(slot + n <= hi && rsSetSel(slot, slot + n)) return true;
@@ -6309,7 +6315,7 @@ var PF = (function(){
     const slot = rsSlotAtPoint(e.clientY);
     if(slot == null) return;
     let changed = false;
-    if(rsDrag.mode === 'resize') changed = rsSetEnd(slot + 1);
+    if(rsDrag.mode === 'resize'){ changed = rsSetEnd(slot + 1); if(changed) RS.want = (RS.sel.end - RS.sel.start) * RS.step; }
     else {
       const { start:lo, end:hi } = rsSlotRange();
       const sk = RS.startK || 1;
