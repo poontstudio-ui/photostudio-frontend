@@ -1143,13 +1143,23 @@ body{
   display:flex;
   gap:10px;
   overflow-x:auto;
+  scroll-snap-type:x mandatory;
   padding-bottom:4px;
   scrollbar-width:none;
 }
 .hall-cards::-webkit-scrollbar{display:none;}
+.hall-card{scroll-snap-align:start;}
+.hall-card:only-child{flex-basis:100%;width:100%;}
+/* То же затухание справа, что у сетки времени; у конца ленты — без него. */
+.hall-cards[data-more="true"]{
+  -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),rgba(0,0,0,.15) 100%);
+          mask-image:linear-gradient(to right,#000 calc(100% - 36px),rgba(0,0,0,.15) 100%);
+}
 .hall-card{
-  flex:0 0 168px;
-  width:168px;
+  /* Широкая карточка; если пространств несколько, край следующей выглядывает
+     справа — намёк, что ленту можно листать. Одна — на всю ширину. */
+  flex:0 0 calc(100% - 64px);
+  width:calc(100% - 64px);
   background:var(--surface);
   border:1px solid var(--line);
   border-radius:var(--r-md);
@@ -4018,7 +4028,18 @@ var PF = (function(){
       card.addEventListener('click', ()=>{ haptic('light'); openHall(h.id); });
       box.appendChild(card);
     });
+    markHallCardsEnd();
   }
+  // Затухание справа — пока лента не долистана до конца.
+  function markHallCardsEnd(){
+    const box = document.getElementById('hallCards');
+    if(!box) return;
+    box.dataset.more = (box.scrollLeft + box.clientWidth < box.scrollWidth - 2) ? 'true' : 'false';
+  }
+  document.getElementById('hallCards').addEventListener('scroll', markHallCardsEnd, { passive:true });
+  // лента могла отрисоваться скрытой (экран студии ещё не показан) — пересчитаем при появлении
+  if(window.ResizeObserver) new ResizeObserver(markHallCardsEnd).observe(document.getElementById('hallCards'));
+  else window.addEventListener('resize', markHallCardsEnd);
 
   function renderHallInfo(){
     const hall = gridHall();
