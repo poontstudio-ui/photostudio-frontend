@@ -1572,8 +1572,8 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
   white-space:nowrap;font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(0,0,0,.12);}
 /* Пока тащим блок, подписи часов приглушены — метка начала читается поверх них. */
 #grid[data-drag-mode="move"] .grid-hour,#rsGrid[data-drag-mode="move"] .grid-hour{color:transparent;text-shadow:0 0 0 rgba(128,128,128,.35);}
-/* Время начала — метка на шкале часов, ровно по ширине колонки подписей. */
-.drag-tip.start{width:38px;}
+/* Время начала — метка на месте подписи часа: правый край текста совпадает с подписями. */
+.drag-tip.start{padding:3px 5px;}
 /* Длительность — постоянной ширины («8 ч 45 мин» помещается), чтобы не прыгала. */
 .drag-tip.dur{width:84px;}
 .drag-tip[hidden]{display:none;}
@@ -3348,7 +3348,7 @@ var PF = (function(){
       (Array.isArray(v.priceRules) ? v.priceRules : []).forEach(function(r){ rates.push(r.rate); });
     });
     rates = rates.filter(function(r){ return typeof r === 'number' && isFinite(r); });
-    if(!rates.length && perGuest.length) return 'от ' + gpMoney(Math.min.apply(null, perGuest)) + ' ' + CUR + ' за гостя';
+    if(!rates.length && perGuest.length) return 'от ' + gpMoney(Math.min.apply(null, perGuest)) + ' ' + CUR + '/чел';
     if(!rates.length) return '';
     var lo = Math.min.apply(null, rates), hi = Math.max.apply(null, rates);
     return (hi > lo ? 'от ' : '') + lo + ' ' + CUR + '/ч';
@@ -3919,9 +3919,14 @@ var PF = (function(){
     const gridOf = blockEl.closest('.grid'); if(gridOf) gridOf.dataset.dragMode = mode;
     if(mode === 'move'){
       dragTipEl.textContent = minutesToLabel(startMin);
+      // Метка ложится ровно туда, где стоит подпись часа: по вертикали — в полосу
+      // первого часа блока (как «13:00» в своей строке), по горизонтали — в колонку подписей.
       const sr = scrollerEl.getBoundingClientRect();
-      dragTipEl.style.left = (sr.left + 1) + 'px';
-      dragTipEl.style.top = Math.max(sr.top, r.top - dragTipEl.offsetHeight / 2) + 'px';
+      const hourEl = gridOf && gridOf.querySelector('.grid-hour');
+      const hr = hourEl ? hourEl.getBoundingClientRect() : { right: sr.left + 40, height: 38 };
+      const w = dragTipEl.offsetWidth, h = dragTipEl.offsetHeight;
+      dragTipEl.style.left = (hr.right - w) + 'px';
+      dragTipEl.style.top = Math.max(sr.top, r.top + (hr.height - h) / 2) + 'px';
     } else {
       dragTipEl.textContent = durText(endMin - startMin);
       const w = dragTipEl.offsetWidth, h = dragTipEl.offsetHeight;
