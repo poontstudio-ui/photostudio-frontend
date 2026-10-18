@@ -4513,7 +4513,11 @@ var PF = (function(){
       box.dataset.collapsed = (!open && cells.length > INCLUDED_COLLAPSED) ? 'true' : 'false';
       if(more) more.textContent = open ? 'Свернуть' : 'Показать всё · ' + lines.length;
     }
-    if(more){ apply(); more.addEventListener('click', function(){ open = !open; apply(); haptic('light'); }); }
+    if(more){
+      apply();
+      var grid = box.querySelector('.feat-grid');
+      more.addEventListener('click', function(){ open = !open; animateList(grid, apply, open); haptic('light'); });
+    }
   }
 
   // Смена цели меняет цену, минимум брони и вместимость. Выбранное время
@@ -4529,6 +4533,35 @@ var PF = (function(){
     if(hasSelection() && !selectionValid()) clearSelection();
     renderAll();
     refreshGrid();
+  }
+
+  // Плавно раскрывает и сворачивает список пунктов (оснащение, «Пространство и
+  // удобства»). change() переключает, какие пункты скрыты; мы меряем высоту до и
+  // после и ведём её анимацией. Раскрытие — новые пункты ещё и проявляются;
+  // сворачивание — пункты остаются видны, пока список сжимается, и скрываются в конце.
+  function animateList(grid, change, opening){
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!grid || reduce || !grid.animate){ change(); return; }
+    var h0 = grid.offsetHeight;                     // во время прошлой анимации — текущая высота
+    if(grid._anim){ grid._anim.onfinish = grid._anim.oncancel = null; grid._anim.cancel(); }
+    grid.querySelectorAll('.feat[data-leaving]').forEach(function(el){ delete el.dataset.leaving; });
+    var wasHidden = Array.prototype.filter.call(grid.querySelectorAll('.feat'), function(el){ return el.hidden; });
+    change();
+    var h1 = grid.offsetHeight;
+    if(Math.abs(h1 - h0) < 1) return;
+    if(opening){
+      wasHidden.forEach(function(el){ if(!el.hidden) el.animate([{ opacity:0 }, { opacity:1 }], { duration:260, easing:'ease-out' }); });
+    } else {
+      grid.querySelectorAll('.feat[hidden]').forEach(function(el){ el.hidden = false; el.dataset.leaving = '1'; });
+    }
+    grid.style.overflow = 'hidden';
+    var a = grid._anim = grid.animate([{ height:h0 + 'px' }, { height:h1 + 'px' }], { duration:280, easing:'cubic-bezier(.2,.7,.2,1)' });
+    a.onfinish = function(){
+      grid._anim = null;
+      grid.style.overflow = '';
+      grid.querySelectorAll('.feat[data-leaving]').forEach(function(el){ el.hidden = true; delete el.dataset.leaving; });
+    };
+    a.oncancel = a.onfinish;
   }
 
   // Один пункт «есть/нет»: зачёркнутый серый = в зале такого нет.
@@ -4587,9 +4620,9 @@ var PF = (function(){
       if(more) more.textContent = open ? 'Свернуть' : 'Показать все';
     }
     if(more){
-      var open = false;
+      var open = false, grid = box.querySelector('.feat-grid');
       apply(false);
-      more.addEventListener('click', function(){ open = !open; apply(open); haptic('light'); });
+      more.addEventListener('click', function(){ open = !open; animateList(grid, function(){ apply(open); }, open); haptic('light'); });
     }
   }
 
