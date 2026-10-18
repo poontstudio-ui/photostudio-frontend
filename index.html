@@ -1515,8 +1515,38 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
    идущие занятые слоты (как в кабинете владельца), а не заливка каждой
    клетки. Сама клетка под ним прозрачная. */
 .grid-cell[data-state="free"]:active{background:var(--surface-2);}
+#grid .grid-cell[data-agg="free"]:active,#grid .grid-cell[data-agg="mixed"]:active{background:var(--surface-2);}
+@media (hover:hover){ #grid .grid-cell[data-agg="free"]:hover{background:var(--surface-2);} }
 @media (hover:hover){ .grid-cell[data-state="free"]:hover{background:var(--surface-2);} }
 .grid-cell[data-state="busy"]{background:none;cursor:not-allowed;}
+/* Основная сетка: строки — по шагу студии (15/30/60), а клетки — по часу и
+   растянуты на свои строки. Занятость, недоступное время и выбор — блоки поверх
+   клеток с точностью до шага. 4 px снизу у часа — «зазор» между часами. */
+#grid{row-gap:0;}
+#grid .grid-hour,#grid .grid-cell{align-self:start;height:38px;}
+#grid .grid-busy,#grid .grid-off,#grid .grid-sel{margin-bottom:4px;}
+#grid .grid-busy.flush,#grid .grid-off.flush,#grid .grid-sel.flush{margin-bottom:0;}
+.grid-off{position:relative;z-index:1;border-radius:var(--r-sm);pointer-events:none;
+  background:repeating-linear-gradient(-45deg,var(--stripe),var(--stripe) 5px,var(--stripe-2) 5px,var(--stripe-2) 10px),var(--bg);}
+.grid-sel{position:relative;z-index:3;border-radius:var(--r-sm);background:var(--sel-fill);box-shadow:inset 0 0 0 2px var(--accent);
+  display:flex;justify-content:center;overflow:hidden;touch-action:none;cursor:grab;min-height:8px;}
+.grid-sel[data-short="true"]{box-shadow:inset 0 0 0 2px var(--amber);}
+.grid-sel-time{font-family:var(--f-mono);font-size:var(--fs-xs);font-weight:600;color:var(--accent-dark);padding-top:3px;
+  white-space:nowrap;pointer-events:none;line-height:1.15;text-align:center;}
+/* Ручка снизу — тянуть конец брони. Зона касания крупнее видимой полоски. */
+.grid-sel-handle{position:absolute;left:0;right:0;bottom:0;height:12px;display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:2px;cursor:ns-resize;touch-action:none;}
+.grid-sel-handle::before{content:'';width:20px;height:4px;border-radius:2px;background:var(--accent);}
+.grid[data-dragging="true"] .grid-sel{background:var(--accent-dim);}
+.grid-hint{font-size:var(--fs-sm);color:var(--text-2);margin:-4px 0 10px;}
+.grid-hint[hidden]{display:none;}
+.sb-dur{flex-basis:100%;display:flex;align-items:center;gap:8px;font-size:var(--fs-sm);color:var(--text-2);margin:-4px 0 2px;}
+.sb-dur[hidden]{display:none;}
+.sb-dur b{color:var(--text);font-variant-numeric:tabular-nums;min-width:64px;text-align:center;}
+.sb-dur button{width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--accent);
+  font-size:18px;line-height:1;cursor:pointer;touch-action:manipulation;}
+.sb-dur button:disabled{opacity:.35;cursor:not-allowed;}
+.sb-dur .sb-dur-time{margin-left:auto;font-family:var(--f-mono);font-size:var(--fs-xs);color:var(--text-3);}
 .grid-busy{
   position:relative;
   z-index:1;
@@ -1573,7 +1603,7 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
   box-shadow:0 -6px 20px rgba(20,22,28,.06);
   /* Плашка выше на ~20% (было 10px сверху и снизу). */
   padding:16px 14px calc(16px + env(safe-area-inset-bottom, 0px));
-  display:flex;align-items:center;gap:10px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:10px;
 }
 .sb-guests{flex:none;display:flex;align-items:center;gap:2px;touch-action:manipulation;-webkit-user-select:none;user-select:none;}
 .sb-guests button{
@@ -2046,6 +2076,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="section">
       <div class="repeat-hint" id="repeatHint" hidden></div>
       <div class="section-label" id="gridLabel">Время брони</div>
+      <div class="grid-hint" id="gridHint" hidden>Нажмите время начала. Потяните нижний край, чтобы изменить длительность, или перетащите бронь целиком.</div>
       <div class="grid-head-wrap" id="gridHeadWrap">
         <div class="grid" id="gridHead"></div>
       </div>
@@ -2113,6 +2144,13 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   <!-- Нижняя плашка: гости, стоимость и одна кнопка. Пока время не выбрано —
        «Выбрать время» (ведёт к сетке), выбрано — «Забронировать». -->
   <div class="summary-bar" id="summaryBar">
+    <div class="sb-dur" id="sbDur" hidden>
+      <span>Длительность</span>
+      <button id="durMinus" type="button" aria-label="Короче">−</button>
+      <b id="durVal">1 ч</b>
+      <button id="durPlus" type="button" aria-label="Длиннее">+</button>
+      <span class="sb-dur-time" id="durTime"></span>
+    </div>
     <div class="sb-guests" role="group" aria-label="Сколько гостей">
       <button id="peopleMinus" type="button" aria-label="Меньше гостей">−</button>
       <span class="sb-guests-n"><b id="peopleCount">1</b><small id="peopleWord">гость</small></span>
@@ -2769,7 +2807,7 @@ var PF = (function(){
   let HALLS = [], EQUIPMENT = [], WEEK_HOURS;   // EQUIPMENT — только для кабинета владельца
   let STUDIO_TZ = 'Europe/Minsk';   // IANA-таймзона студии, приходит в /config
   let STUDIO_BUFFER_MIN = 0;        // буфер после брони, режется из времени клиента (/config)
-  let SLOT_MIN = 60;               // шаг сетки времени: 30 или 60, из /config
+  let SLOT_MIN = 60;               // шаг выбора времени студии: 15, 30 или 60 (/config). Строки сетки — по часу.
   let STUDIO_MIN_BOOKING_MIN = 60; // минимум брони по студии; правило окна может поднять (фаза B)
   let STUDIO_LASTMINUTE = { enabled:false, hours:24, pct:20 };  // скидка «горящих» окон (П3-3)
   let HALL_PROPS = { hallType:true, areaM2:true, ceilingCm:true, floor:true, styles:true,
@@ -2891,7 +2929,7 @@ var PF = (function(){
     WEEK_HOURS = normalizeWeekHours(cfg);
     STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
     STUDIO_BUFFER_MIN = Number.isInteger(cfg.bufferMin) ? cfg.bufferMin : 0;
-    SLOT_MIN = cfg.slotStep === 30 ? 30 : 60;
+    SLOT_MIN = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : 60;
     // Валюта студии: подставляем и в динамические подписи (через CUR), и в
     // статические ярлыки в разметке.
     if(typeof cfg.currency === 'string' && cfg.currency){
@@ -3601,28 +3639,33 @@ var PF = (function(){
     return !!col && spanFree(col, sel.start, sel.end) && (sel.end - sel.start) < minSlotsAt(col, sel.start);
   }
 
-  // Тап — две точки промежутка. Нет выделения (или другой столбец) — первый
-  // тап: отмечается только эта клетка. Тап вне текущего выделения, в том же
-  // столбце — второй тап: выделяется весь промежуток от старой отметки до
-  // этой клетки (в любую сторону). Тап ВНУТРИ текущего выделения — начинаем
-  // сначала: остаётся отмечена только эта клетка.
+  // Тап — начало брони. Блок встаёт с этого места: длиной как текущий выбор
+  // (повторный тап переносит его), а если выбора нет — минимум окна или пакет.
+  // Не помещается (дальше занято или студия закрывается) — блок короче, до
+  // помехи; если он короче минимума, сетка и плашка это покажут.
   function tapCell(colKey, slot){
-    if(sel.key === colKey && hasSelection()){
-      if(slot >= sel.start && slot < sel.end) return setSel(colKey, slot, slot + 1);
-      const a = Math.min(sel.start, slot);
-      const b = Math.max(sel.end - 1, slot) + 1;
-      // Если между текущим выделением и тапнутой клеткой есть занятое время,
-      // промежуток не выделяется — тогда начинаем выбор с этой клетки, а не
-      // молча игнорируем тап.
-      return setSel(colKey, a, b) || setSel(colKey, slot, slot + 1);
+    const col = gridColumns().find(c => c.key === colKey);
+    if(!col) return false;
+    const keep = hasSelection() ? sel.end - sel.start : 0;
+    const want = Math.max(keep, targetSlotsAt(col, slot));
+    const { end:hi } = gridSlotRange();
+    for(let n = Math.min(want, hi - slot); n >= 1; n--){
+      if(setSel(colKey, slot, slot + n)) return true;
     }
-    // Выбран пакет — первый тап сразу отмечает окно его длины.
-    if(state.packageHours != null){
-      const col = gridColumns().find(c => c.key === colKey);
-      const n = col ? targetSlotsAt(col, slot) : 1;
-      if(n > 1 && setSel(colKey, slot, slot + n)) return true;
+    return false;
+  }
+  // Длительность ±шаг (кнопки в плашке и ручка): конец двигается, начало на месте.
+  function setSelEnd(end){
+    if(!hasSelection()) return false;
+    const { end:hi } = gridSlotRange();
+    const b = Math.max(sel.start + 1, Math.min(end, sel.start + maxSlots(), hi));
+    if(b === sel.end) return false;
+    if(b > sel.end){
+      // растягиваем до первой помехи
+      for(let t = b; t > sel.end; t--) if(setSel(sel.key, sel.start, t)) return true;
+      return false;
     }
-    return setSel(colKey, slot, slot + 1);
+    return setSel(sel.key, sel.start, b);
   }
 
   const gridHeadEl = document.getElementById('gridHead');
@@ -3695,39 +3738,51 @@ var PF = (function(){
     }
     gridHeadEl.innerHTML = head;
 
-    // Каждому элементу — явные grid-row/grid-column: поверх клеток ложатся
-    // явно позиционированные .grid-busy, а смешение авто- и явной расстановки
-    // в одном гриде сдвигает авто-элементы (баг, пойманный в кабинете).
-    const states = cols.map(() => []);
+    // Строки — по шагу студии, клетки — по часу (растянуты на SPR строк). Явные
+    // grid-row у всех элементов: смешение авто- и явной расстановки в одном гриде
+    // сдвигает авто-элементы (баг, пойманный в кабинете).
+    const SPR = Math.max(1, Math.round(60 / SLOT_MIN));
+    gridEl.style.gridTemplateRows = `repeat(${end - start}, ${42 / SPR}px)`;
+    const states = cols.map(c => { const a = []; for(let i=start; i<end; i++) a.push(cellState(c, i)); return a; });
     let html = '';
-    for(let i=start; i<end; i++){
-      const row = i - start + 1;
-      const label = minutesToLabel(i * SLOT_MIN);
-      html += `<div class="grid-hour" style="grid-row:${row};grid-column:1">${label}</div>`;
+    for(let i=start; i<end; i+=SPR){
+      const row = i - start + 1, span = Math.min(SPR, end - i);
+      html += `<div class="grid-hour" style="grid-row:${row} / span ${span};grid-column:1">${minutesToLabel(i * SLOT_MIN)}</div>`;
       cols.forEach((c, ci)=>{
-        const st = cellState(c, i);
-        states[ci].push(st);
-        const on = hasSelection() && sel.key===c.key && i>=sel.start && i<sel.end;
-        html += `<div class="grid-cell" style="grid-row:${row};grid-column:${ci+2}" data-col="${esc(c.key)}" data-slot="${i}" data-state="${st}"`
-              + (on ? ' data-sel="true"' : '')
-              + (on && i===sel.start ? ` data-sel-first="true" data-time="${label}"` : '')
-              + '></div>';
+        const part = states[ci].slice(i - start, i - start + span);
+        const agg = part.every(x => x === part[0]) ? part[0] : 'mixed';
+        html += `<div class="grid-cell" style="grid-row:${row} / span ${span};grid-column:${ci+2}" data-col="${esc(c.key)}" data-slot="${i}" data-span="${span}" data-agg="${agg}"></div>`;
       });
     }
-    // Подряд идущие занятые слоты столбца — один прямоугольник. Клиенту чья
-    // это бронь не важно, поэтому соседние брони сливаются в одно «занято».
-    // Прошедшее время остаётся штриховкой (cellState отдаёт его как past).
+    // Блок, который кончается не на границе часа, не держит нижний «зазор» часа.
+    const flush = (slotAbs) => (slotAbs % SPR) ? ' flush' : '';
+    // Подряд идущие занятые слоты — один прямоугольник (чья бронь — клиенту не
+    // важно); прошедшее и нерабочее время — штриховкой, тоже одним блоком.
     states.forEach((col, ci)=>{
-      let runStart = -1;
-      for(let k=0; k<=col.length; k++){
-        const busy = k < col.length && col[k] === 'busy';
-        if(busy && runStart < 0) runStart = k;
-        if(!busy && runStart >= 0){
-          html += `<div class="grid-busy" style="grid-column:${ci+2};grid-row:${runStart+1} / ${k+1}"></div>`;
-          runStart = -1;
+      [['busy', 'grid-busy'], ['off', 'grid-off']].forEach(([kind, cls])=>{
+        let rs = -1;
+        for(let k=0; k<=col.length; k++){
+          const on = k < col.length && (kind === 'busy' ? col[k] === 'busy' : (col[k] === 'past' || col[k] === 'closed'));
+          if(on && rs < 0) rs = k;
+          if(!on && rs >= 0){
+            html += `<div class="${cls}${flush(start + k)}" style="grid-column:${ci+2};grid-row:${rs+1} / ${k+1}"></div>`;
+            rs = -1;
+          }
         }
-      }
+      });
     });
+    // Выбор — один блок с временем и ручкой снизу.
+    if(hasSelection()){
+      const ci = cols.findIndex(c => c.key === sel.key);
+      const a = Math.max(sel.start, start), b = Math.min(sel.end, end);
+      if(ci >= 0 && b > a){
+        html += `<div class="grid-sel${flush(b)}" data-short="${!selectionValid()}" style="grid-column:${ci+2};grid-row:${a-start+1} / ${b-start+1}">`
+          // Узкий столбец: начало сверху, конец второй строкой — если блок достаточно высокий.
+          + `<span class="grid-sel-time">${minutesToLabel(sel.start * SLOT_MIN)}`
+          + ((b - a) * 42 / SPR >= 46 ? `<br>${minutesToLabel(sel.end * SLOT_MIN)}` : '') + `</span>`
+          + `<span class="grid-sel-handle" role="slider" aria-label="Длительность брони"></span></div>`;
+      }
+    }
     gridEl.dataset.slotmin = String(SLOT_MIN);
     gridEl.innerHTML = html;
     // Шапка и тело — разные гриды, и max-content считает их по-разному
@@ -3740,10 +3795,11 @@ var PF = (function(){
   // ---- Ввод: только тап (по клетке или по соседней) ----
   gridEl.addEventListener('click', (e)=>{
     if(dragJustEnded){ dragJustEnded = false; return; }   // это был конец перетаскивания, не тап
-    const el = e.target && e.target.closest ? e.target.closest('.grid-cell') : null;
-    // Тап мимо свободной клетки (занятая, прошедшая, закрытая, подпись времени,
+    if(e.target && e.target.closest && e.target.closest('.grid-sel')) return;   // тап по самому выбору — ничего
+    const hit = slotAtPoint(e.clientX, e.clientY);
+    // Тап мимо свободного времени (занятое, прошедшее, закрытое, подпись часа,
     // промежуток между столбцами) — снимает выбор.
-    if(!el || el.dataset.state !== 'free'){
+    if(!hit || cellState(hit.col, hit.slot) !== 'free'){
       if(hasSelection()){
         clearSelection();
         haptic('light');
@@ -3751,11 +3807,21 @@ var PF = (function(){
       }
       return;
     }
-    if(tapCell(el.dataset.col, Number(el.dataset.slot))){
+    if(tapCell(hit.col.key, hit.slot)){
       haptic('light');
+      gridHintSeen();
       renderGrid(); renderPeople(); renderSummary();
     }
   });
+  // Подсказка над сеткой — пока человек ни разу не выбрал время.
+  function gridHintSeen(){
+    try{ localStorage.setItem('poont.gridHint', '1'); }catch(e){}
+    const h = document.getElementById('gridHint'); if(h) h.hidden = true;
+  }
+  (function(){
+    let seen = false; try{ seen = localStorage.getItem('poont.gridHint') === '1'; }catch(e){}
+    const h = document.getElementById('gridHint'); if(h) h.hidden = seen;
+  })();
 
   // ---- Перетаскивание выбранного времени ----
   // Палец (или мышь) на выбранном времени и сдвиг — выбор едет целиком той же
@@ -3763,7 +3829,7 @@ var PF = (function(){
   // другие пространства). Встаёт только туда, где всё время свободно; у края
   // сетки и экрана она сама прокручивается. Короткое касание без сдвига — по-
   // прежнему тап (см. tapCell).
-  let drag = null;            // { id, grab, len, x0, y0, x, y, moved }
+  let drag = null;            // { id, mode:'move'|'resize', grab, len, x0, y0, x, y, moved }
   let dragJustEnded = false;
   function cellAtPoint(x, y){
     // Поверх занятых клеток лежат .grid-busy — берём клетку под ними.
@@ -3773,14 +3839,38 @@ var PF = (function(){
     }
     return null;
   }
+  // Слот под точкой: часовая клетка + доля её высоты (4 слота в часе при шаге 15).
+  // Считаем по геометрии сетки, а не по клетке под пальцем: так и зазоры между
+  // часами и столбцами относятся к ближайшему времени, а строка = шаг студии.
+  function slotAtPoint(x, y){
+    const { start, end } = gridSlotRange();
+    if(end <= start) return null;
+    const gr = gridEl.getBoundingClientRect();
+    const rowH = 42 / Math.max(1, Math.round(60 / SLOT_MIN));
+    const k = Math.floor((y - gr.top) / rowH);
+    if(k < 0 || k >= end - start) return null;
+    const firstRow = gridEl.querySelectorAll('.grid-cell[data-slot="' + start + '"]');
+    let hitCell = null;
+    for(const c of firstRow){
+      const r = c.getBoundingClientRect();
+      if(x >= r.left && x < r.right + 4){ hitCell = c; break; }   // +4 — зазор справа от столбца
+    }
+    if(!hitCell) return null;
+    const col = gridColumns().find(c => c.key === hitCell.dataset.col);
+    return col ? { col, slot: start + k } : null;
+  }
   function dragTo(x, y){
-    const cell = cellAtPoint(x, y);
-    if(!cell) return;          // промежуток между клетками — остаёмся где были
+    const hit = slotAtPoint(x, y);
+    if(!hit) return;           // промежуток между клетками — остаёмся где были
+    if(drag.mode === 'resize'){
+      if(setSelEnd(hit.slot + 1)){ haptic('light'); renderGrid(); renderPeople(); renderSummary(); }
+      return;
+    }
     const { start:lo, end:hi } = gridSlotRange();
-    let a = Number(cell.dataset.slot) - drag.grab;
+    let a = hit.slot - drag.grab;
     a = Math.max(lo, Math.min(a, hi - drag.len));
-    if(cell.dataset.col === sel.key && a === sel.start) return;
-    if(setSel(cell.dataset.col, a, a + drag.len)){
+    if(hit.col.key === sel.key && a === sel.start) return;
+    if(setSel(hit.col.key, a, a + drag.len)){
       haptic('light');
       renderGrid(); renderPeople(); renderSummary();
     }
@@ -3800,16 +3890,19 @@ var PF = (function(){
   }
   gridEl.addEventListener('pointerdown', (e)=>{
     if(e.button > 0 || !hasSelection()) return;
-    const el = e.target && e.target.closest ? e.target.closest('.grid-cell[data-sel="true"]') : null;
-    if(!el) return;
-    drag = { id:e.pointerId, grab:Number(el.dataset.slot) - sel.start, len:sel.end - sel.start,
-             x0:e.clientX, y0:e.clientY, x:e.clientX, y:e.clientY, moved:false };
+    const blk = e.target && e.target.closest ? e.target.closest('.grid-sel') : null;
+    if(!blk) return;
+    const resize = !!e.target.closest('.grid-sel-handle');
+    const hit = slotAtPoint(e.clientX, e.clientY);
+    drag = { id:e.pointerId, mode: resize ? 'resize' : 'move',
+             grab: hit ? Math.max(0, Math.min(hit.slot - sel.start, sel.end - sel.start - 1)) : 0,
+             len:sel.end - sel.start, x0:e.clientX, y0:e.clientY, x:e.clientX, y:e.clientY, moved:false };
   });
   window.addEventListener('pointermove', (e)=>{
     if(!drag || e.pointerId !== drag.id) return;
     drag.x = e.clientX; drag.y = e.clientY;
     if(!drag.moved){
-      if(Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 8) return;
+      if(Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < (drag.mode === 'resize' ? 4 : 8)) return;
       drag.moved = true;
       gridEl.dataset.dragging = 'true';
       haptic('medium');
@@ -3827,6 +3920,7 @@ var PF = (function(){
       // Следом браузер пришлёт click — он не должен сработать как тап.
       dragJustEnded = true;
       setTimeout(() => { dragJustEnded = false; }, 60);
+      gridHintSeen();
       renderGrid();
     }
   }
@@ -3836,7 +3930,7 @@ var PF = (function(){
   // Сетка длиннее экрана: автовыбор берёт первую свободную клетку по всему
   // месяцу, и она может оказаться правее видимой части — подводим её в кадр.
   function scrollGridToSelection(){
-    const el = gridEl.querySelector('.grid-cell[data-sel-first="true"]');
+    const el = gridEl.querySelector('.grid-sel');
     if(!el) return;
     const x = el.getBoundingClientRect().left - gridEl.getBoundingClientRect().left;
     const w = el.offsetWidth, view = gridScrollEl.scrollLeft, vw = gridScrollEl.clientWidth;
@@ -4482,7 +4576,29 @@ var PF = (function(){
   // Нижняя плашка: гости, стоимость и одна кнопка. Время по умолчанию не
   // выбрано: кнопка «Выбрать время» ведёт к сетке, рядом — цена за час.
   // Выбрал — итог за выбранное время и «Забронировать».
+  function renderDuration(){
+    const box = document.getElementById('sbDur');
+    if(!box) return;
+    box.hidden = !hasSelection();
+    if(box.hidden) return;
+    const m = (sel.end - sel.start) * SLOT_MIN, h = Math.floor(m / 60), r = m % 60;
+    document.getElementById('durVal').textContent = r ? (h ? h + ' ч ' + r + ' мин' : r + ' мин') : h + ' ч';
+    document.getElementById('durTime').textContent = minutesToLabel(sel.start * SLOT_MIN) + '–' + minutesToLabel(sel.end * SLOT_MIN);
+    const { end:hi } = gridSlotRange();
+    const col = gridColumns().find(c => c.key === sel.key);
+    document.getElementById('durMinus').disabled = sel.end - sel.start <= 1;
+    document.getElementById('durPlus').disabled = sel.end - sel.start >= maxSlots() || sel.end >= hi ||
+      !col || cellState(col, sel.end) !== 'free';
+  }
+  ['durMinus', 'durPlus'].forEach(function(id){
+    document.getElementById(id).addEventListener('click', function(){
+      if(setSelEnd(sel.end + (id === 'durPlus' ? 1 : -1))){
+        haptic('light'); renderGrid(); renderPeople(); renderSummary();
+      }
+    });
+  });
   function renderSummary(){
+    renderDuration();
     const cap = document.getElementById('summaryRow');
     const total = document.getElementById('summaryTotal');
     const btn = document.getElementById('recBtn');
@@ -4496,7 +4612,7 @@ var PF = (function(){
       total.innerHTML = r.big === '—' ? '—' : esc(r.big).replace(/^от /, '<small>от</small> ') + ' <small>' + esc(CUR) + '</small>';
       if(selectionPending()){
         const col = gridColumns().find(c => c.key === sel.key);
-        cap.textContent = 'Минимум ' + minLabel(col ? minSlotsAt(col, sel.start) * SLOT_MIN : SLOT_MIN) + ' — отметьте конец';
+        cap.textContent = 'Минимум ' + minLabel(col ? minSlotsAt(col, sel.start) * SLOT_MIN : SLOT_MIN) + ' — потяните край вниз';
       } else if(state.packageHours != null){
         cap.textContent = 'Пакет ' + pkgHoursLabel(state.packageHours) + ' — выберите начало';
       } else cap.textContent = r.cap;
@@ -4519,7 +4635,7 @@ var PF = (function(){
     const reduceM = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     const go = (y) => window.scrollTo({ top:Math.max(0, Math.round(y)), behavior: reduceM ? 'auto' : 'smooth' });
     // Начало уже отмечено, ждём конец — ведём к отмеченной клетке.
-    const first = hasSelection() && gridEl.querySelector('.grid-cell[data-sel-first="true"]');
+    const first = hasSelection() && gridEl.querySelector('.grid-sel');
     if(first){
       scrollGridToSelection();
       const r = first.getBoundingClientRect();
