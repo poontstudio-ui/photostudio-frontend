@@ -466,6 +466,9 @@
     }
 
     // ---- Блок выбора ----
+    // Снизу у блока всегда 4px «зазора» между часами (класс .flush ему не ставим),
+    // даже когда он кончается не на часе: иначе при переносе по 15 минут высота
+    // прыгала на 4px — то с зазором (конец на часе), то без.
     // Выбор меняется часто (тап, каждый шаг перетаскивания), а клетки и занятость —
     // только с данными. Поэтому блок переставляется на месте, сетка не пересобирается.
     function spec(){
@@ -475,14 +478,13 @@
       if(ci < 0 || b <= a) return null;
       var s = spr();
       return { col:ci + 2, rowA:a - r.start + 1, rowB:b - r.start + 1,
-        flush: b % s !== 0,                  // кончается не на границе часа — без нижнего «зазора»
         short: !valid(), time: o.label(sel, a, b, s), handle: o.handle ? o.handle() : true };
     }
     function handleHtml(){ return '<span class="' + cls + '-sel-handle" role="slider" aria-label="Длительность"></span>'; }
     function blockHtml(){
       var sp = spec();
       if(!sp) return '';
-      return '<div class="' + cls + '-sel' + (sp.flush ? ' flush' : '') + '" data-short="' + sp.short + '" style="grid-column:' + sp.col + ';grid-row:' + sp.rowA + ' / ' + sp.rowB + '">'
+      return '<div class="' + cls + '-sel" data-short="' + sp.short + '" style="grid-column:' + sp.col + ';grid-row:' + sp.rowA + ' / ' + sp.rowB + '">'
         + '<span class="' + cls + '-sel-time">' + sp.time + '</span>' + (sp.handle ? handleHtml() : '') + '</div>';
     }
     function blockEl(){ return el.querySelector('.' + cls + '-sel'); }
@@ -495,7 +497,6 @@
       var before = animate && !REDUCED_MOTION ? b.getBoundingClientRect() : null;
       b.style.gridColumn = String(sp.col);
       b.style.gridRow = sp.rowA + ' / ' + sp.rowB;
-      b.classList.toggle('flush', sp.flush);
       b.dataset.short = String(sp.short);
       var t = b.querySelector('.' + cls + '-sel-time');
       if(t && t.innerHTML !== sp.time) t.innerHTML = sp.time;
@@ -1910,7 +1911,7 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 #grid,#rsGrid{row-gap:0;}
 #rsGrid .grid-hour,#rsGrid .grid-cell{align-self:start;height:38px;}
 #rsGrid .grid-busy,#rsGrid .grid-off,#rsGrid .grid-sel{margin-bottom:4px;}
-#rsGrid .grid-busy.flush,#rsGrid .grid-off.flush,#rsGrid .grid-sel.flush{margin-bottom:0;}
+#rsGrid .grid-busy.flush,#rsGrid .grid-off.flush{margin-bottom:0;}
 #rsGrid .grid-hour{z-index:6;}
 #rsGrid .grid-cell[data-agg="free"]{cursor:pointer;}
 /* Сетка переноса лежит на панели цвета --surface: клетки — фоном страницы, подписи — цветом панели. */
@@ -1946,7 +1947,7 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 @media (prefers-reduced-motion:reduce){ .grid-sel{transition:none;} }
 #grid .grid-hour,#grid .grid-cell{align-self:start;height:38px;}
 #grid .grid-busy,#grid .grid-off,#grid .grid-sel{margin-bottom:4px;}
-#grid .grid-busy.flush,#grid .grid-off.flush,#grid .grid-sel.flush{margin-bottom:0;}
+#grid .grid-busy.flush,#grid .grid-off.flush{margin-bottom:0;}
 .grid-off{position:relative;z-index:1;border-radius:var(--r-sm);pointer-events:none;
   background:repeating-linear-gradient(-45deg,var(--stripe),var(--stripe) 5px,var(--stripe-2) 5px,var(--stripe-2) 10px),var(--bg);}
 .grid-sel{position:relative;z-index:3;border-radius:var(--r-sm);background:var(--sel-fill);box-shadow:inset 0 0 0 2px var(--accent);
