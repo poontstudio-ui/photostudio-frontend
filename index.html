@@ -1674,7 +1674,6 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 .amenity-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
 .amenity-chips .chip{font-size:var(--fs-sm);line-height:1;padding:6px 10px;border-radius:var(--r-pill);
   background:var(--surface);border:1px solid var(--line);color:var(--text);}
-.amenity-chips.ok .chip{background:rgba(60,160,80,.12);border-color:rgba(60,160,80,.35);color:#3ba05a;}
 .amenity-chips:empty{display:none;}
 .hall-soon{font-size:var(--fs-sm);color:var(--text-3);margin-top:12px;line-height:1.5;}
 
@@ -2459,12 +2458,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="section" id="hallCardsSection">
       <div class="section-label">Пространства</div>
       <div class="hall-cards" id="hallCards"></div>
-    </div>
-
-    <div class="section" id="studioAmenitiesSection" hidden>
-      <div class="section-label">Удобства студии</div>
-      <div class="amenity-chips" id="studioAmenityChips"></div>
-      <div class="amenity-chips ok" id="studioPolicyChips"></div>
     </div>
 
     <div class="section" id="hallInfoSection" style="display:none">
@@ -3388,7 +3381,6 @@ var PF = (function(){
     if(cfg.verticalUi && cfg.verticalUi.hallProps) HALL_PROPS = cfg.verticalUi.hallProps;
     STUDIO_AMENITIES = cfg.amenities || {};
     _hallAboutRenderedId = null;   // новая студия — описания пространства пересобрать
-    renderStudioAmenities();
     STUDIO_LAT = Number.isFinite(cfg.lat) ? cfg.lat : null;
     STUDIO_LON = Number.isFinite(cfg.lon) ? cfg.lon : null;
     STUDIO_ADDRESS = cfg.address || '';
@@ -4662,21 +4654,6 @@ var PF = (function(){
     });
   }
 
-  // Удобства/правила студии — секция под списком залов, из /config.amenities.
-  function renderStudioAmenities(){
-    var sec = document.getElementById('studioAmenitiesSection');
-    if(!sec) return;
-    var a = STUDIO_AMENITIES || {};
-    var am = STUDIO_AMENITY_LIST.filter(function(x){ return a[x.f]; }).map(function(x){ return x.label; });
-    // Ответ «парковки нет» перекрывает варианты: владелец мог сначала
-    // отметить их, а потом переключить ответ — показывать их было бы враньём.
-    if(a.parkingAvailable !== false) am.push.apply(am, parkingLabels(a));
-    var pol = POLICY_LIST.filter(function(x){ return a[x.f]; }).map(function(x){ return x.label; });
-    document.getElementById('studioAmenityChips').innerHTML = am.map(function(c){ return '<span class="chip">'+esc(c)+'</span>'; }).join('');
-    document.getElementById('studioPolicyChips').innerHTML = pol.map(function(c){ return '<span class="chip">'+esc(c)+'</span>'; }).join('');
-    sec.hidden = !(am.length || pol.length);
-  }
-
   // Карта студии — отдельная секция под сеткой времени, метка по координатам
   // из /config. Уровень студии, не зала: показывается и в списке залов.
   // Точка на карте и для кнопок «Как добраться / Вызвать такси»: у открытого
@@ -4852,17 +4829,7 @@ var PF = (function(){
     const on = !!openHallId;
     document.getElementById('hallCardsSection').style.display = on ? 'none' : '';
     document.getElementById('hallInfoSection').style.display = on ? '' : 'none';
-    // Единственный зал открыт сразу, «обзора студии» с карточками у него нет;
-    // удобства студии остаются на странице, но под описанием зала: над фото им не место.
-    const single = HALLS.length === 1;
     syncStudioBack();
-    // Удобства студии — контекст «обзора студии», при входе в зал прячем.
-    var sa = document.getElementById('studioAmenitiesSection');
-    if(sa){
-      sa.style.display = (on && !single) ? 'none' : '';
-      const anchor = document.getElementById(single ? 'hallInfoSection' : 'hallCardsSection');
-      if(anchor.nextElementSibling !== sa) anchor.after(sa);
-    }
     document.getElementById('gridLabel').textContent = on ? 'Время брони' : 'Занятость пространств';
     if(HALLS.length <= 1) document.getElementById('gridLabel').textContent = 'Время брони';
   }
