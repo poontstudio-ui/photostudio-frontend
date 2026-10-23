@@ -1545,7 +1545,9 @@ body{
   overflow:hidden;
   cursor:pointer;
 }
-.hall-card:active{border-color:var(--accent);}
+/* Подсветка — только при наведении мышью: на телефоне :active срабатывает от
+   любого касания, в том числе когда ленту просто листают пальцем. */
+@media (hover:hover){ .hall-card:hover{border-color:var(--accent);} }
 .hall-card-photo{position:relative;width:100%;aspect-ratio:4/3;background:var(--surface-2);}
 .hall-card-photo img{width:100%;height:100%;object-fit:cover;display:block;}
 /* Фото не загрузилось (файл удалён, сбой CDN): вместо пустого белого блока —
