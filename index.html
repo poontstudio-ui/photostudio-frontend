@@ -160,7 +160,7 @@
         c.className = 'pmap-cluster';
         c.textContent = n > 99 ? '99+' : String(n);
         c.setAttribute('role', 'button');
-        c.setAttribute('aria-label', n + ' студий — приблизить');
+        c.setAttribute('aria-label', n + ' площадок — приблизить');
         // Тап по маркеру карта ловит сама (DOM-клик до элемента не доходит) — отдаём onClick маркеру.
         c._zoomIn = function(){
           var lo = coords.map(function(p){ return p[0]; }), la = coords.map(function(p){ return p[1]; });
@@ -2393,7 +2393,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
   <div class="catalog-view" id="catalogView">
     <div class="catalog-head">
-      <div class="catalog-head-title">Студии</div>
+      <div class="catalog-head-title">Площадки</div>
       <div class="head-actions">
         <button class="icon-btn theme-btn" data-theme-toggle type="button"></button>
         <button class="icon-btn" data-profile-open type="button" aria-label="Профиль" title="Профиль"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7"/></svg></button>
@@ -2411,9 +2411,9 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
           <div class="city-select-list" id="cityOptions" role="listbox"></div>
         </div>
       </div>
-      <input type="text" id="studioSearch" class="catalog-search" placeholder="Поиск студии по названию" autocomplete="off" spellcheck="false">
+      <input type="text" id="studioSearch" class="catalog-search" placeholder="Поиск площадки по названию" autocomplete="off" spellcheck="false">
       <div class="catalog-links">
-        <button class="catalog-mode-toggle" id="favFilterBtn" type="button" data-on="false" hidden>← Все студии</button>
+        <button class="catalog-mode-toggle" id="favFilterBtn" type="button" data-on="false" hidden>← Все площадки</button>
         <button class="catalog-mode-toggle" id="searchModeToggle" type="button">Найти по времени →</button>
       </div>
       <div class="time-search" id="timeSearch" hidden>
@@ -2440,7 +2440,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
   <div class="main-view" id="mainView">
     <div class="header">
-      <button class="back-btn" id="studioBackBtn" type="button" aria-label="К списку студий" style="display:none">←</button>
+      <button class="back-btn" id="studioBackBtn" type="button" aria-label="К списку площадок" style="display:none">←</button>
       <div class="vu"><span></span><span></span><span></span><span></span><span></span></div>
       <div class="header-brand">
         <div class="brand-name">ВСЁ ВКЛЮЧЕНО</div>
@@ -2541,7 +2541,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
        см. link_ в startapp) — отдельный от successView, чтобы не путать
        «бронь подтверждена» и «Telegram привязан», хотя визуально тот же
        success-паттерн. Показывается вместо всего обычного boot() целиком —
-       для привязки студия/каталог не нужны вообще. -->
+       для привязки площадка/каталог не нужны вообще. -->
   <div class="success-view" id="linkTelegramView">
     <div class="success-ring" id="linkTelegramRing">
       <svg viewBox="0 0 24 24" fill="none"><path d="M4 12.5L9.5 18L20 6" stroke="#E8A33D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2594,7 +2594,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
     <div class="panel-summary-hint" id="psBreak" hidden></div>
     <div class="panel-summary-hint" id="psPolicy" hidden></div>
-    <div class="panel-summary-hint" id="psPay">Оплата — напрямую студии. Платформа платежи не принимает.</div>
+    <div class="panel-summary-hint" id="psPay">Оплата — напрямую площадке. Платформа платежи не принимает.</div>
   </div>
   <div class="field">
     <label for="nameInput">Имя</label>
@@ -2633,7 +2633,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 
 <!-- Вход через бота платформы: кнопка открывает t.me-ссылку, страница сама
      опрашивает /api/auth/bot/check; «Готово» — проверить сразу, не дожидаясь
-     очередного опроса. Как у Foodpicasso, только бот один на все студии. -->
+     очередного опроса. Как у Foodpicasso, только бот один на все площадки. -->
 <div class="panel" id="botLoginPanel">
   <div class="panel-title">Вход через Telegram</div>
   <div class="save-note" id="botLoginHint" style="color:var(--text-2)"></div>
@@ -2643,7 +2643,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
   <button class="btn-ghost" id="botLoginBackBtn">Назад</button>
 </div>
 
-<!-- Профиль клиента: открывается человечком в шапке (каталог и студия). -->
+<!-- Профиль клиента: открывается человечком в шапке (каталог и площадка). -->
 <div class="panel" id="profilePanel">
   <div class="panel-title auth-title">Профиль</div>
   <div class="profile-who" id="profileWho"></div>
@@ -2710,12 +2710,12 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
 </div>
 
 
-<!-- Быстрый просмотр студии по клику на цену на карте каталога — тот же
+<!-- Быстрый просмотр площадки по клику на цену на карте каталога — тот же
      механизм окна (.panel/.overlay), что и везде в приложении, просто без
      верхнего отступа под фото-карусель (sp-media гасит padding панели
      отрицательным отступом). Не модалка деталей пространства — только то, что нужно
      решить «стоит заходить или нет»: фото, вместимость, пара удобств, цена
-     «от». Полный переход в студию — уже кнопкой внизу. -->
+     «от». Полный переход на площадку — уже кнопкой внизу. -->
 <div class="panel studio-preview-panel" id="studioPreviewPanel">
   <div class="sp-media">
     <div class="sp-carousel" id="spCarousel"></div>
@@ -2728,7 +2728,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="sp-capacity" id="spCapacity"></div>
     <div class="sp-blurb" id="spBlurb"></div>
     <div class="sp-price-line" id="spPriceLine"></div>
-    <button class="btn-primary" id="spViewBtn" style="width:100%;margin-top:14px">Смотреть студию</button>
+    <button class="btn-primary" id="spViewBtn" style="width:100%;margin-top:14px">Смотреть площадку</button>
   </div>
 </div>
 
@@ -3206,7 +3206,7 @@ var PF = (function(){
     const message = res.status===401
       ? (tg ? 'Откройте мини-апп через кнопку бота в Telegram.' : 'Сессия истекла — подтвердите номер ещё раз через любую бронь.')
       : res.status===501
-        ? 'Общий список броней пока недоступен. Откройте студию — её брони видны внутри.'
+        ? 'Общий список броней пока недоступен. Откройте площадку — её брони видны внутри.'
         : (data && data.error) ? data.error : 'Не удалось загрузить брони ('+res.status+').';
     throw new Error(message);
   }
@@ -3327,7 +3327,7 @@ var PF = (function(){
       {f:'skylights',label:'Мансардные окна'} ] },
     { key:'aboutSound', title:'Звук', icon:'sound', hall:[
       {f:'soundproofing',label:'Звукоизоляция'} ] },
-    { key:'aboutAccess', title:'Доступ в студию', icon:'door',
+    { key:'aboutAccess', title:'Доступ на площадку', icon:'door',
       hall:[{f:'streetLevelAccess',label:'Вход с улицы'},{f:'wheelchairAccessible',label:'Доступ для колясок'},
             {f:'freightElevator',label:'Грузовой лифт'},{f:'publicTransport',label:'Общественный транспорт рядом'}],
       studio:[{f:'separateEntrance',label:'Отдельный вход'},{f:'elevator',label:'Лифт'}],
@@ -4151,7 +4151,7 @@ var PF = (function(){
       gridHeadEl.innerHTML = '';
       gridHeadWrap.style.display = 'none';
       gridEl.style.gridTemplateColumns = '';
-      gridEl.innerHTML = '<div class="grid-empty">В этот день студия не работает.</div>';
+      gridEl.innerHTML = '<div class="grid-empty">В этот день площадка не работает.</div>';
       return;
     }
     gridHeadWrap.style.display = '';
@@ -5264,20 +5264,20 @@ var PF = (function(){
       document.getElementById('successTitle').textContent =
         isPending ? 'Заявка отправлена' : 'Бронь подтверждена';
       document.getElementById('successDetail').innerHTML =
-        (isPending ? '<span style="color:var(--text-2)">Заявка ждёт ответа студии — не дольше суток и не позже начала брони.</span><br>' : '') +
+        (isPending ? '<span style="color:var(--text-2)">Заявка ждёт ответа площадки — не дольше суток и не позже начала брони.</span><br>' : '') +
         `<b>${esc(currentHall().name)}</b>${booking.purpose && HALL_PURPOSE_RU[booking.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[booking.purpose]) : ''}<br>`+
         `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`+
         (equipLine ? `${esc(equipLine)}<br>` : '')+
         `${esc(nameInput.value.trim())} · ${esc(phoneInput.value.trim())}<br>`+
         `Итого: ${esc(booking.price)} ${CUR}<br>`+
-        `<span style="color:var(--text-2)">Оплата — напрямую студии.</span>`;
+        `<span style="color:var(--text-2)">Оплата — напрямую площадке.</span>`;
 
       const tgNote = document.getElementById('successTgNote');
       tgNote.hidden = !noTg;
       document.getElementById('successLinks').hidden = !noTg;
       if(noTg){
         tgNote.textContent = isPending
-          ? 'Ответ студии сам не придёт: у вас не привязан Telegram. Привяжите его — или смотрите статус в «Моих бронях».'
+          ? 'Ответ площадки сам не придёт: у вас не привязан Telegram. Привяжите его — или смотрите статус в «Моих бронях».'
           : 'Напоминание и сообщения об отмене сами не придут: у вас не привязан Telegram. Привяжите его, чтобы получать их бесплатно.';
       }
       closePanel();
@@ -6082,10 +6082,10 @@ var PF = (function(){
   function policyLines(cfg){
     const pol = policyOf(cfg).slice().sort((a, b) => b.hoursBefore - a.hoursBefore);
     const when = (t, i) => i === pol.length - 1 ? (pol.length > 1 ? 'позже' : 'в любое время') : 'за ' + t.hoursBefore + ' ч и раньше';
-    const cancel = pol.map((t, i) => when(t, i) + ' — ' + (t.refundPct >= 100 ? 'бесплатно' : 'студия вправе потребовать ' + (100 - t.refundPct) + '% стоимости')).join('; ');
+    const cancel = pol.map((t, i) => when(t, i) + ' — ' + (t.refundPct >= 100 ? 'бесплатно' : 'площадка вправе потребовать ' + (100 - t.refundPct) + '% стоимости')).join('; ');
     const paidMove = pol.map((t, i) => ({ t, i })).filter(x => !x.t.rescheduleFree);
-    const move = paidMove.length ? 'Перенос ' + paidMove.map(x => when(x.t, x.i)).join(', ') + ' — платный (студия вправе потребовать ' + (Number.isInteger(cfg.rescheduleFeePct) ? cfg.rescheduleFeePct : 25) + '% стоимости).' : 'Перенос бесплатный.';
-    return 'Условия отмены студии: ' + cancel + '. ' + move;
+    const move = paidMove.length ? 'Перенос ' + paidMove.map(x => when(x.t, x.i)).join(', ') + ' — платный (площадка вправе потребовать ' + (Number.isInteger(cfg.rescheduleFeePct) ? cfg.rescheduleFeePct : 25) + '% стоимости).' : 'Перенос бесплатный.';
+    return 'Условия отмены площадки: ' + cancel + '. ' + move;
   }
   // Что будет при отмене брони b прямо сейчас.
   function cancelTermsHtml(b, cfg){
@@ -6096,8 +6096,8 @@ var PF = (function(){
     if(tier.refundPct >= 100) return 'Отмена бесплатная: место освободится.';
     const fee = feeOf(b.price, 100 - tier.refundPct);
     return (hrs < 0 ? 'Бронь уже началась. ' : 'До начала ' + hoursWord(hrs) + '. ') +
-      'По условиям студии за такую отмену она вправе потребовать <b>' + esc(gpMoney(fee)) + ' ' + esc(cur) + '</b> (' + (100 - tier.refundPct) + '% стоимости). ' +
-      'Решение и расчёт — за студией, она свяжется с вами. Платформа денег не принимает.';
+      'По условиям площадки за такую отмену она вправе потребовать <b>' + esc(gpMoney(fee)) + ' ' + esc(cur) + '</b> (' + (100 - tier.refundPct) + '% стоимости). ' +
+      'Решение и расчёт — за площадкой, она свяжется с вами. Платформа денег не принимает.';
   }
 
   const RS = {
@@ -6205,7 +6205,7 @@ var PF = (function(){
     const wrap = document.getElementById('rsGrid');
     const { start, end } = rsSlotRange();
     if(end <= start){
-      wrap.innerHTML = '<div class="grid-empty">В этот день студия не работает.</div>';
+      wrap.innerHTML = '<div class="grid-empty">В этот день площадка не работает.</div>';
       rsRenderSum();
       return;
     }
@@ -6282,8 +6282,8 @@ var PF = (function(){
             + (Math.abs(np - was) > 0.004 ? '(сейчас ' + esc(gpMoney(was)) + ')' : '') + '</span>' : '')
         + (RS.fee ? (RS.fee.free
             ? '<span class="rs-fee" data-warn="false">Перенос бесплатный.</span>'
-            : '<span class="rs-fee" data-warn="true">Перенос платный по условиям студии: она вправе потребовать ' + esc(gpMoney(RS.fee.amount)) + ' ' + esc(cur)
-              + ' (' + RS.fee.pct + '% стоимости). Расчёт — напрямую со студией.</span>') : '');
+            : '<span class="rs-fee" data-warn="true">Перенос платный по условиям площадки: она вправе потребовать ' + esc(gpMoney(RS.fee.amount)) + ' ' + esc(cur)
+              + ' (' + RS.fee.pct + '% стоимости). Расчёт — напрямую с площадкой.</span>') : '');
       btn.disabled = false;
     } else {
       box.dataset.state = '';
@@ -6768,7 +6768,7 @@ var PF = (function(){
     favSet = new Set(list.map(function(x){ return String(x.id); })); favSave();
     if(!list.length){
       catalogStudios = []; updateMapBtn();
-      catalogList.innerHTML = '<div class="catalog-empty">Пока пусто. Нажмите ♡ на карточке студии, чтобы сохранить её сюда.</div>';
+      catalogList.innerHTML = '<div class="catalog-empty">Пока пусто. Нажмите ♡ на карточке площадки, чтобы сохранить её сюда.</div>';
       return;
     }
     catalogList.innerHTML = '';
@@ -6967,7 +6967,7 @@ var PF = (function(){
     panel.hidden = !searchMode;
     document.getElementById('studioSearch').style.display = searchMode ? 'none' : '';
     document.getElementById('searchModeToggle').textContent =
-      searchMode ? '← Все студии города' : 'Найти по времени →';
+      searchMode ? '← Все площадки города' : 'Найти по времени →';
     if(searchMode){ initTimeSearch(); catalogList.innerHTML = '<div class="catalog-empty">Задайте параметры и нажмите «Найти».</div>'; }
     else { renderStudios(selectedCity); }
   });
@@ -7054,15 +7054,15 @@ var PF = (function(){
       catalogStudios = []; updateMapBtn();
       catalogList.innerHTML = ALL_CITIES.length
         ? '<div class="catalog-empty">Выберите город выше.</div>'
-        : '<div class="catalog-empty">Пока нет доступных студий.</div>';
+        : '<div class="catalog-empty">Пока нет доступных площадок.</div>';
       return;
     }
     catalogList.innerHTML = '<div class="catalog-empty">Загрузка…</div>';
     let studios;
     try{ studios = await fetch(API_BASE + '/api/studios?city=' + encodeURIComponent(city)).then(r=>r.json()); }
-    catch(e){ catalogList.innerHTML = '<div class="catalog-empty">Не удалось загрузить студии.</div>'; return; }
+    catch(e){ catalogList.innerHTML = '<div class="catalog-empty">Не удалось загрузить площадки.</div>'; return; }
     if(!Array.isArray(studios) || !studios.length){
-      catalogStudios = []; updateMapBtn(); catalogList.innerHTML = '<div class="catalog-empty">В этом городе пока нет студий.</div>'; return;
+      catalogStudios = []; updateMapBtn(); catalogList.innerHTML = '<div class="catalog-empty">В этом городе пока нет площадок.</div>'; return;
     }
     catalogList.innerHTML = '';
     studios = favFirst(studios);
@@ -7235,7 +7235,7 @@ var PF = (function(){
     const btn = document.getElementById('studioBackBtn');
     const toStudio = !!openHallId && HALLS.length > 1;
     btn.style.display = (toStudio || cameFromCatalog) ? 'flex' : 'none';
-    btn.setAttribute('aria-label', toStudio ? 'Ко всем пространствам' : 'К списку студий');
+    btn.setAttribute('aria-label', toStudio ? 'Ко всем пространствам' : 'К списку площадок');
   }
   document.getElementById('studioBackBtn').addEventListener('click', ()=>{
     haptic('light');
@@ -7269,8 +7269,8 @@ var PF = (function(){
       ls.style.display = 'flex';
       if(e && e.status === 404){
         // Нет такой студии или она ещё не опубликована / снята с показа.
-        ls.innerHTML = '<div style="text-align:center;padding:0 24px">Студия не найдена или пока недоступна.' +
-          '<br><button class="btn-primary" id="lsCatalogBtn" type="button" style="margin-top:16px;max-width:220px">К списку студий</button></div>';
+        ls.innerHTML = '<div style="text-align:center;padding:0 24px">Площадка не найдена или пока недоступна.' +
+          '<br><button class="btn-primary" id="lsCatalogBtn" type="button" style="margin-top:16px;max-width:220px">К списку площадок</button></div>';
         document.getElementById('lsCatalogBtn').addEventListener('click', ()=>{
           TENANT_ID = null; cameFromCatalog = false;
           try{ const u = new URL(location.href); u.searchParams.delete('tenant'); u.searchParams.delete('startapp'); history.replaceState(null, '', u.toString()); }catch(_){}
@@ -7278,7 +7278,7 @@ var PF = (function(){
           boot();
         });
       } else {
-        ls.textContent = 'Не удалось загрузить студию. Проверьте соединение и попробуйте снова.';
+        ls.textContent = 'Не удалось загрузить площадку. Проверьте соединение и попробуйте снова.';
       }
     }
   }
