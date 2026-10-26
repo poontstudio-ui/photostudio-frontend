@@ -1,0 +1,88 @@
+# Оповещение о падении: каждые 10 минут проверяем, что открываются сервер (с базой),
+# кабинет, мини-приложение, лендинг и страница площадки. Упало — бот платформы
+# пишет владельцу в Telegram; поднялось — пишет, что восстановилось. Между ними
+# молчит: прошлое состояние хранится в кеше Actions (monitor-state-*).
+#
+# Здесь, а не в репозитории сервера, по той же причине, что keep-warm: у публичного
+# репозитория минуты Actions бесплатные, а 144 запуска в сутки съели бы лимит приватного.
+# В отличие от keep-warm, этот файл не временный — после перехода на платный Render остаётся.
+#
+# Секреты репозитория: MONITOR_BOT_TOKEN (токен бота платформы) и MONITOR_CHAT_ID
+# (кому писать — Telegram id владельца; несколько — через запятую). GitHub может
+# запускать расписание с опозданием на несколько минут — для оповещения это допустимо.
+
+name: monitor
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Прошлое состояние
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: monitor-state-${{ github.run_id }}
+          restore-keys: monitor-state-
+
+      - name: Проверка адресов
+        id: check
+        run: |
+          mkdir -p state
+          prev=$(cat state/status 2>/dev/null || echo ok)
+          # Каждая проверка — две попытки с паузой: разовый сетевой сбой не повод будить владельца.
+          # Сервер — /health с запросом в базу: «живой сервер без базы» тоже падение.
+          fail=""
+          check(){   # имя, адрес, что должно быть в ответе
+            for i in 1 2; do
+              code=$(curl -sS -o /tmp/body -w "%{http_code}" --max-time 60 "$2" || echo 000)
+              if [ "$code" = "200" ] && grep -q "$3" /tmp/body; then echo "ok  $1"; return; fi
+              [ $i = 1 ] && sleep 30
+            done
+            echo "FAIL $1 ($code)"; fail="$fail\n• $1 — ответ $code"
+          }
+          check "Сервер и база (api.poont.space)" "https://api.poont.space/health" '"ok":true'
+          check "Кабинет (app.poont.space)" "https://app.poont.space/cabinet.html" "<html"
+          check "Мини-приложение (book.poont.space)" "https://book.poont.space/" "<html"
+          check "Лендинг (poont.space)" "https://poont.space/" "<html"
+          check "Страница площадки (poont.space/s/…)" "https://poont.space/s/nokswild-s-studio" "<html"
+          now=ok; [ -n "$fail" ] && now=fail
+          echo "$now" > state/status
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          echo "now=$now" >> "$GITHUB_OUTPUT"
+          { echo 'fail<<EOF'; printf "%b\n" "$fail"; echo EOF; } >> "$GITHUB_OUTPUT"
+
+      - name: Сообщить в Telegram
+        if: steps.check.outputs.prev != steps.check.outputs.now
+        env:
+          TOKEN: ${{ secrets.MONITOR_BOT_TOKEN }}
+          CHATS: ${{ secrets.MONITOR_CHAT_ID }}
+          NOW: ${{ steps.check.outputs.now }}
+          FAIL: ${{ steps.check.outputs.fail }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$CHATS" ]; then echo "::warning::нет секретов MONITOR_BOT_TOKEN / MONITOR_CHAT_ID — сообщить некому"; exit 0; fi
+          if [ "$NOW" = fail ]; then
+            text=$(printf '🔴 Poont: не отвечает\n%s\n\nПроверяю каждые 10 минут, напишу, когда восстановится.' "$FAIL")
+          else
+            text='🟢 Poont снова отвечает: сервер, кабинет, мини-приложение и лендинг открываются.'
+          fi
+          for chat in $(echo "$CHATS" | tr ',' ' '); do
+            curl -sS -o /dev/null -w "telegram %{http_code}\n" "https://api.telegram.org/bot$TOKEN/sendMessage" \
+              --data-urlencode "chat_id=$chat" --data-urlencode "text=$text" --data "disable_web_page_preview=true"
+          done
+
+      - name: Запомнить состояние
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: monitor-state-${{ github.run_id }}
