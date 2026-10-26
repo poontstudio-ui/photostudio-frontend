@@ -5149,8 +5149,11 @@ var PF = (function(){
   }
   function ntEarlyOk(hall){ return !!(hall.nightly.early && N.in && !ntBusyNight(hall, ntAdd(N.in, -1))); }
   function ntLateOk(hall){ return !!(hall.nightly.late && N.out && !ntBusyNight(hall, N.out)); }
-  function ntExtras(){   // допы студии для посуточных броней: «за раз» и «за ночь»
-    return (EQUIPMENT || []).filter(e => e.active !== false && (e.unit === 'flat' || e.unit === 'night'));
+  // Допы для посуточной брони: «за раз» и «за ночь», этого пространства или общие (0066).
+  function ntExtras(hall){
+    hall = hall || nightlyOpen();
+    return (EQUIPMENT || []).filter(e => e.active !== false && (e.unit === 'flat' || e.unit === 'night') &&
+      (!Array.isArray(e.hallIds) || !e.hallIds.length || (hall && e.hallIds.indexOf(hall.id) >= 0)));
   }
   function nightlyQuote(hall){
     if(!N.in || !N.out) return null;
