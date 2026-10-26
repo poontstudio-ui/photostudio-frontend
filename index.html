@@ -2081,6 +2081,56 @@ img.img-broken{visibility:hidden;background:var(--surface-2);}
 }
 @media (prefers-reduced-motion:reduce){ .sb-cta{transition:none;} }
 #dateSection{scroll-margin-top:8px;}
+/* ---------- Посуточная сдача: календарь заезда и выезда ---------- */
+#nightlySection{scroll-margin-top:8px;}
+.nt-cal-h{display:flex;align-items:center;justify-content:space-between;margin:2px 0 6px;}
+.nt-cal-h b{font-size:var(--fs-lg);}
+.nt-cal-h button{border:1px solid var(--line);background:var(--surface);border-radius:var(--r-sm);width:34px;height:34px;cursor:pointer;color:var(--text-2);font:inherit;}
+.nt-cal-h button:disabled{opacity:.35;cursor:default;}
+.nt-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px 0;}
+.nt-cal .nt-dw{font-size:10.5px;color:var(--text-3);text-align:center;padding:4px 0;}
+.nt-d{position:relative;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:none;background:none;cursor:pointer;padding:0;font:inherit;color:var(--text);}
+.nt-d .n{font-size:var(--fs-md);font-weight:500;font-variant-numeric:tabular-nums;line-height:1.1;}
+.nt-d .p{font-size:9.5px;color:var(--text-3);font-variant-numeric:tabular-nums;}
+.nt-d.we .p{color:var(--amber);}
+.nt-d.se .p{color:var(--green);font-weight:600;}
+.nt-d.past,.nt-d.off{cursor:default;}
+.nt-d.past .n{color:var(--text-3);opacity:.5;}
+.nt-d.busy{cursor:default;}
+.nt-d.busy .n{color:var(--text-3);text-decoration:line-through;}
+.nt-d.busy .p{opacity:0;}
+.nt-d.off .n{color:var(--text-3);opacity:.5;}
+.nt-d.mid{background:var(--accent-bg);}
+.nt-d.in,.nt-d.out{background:var(--accent);}
+.nt-d.in{border-radius:10px 0 0 10px;}
+.nt-d.out{border-radius:0 10px 10px 0;}
+.nt-d.in.solo{border-radius:10px;}
+.nt-d.in .n,.nt-d.out .n,.nt-d.in .p,.nt-d.out .p{color:#fff;}
+.nt-d:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:10px;}
+.nt-hint{font-size:var(--fs-sm);color:var(--text-2);margin-top:8px;min-height:20px;}
+.nt-hint.warn{color:var(--amber);}
+.nt-times{display:flex;gap:8px;margin-top:6px;}
+.nt-times div{flex:1;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px;}
+.nt-times small{display:block;font-size:var(--fs-xs);color:var(--text-3);}
+.nt-times b{font-variant-numeric:tabular-nums;font-size:var(--fs-md);}
+.nt-sub{font-size:var(--fs-xs);font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);margin:18px 0 8px;}
+.nt-ex{display:flex;flex-direction:column;gap:10px;}
+.nt-ex label{display:flex;align-items:flex-start;gap:10px;font-size:var(--fs-sm);cursor:pointer;}
+.nt-ex label.dis{opacity:.5;cursor:default;}
+.nt-ex input{margin-top:2px;width:16px;height:16px;accent-color:var(--accent);}
+.nt-ex .why{display:block;font-size:var(--fs-xs);color:var(--text-3);}
+.nt-exr{display:flex;align-items:center;gap:10px;font-size:var(--fs-sm);}
+.nt-exr .t{flex:1;min-width:0;}
+.nt-exr .t small{display:block;font-size:var(--fs-xs);color:var(--text-3);}
+.nt-qty{display:inline-flex;align-items:center;gap:8px;}
+.nt-qty button{width:30px;height:30px;border-radius:50%;border:1px solid var(--line-strong);background:var(--surface);cursor:pointer;line-height:1;font:inherit;color:var(--text);}
+.nt-qty button:disabled{opacity:.35;cursor:default;}
+.nt-qty b{min-width:14px;text-align:center;font-variant-numeric:tabular-nums;}
+.nt-sum{display:flex;flex-direction:column;gap:5px;font-size:var(--fs-sm);}
+.nt-sum .r{display:flex;justify-content:space-between;gap:10px;color:var(--text-2);}
+.nt-sum .r b{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.nt-sum .tot{border-top:1px solid var(--line);padding-top:8px;margin-top:3px;font-size:var(--fs-lg);color:var(--text);font-weight:700;}
+.nt-sum .tot b{font-weight:700;}
 
 /* ---------- Slide-up panel ---------- */
 .overlay{
@@ -2504,6 +2554,8 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
       <div class="hall-accordion" id="hallAccordion" hidden></div>
       <div class="hall-packages" id="hallPackages" hidden></div>
     </div>
+
+    <div class="section" id="nightlySection" style="display:none"></div>
 
     <div class="section" id="dateSection">
       <div class="section-label">Дата</div>
@@ -3536,6 +3588,22 @@ var PF = (function(){
   function renderHallPrice(hall){
     var box = document.getElementById('hallPrice'); if(!box) return;
     var ph = purposeHall(hall, state.purpose), g = ph.guestPricing, lines = [], big;
+    if(isNightly(hall)){   // посуточный зал: цена за ночь, правила — за значком «i»
+      var ns = hall.nightly, lo = Math.min.apply(null, [ns.priceWd, ns.priceWe].concat((ns.seasons || []).map(function(z){ return z.wd; })).filter(function(v){ return typeof v === 'number' && isFinite(v); }));
+      big = (ns.priceWe != null && ns.priceWe !== ns.priceWd || (ns.seasons || []).length ? 'от ' : '') + moneyTxt(lo) + ' ' + CUR + ' <small>за ночь</small>';
+      lines.push('Заезд с ' + ntHm(ns.checkIn) + ', выезд до ' + ntHm(ns.checkOut) + '.');
+      if(ns.priceWe != null && ns.priceWe !== ns.priceWd) lines.push('Ночи с пятницы и с субботы — ' + moneyTxt(ns.priceWe) + ' ' + CUR + '.');
+      if((ns.seasons || []).length) lines.push('В праздники и сезоны цена другая: ' + ns.seasons.map(function(z){ return z.name; }).join(', ') + '.');
+      if(ns.guestsIncluded) lines.push('В цену входят гости: до ' + ns.guestsIncluded + '. Каждый следующий — +' + moneyTxt(ns.extraGuest) + ' ' + CUR + ' за ночь.');
+      if((ns.minNights || 1) > 1 || (ns.minNightsWe || 1) > 1) lines.push('Минимум ночей: ' + ((ns.minNightsWe || 1) > (ns.minNights || 1) ? ns.minNights + ', с выходными — ' + ns.minNightsWe : ns.minNights) + '.');
+      box.innerHTML = '<div class="section-label">Цена</div><div class="price-card"><div class="price-line"><div class="price-big">' + big + '</div>' +
+        '<button class="info-btn" type="button" aria-expanded="false" aria-controls="priceWhy" aria-label="Как считается цена">i</button></div>' +
+        '<div class="price-why" id="priceWhy" hidden>' + lines.map(function(t){ return '<p>' + esc(t) + '</p>'; }).join('') + '</div></div>';
+      box.hidden = false;
+      var nib = box.querySelector('.info-btn'), nwhy = box.querySelector('.price-why');
+      nib.addEventListener('click', function(){ var open = nwhy.hidden; nwhy.hidden = !open; nib.setAttribute('aria-expanded', open ? 'true' : 'false'); nib.dataset.on = open ? 'true' : 'false'; haptic('light'); });
+      return;
+    }
     if(g && g.mode === 'perPerson'){
       var m = Math.min.apply(null, g.tiers.map(function(t){ return t.price; }));
       big = (g.tiers.length > 1 ? 'от ' : '') + moneyTxt(m) + ' ' + CUR + ' <small>с гостя' + (g.unit === 'hour' ? ' в час' : '') + '</small>';
@@ -3726,6 +3794,10 @@ var PF = (function(){
   }
   // Подпись ставки зала в каталоге: с правилами точной цифры нет — «от N».
   function hallRateLabel(h){
+    if(isNightly(h)){
+      const s = h.nightly, ps = [s.priceWd, s.priceWe].concat((s.seasons || []).map(z => z.wd)).filter(v => typeof v === 'number' && isFinite(v));
+      return ps.length ? 'от ' + moneyTxt(Math.min.apply(null, ps)) + ' ' + CUR + '/ночь' : '';
+    }
     // Цены всех назначений тоже участвуют: у зала «от» — это самая дешёвая
     // цель аренды, а не базовая ставка, которой может не быть ни у одной.
     var variants = hallPurposeList(h).length
@@ -3933,8 +4005,8 @@ var PF = (function(){
   // Сколько гостей можно выбрать: в обзоре нескольких пространств, пока время
   // не выбрано, — по самому вместительному; дальше — по выбранному.
   function peopleMax(){
-    if(gridMode()==='halls' && HALLS.length > 1 && !hasSelection()){
-      return Math.max.apply(null, HALLS.map(h => purposeHall(h, null).capacity || 1));
+    if(gridMode()==='halls' && hourlyHalls().length > 1 && !hasSelection()){
+      return Math.max.apply(null, hourlyHalls().map(h => purposeHall(h, null).capacity || 1));
     }
     return pricingHall().capacity;
   }
@@ -3954,6 +4026,7 @@ var PF = (function(){
   function renderPanelPrice(){
     const el = document.getElementById('psPrice');
     if(!el) return;
+    if(nightlyOpen()) return;   // у посуточной брони итог считает nightlyOpenPanel
     const g = pricingHall().guestPricing, guests = guestPrice();
     el.textContent = `${priceLabel()} ${CUR}`;
     const br = document.getElementById('psBreak');
@@ -3982,13 +4055,13 @@ var PF = (function(){
   // Открытая страница зала: null — обзор студии, иначе сетка только этого зала.
   let openHallId = null;
   function gridHall(){
-    return (openHallId && HALLS.find(h => h.id === openHallId)) || HALLS[0] || null;
+    return (openHallId && HALLS.find(h => h.id === openHallId)) || hourlyHalls()[0] || null;
   }
   // 'halls' — столбцы залы на одну дату; 'days' — дни одного зала до конца
   // месяца (окно state.dates), на экране 7, остальные — горизонтальной прокруткой.
   function gridMode(){
     if(openHallId) return 'days';
-    return HALLS.length > 1 ? 'halls' : 'days';
+    return hourlyHalls().length > 1 ? 'halls' : 'days';
   }
 
   // [{key, hall, date, label, sub, today}] — key уникален в пределах сетки.
@@ -3996,7 +4069,7 @@ var PF = (function(){
   // входных данных (режим, пространство, даты, сегодня) и отдаём готовыми.
   let colsMemo = null;
   function gridColumns(){
-    if(!HALLS.length) return [];
+    if(!hourlyHalls().length && !openHallId) return [];
     const mode = gridMode();
     const todayKey = dateKey(businessToday());
     const sig = mode + '|' + openHallId + '|' + (mode === 'halls' ? dateKey(currentDate()) : '') + '|' + todayKey;
@@ -4004,7 +4077,7 @@ var PF = (function(){
     let list = [];
     if(mode==='halls'){
       const d = currentDate();
-      list = HALLS.map(h => ({
+      list = hourlyHalls().map(h => ({
         key:h.id, hall:h, date:d,
         label:h.name, sub:hallRateLabel(h), today:false,
       }));
@@ -4042,7 +4115,7 @@ var PF = (function(){
 
   async function fetchBusy(){
     BUSY = {};
-    if(!HALLS.length || !TENANT_ID) return;
+    if(!HALLS.length || !TENANT_ID || nightlyOpen() || !gridHall()) return;
     const base = API_BASE + '/api/t/' + TENANT_ID + '/availability';
     const url = gridMode()==='halls'
       ? base + '?date=' + dateKey(currentDate())
@@ -4185,6 +4258,10 @@ var PF = (function(){
     // Месяц-слайдер нужен в обоих режимах сетки — он двигает окно
     // state.dates, а не только ленту дат. Ленту дней (dateRow) прячем в
     // режиме 'days': там дни уже показаны столбцами самой сетки.
+    // Посуточный зал (или площадка только с такими залами) — вместо сетки по часам календарь.
+    const noGrid = !!nightlyOpen() || !hourlyHalls().length;
+    document.getElementById('gridSection').style.display = noGrid ? 'none' : '';
+    if(noGrid){ document.getElementById('dateSection').style.display = 'none'; return; }
     const hasHalls = HALLS.length > 0;
     document.getElementById('dateSection').style.display = hasHalls ? '' : 'none';
     document.getElementById('dateRow').style.display = (hasHalls && gridMode()==='halls') ? '' : 'none';
@@ -4890,6 +4967,7 @@ var PF = (function(){
     state.purpose = purpose || null;
     gridScrollEl.scrollLeft = 0;
     clearSelection();
+    nightlyReset();
     applyHallMode();
     renderAll();
     refreshGrid();
@@ -4902,6 +4980,7 @@ var PF = (function(){
     state.purpose = null;
     gridScrollEl.scrollLeft = 0;
     clearSelection();
+    nightlyReset();
     applyHallMode();
     renderAll();
     refreshGrid();
@@ -4912,7 +4991,7 @@ var PF = (function(){
   // гостя при текущем числе гостей). В обзоре нескольких пространств — самая
   // низкая из всех.
   function barRate(){
-    if(!(gridMode()==='halls' && HALLS.length > 1)){
+    if(!(gridMode()==='halls' && hourlyHalls().length > 1)){
       const ph = pricingHall(), g = ph.guestPricing;
       if(g && g.mode === 'perPerson'){
         let pr = g.tiers[0].price;
@@ -4926,7 +5005,7 @@ var PF = (function(){
       return { big:(hi > lo ? 'от ' : '') + moneyTxt(lo), cap:'в час' };
     }
     let rates = [], per = [];
-    HALLS.forEach(h => {
+    hourlyHalls().forEach(h => {
       const vs = hallPurposeList(h).filter(p => p.active !== false).map(p => purposeHall(h, p.code));
       (vs.length ? vs : [h]).forEach(v => {
         if(!gpRentApplies(v.guestPricing)){ v.guestPricing.tiers.forEach(t => per.push(t.price)); return; }
@@ -4945,6 +5024,8 @@ var PF = (function(){
   // выбрано: кнопка «Выбрать время» ведёт к сетке, рядом — цена за час.
   // Выбрал — итог за выбранное время и «Забронировать».
   function renderSummary(){
+    const nOpen = nightlyOpen();
+    if(nOpen || (!openHallId && HALLS.length && !hourlyHalls().length)){ renderNightSummary(nOpen); return; }
     const cap = document.getElementById('summaryRow');
     const total = document.getElementById('summaryTotal');
     const btn = document.getElementById('recBtn');
@@ -4993,6 +5074,244 @@ var PF = (function(){
     if(target) go(window.scrollY + target.getBoundingClientRect().top - 8);
   }
 
+
+  // ---------- Посуточная сдача (0065, флажок nightly) ----------
+  // Зал с rentalMode:'nightly' бронируется датами заезда и выезда: календарь вместо
+  // сетки по часам. Правила цены, сезонов и минимума ночей — зеркало
+  // lib/nightly.js (сервер пересчитывает всё сам). «Ночь» названа по дате начала.
+  function isNightly(h){ return !!h && h.rentalMode === 'nightly' && !!h.nightly; }
+  function hourlyHalls(){ return HALLS.filter(h => !isNightly(h)); }
+  function nightlyOpen(){ const h = openHallId && HALLS.find(x => x.id === openHallId); return isNightly(h) ? h : null; }
+  const N = { in:null, out:null, early:false, late:false, ex:{}, month:null, busy:{}, loading:{}, hallId:null };
+  const NT_MON = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  const NT_MON1 = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  function ntParse(s){ const p = s.split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
+  function ntYmd(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+  function ntAdd(s, n){ const d = ntParse(s); d.setDate(d.getDate() + n); return ntYmd(d); }
+  function ntDiff(a, b){ return Math.round((ntParse(b) - ntParse(a)) / 864e5); }
+  function ntHuman(s){ const d = ntParse(s); return d.getDate() + ' ' + NT_MON[d.getMonth()]; }
+  function ntToday(){ return dateKey(businessToday()); }
+  function ntWe(d){ const w = ntParse(d).getDay(); return w === 5 || w === 6; }
+  function ntWord(n){ const a = n % 10, b = n % 100; return (a === 1 && b !== 11) ? 'ночь' : (a >= 2 && a <= 4 && (b < 12 || b > 14)) ? 'ночи' : 'ночей'; }
+  function ntFromWord(n){ return n + ' ' + (n % 10 === 1 && n % 100 !== 11 ? 'ночи' : 'ночей'); }
+  function ntHm(min){ return String(Math.floor(min/60)).padStart(2,'0') + ':' + String(min%60).padStart(2,'0'); }
+  function ntMoney(v){ return (Math.round(v*100)/100).toString().replace('.', ',') + ' ' + CUR; }
+  function ntSeason(s, d){
+    const md = d.slice(5);
+    for(const z of (s.seasons || [])){
+      if(z.from <= z.to ? (md >= z.from && md <= z.to) : (md >= z.from || md <= z.to)) return z;
+    }
+    return null;
+  }
+  function ntPrice(s, d){ const z = ntSeason(s, d), we = ntWe(d); return z ? (we ? z.we : z.wd) : (we ? (s.priceWe != null ? s.priceWe : s.priceWd) : s.priceWd); }
+  function ntLabel(s, d){ const z = ntSeason(s, d); return z ? z.name : (ntWe(d) ? 'пт–сб' : 'будни'); }
+  function ntMin(s, a, b){
+    let m = s.minNights || 1;
+    for(let d = a; d < b; d = ntAdd(d, 1)){
+      if(ntWe(d)) m = Math.max(m, s.minNightsWe || 1);
+      const z = ntSeason(s, d); if(z && z.min) m = Math.max(m, z.min);
+    }
+    return m;
+  }
+  function nightlyReset(){ N.in = null; N.out = null; N.early = false; N.late = false; N.ex = {}; N.month = ntToday().slice(0, 7) + '-01'; N.busy = {}; N.loading = {}; }
+  // Занятые ночи месяца: у дня, где бронь доходит до полуночи, ночь занята.
+  async function nightlyLoadMonth(hall, monthStart){
+    const key = hall.id + '|' + monthStart;
+    if(N.busy[key] || N.loading[key]) return;
+    N.loading[key] = true;
+    const days = new Date(ntParse(monthStart).getFullYear(), ntParse(monthStart).getMonth() + 1, 0).getDate();
+    try{
+      const res = await fetch(API_BASE + '/api/t/' + TENANT_ID + '/availability?hallId=' + encodeURIComponent(hall.id) +
+        '&from=' + monthStart + '&days=' + days, { headers: authHeaders() });
+      const data = res.ok ? await res.json() : null;
+      const set = new Set();
+      if(data && typeof data === 'object' && !Array.isArray(data)){
+        Object.keys(data).forEach(d => { if((data[d] || []).some(r => r.end >= 1440)) set.add(d); });
+      }
+      N.busy[key] = set;
+    }catch(e){ N.busy[key] = new Set(); }   // сеть — календарь покажется свободным, сервер всё равно проверит
+    delete N.loading[key];
+    if(nightlyOpen() === hall) renderNightly();
+  }
+  function ntBusyNight(hall, d){
+    const ms = d.slice(0, 8) + '01', set = N.busy[hall.id + '|' + ms];
+    if(!set){ nightlyLoadMonth(hall, ms); return false; }
+    return set.has(d);
+  }
+  function ntRangeFree(hall, a, b){ for(let d = a; d < b; d = ntAdd(d, 1)) if(ntBusyNight(hall, d)) return false; return true; }
+  function ntOutProblem(hall, a, d){
+    const s = hall.nightly;
+    if(d <= a) return 'before';
+    if(ntDiff(a, d) > 31) return 'long';
+    if(!ntRangeFree(hall, a, d)) return 'busy';
+    if(ntDiff(a, d) < ntMin(s, a, d)) return 'min';
+    return null;
+  }
+  function ntEarlyOk(hall){ return !!(hall.nightly.early && N.in && !ntBusyNight(hall, ntAdd(N.in, -1))); }
+  function ntLateOk(hall){ return !!(hall.nightly.late && N.out && !ntBusyNight(hall, N.out)); }
+  function ntExtras(){   // допы студии для посуточных броней: «за раз» и «за ночь»
+    return (EQUIPMENT || []).filter(e => e.active !== false && (e.unit === 'flat' || e.unit === 'night'));
+  }
+  function nightlyQuote(hall){
+    if(!N.in || !N.out) return null;
+    const s = hall.nightly, n = ntDiff(N.in, N.out);
+    const groups = [], idx = {};
+    for(let d = N.in; d < N.out; d = ntAdd(d, 1)){
+      const lb = ntLabel(s, d), pr = ntPrice(s, d), k = lb + '|' + pr;
+      if(idx[k] == null){ idx[k] = groups.length; groups.push({ lb, pr, k:0 }); }
+      groups[idx[k]].k++;
+    }
+    const rows = groups.map(g => [g.k + ' × ' + ntMoney(g.pr) + ' (' + g.lb + ')', g.k * g.pr]);
+    const over = s.guestsIncluded ? Math.max(0, state.people - s.guestsIncluded) : 0;
+    if(over && s.extraGuest) rows.push(['Гости сверх ' + s.guestsIncluded + ': ' + over + ' × ' + n + ' ' + ntWord(n) + ' × ' + ntMoney(s.extraGuest), over * n * s.extraGuest]);
+    const early = N.early && ntEarlyOk(hall), late = N.late && ntLateOk(hall);
+    if(early) rows.push(['Ранний заезд с ' + ntHm(s.early.from), s.early.price]);
+    if(late) rows.push(['Поздний выезд до ' + ntHm(s.late.to), s.late.price]);
+    const picked = [];
+    ntExtras().forEach(e => {
+      const k = Math.min(N.ex[e.id] || 0, e.maxQty || 1); if(!k) return;
+      const per = e.unit === 'night' ? n : 1;
+      rows.push([e.name + (k > 1 ? ' × ' + k : '') + (e.unit === 'night' ? ' × ' + n + ' ' + ntWord(n) : ''), e.price * k * per]);
+      picked.push({ id:e.id, qty:k });
+    });
+    const total = Math.round(rows.reduce((a, r) => a + r[1], 0) * 100) / 100;
+    return { n, rows, total, early, late, picked,
+      start: early ? s.early.from : s.checkIn, end: late ? s.late.to : s.checkOut };
+  }
+  function nightlyHint(hall){
+    if(!N.in) return { t:'Выберите дату заезда. Цена под датой — за ночь: жёлтым — выходные, зелёным — сезон или праздник.' };
+    if(!N.out){
+      const m = ntMin(hall.nightly, N.in, ntAdd(N.in, 7));
+      return { t:'Заезд ' + ntHuman(N.in) + '. Теперь выберите дату выезда' + (m > 1 ? ' (на эти даты — от ' + ntFromWord(m) + ')' : '') + '.' };
+    }
+    const n = ntDiff(N.in, N.out);
+    return { t:ntHuman(N.in) + ' — ' + ntHuman(N.out) + ', ' + n + ' ' + ntWord(n) + '. Нажмите на дату, чтобы выбрать заново.' };
+  }
+  function renderNightly(){
+    const box = document.getElementById('nightlySection'), hall = nightlyOpen();
+    if(!box) return;
+    box.style.display = hall ? '' : 'none';
+    if(!hall) return;
+    const s = hall.nightly, today = ntToday();
+    if(!N.month) N.month = today.slice(0, 7) + '-01';
+    const m = ntParse(N.month), y = m.getFullYear(), mo = m.getMonth();
+    const days = new Date(y, mo + 1, 0).getDate(), lead = (new Date(y, mo, 1).getDay() + 6) % 7;
+    const canPrev = N.month > today.slice(0, 7) + '-01';
+    const picking = N.in && !N.out;
+    let h = '<div class="nt-cal-h"><button type="button" id="ntPrev" aria-label="Предыдущий месяц"' + (canPrev ? '' : ' disabled') + '>‹</button><b>' + NT_MON1[mo] + ' ' + y + '</b><button type="button" id="ntNext" aria-label="Следующий месяц">›</button></div><div class="nt-cal">';
+    ['пн','вт','ср','чт','пт','сб','вс'].forEach(w => { h += '<div class="nt-dw">' + w + '</div>'; });
+    for(let i = 0; i < lead; i++) h += '<div></div>';
+    for(let dd = 1; dd <= days; dd++){
+      const d = ntYmd(new Date(y, mo, dd)), cls = ['nt-d'];
+      let price = '';
+      if(ntWe(d)) cls.push('we');
+      if(ntSeason(s, d)) cls.push('se');
+      if(d < today) cls.push('past');
+      else {
+        const busy = ntBusyNight(hall, d);
+        if(busy) cls.push('busy'); else price = String(ntPrice(s, d));
+        if(picking){
+          if(d === N.in) cls.push('in', 'solo');
+          else if(!ntOutProblem(hall, N.in, d)) cls.push('can');
+          else if(d > N.in) cls.push('off');
+          else if(!ntBusyNight(hall, d)) cls.push('can');
+        } else if(!busy) cls.push('can');
+        if(N.in && N.out){
+          if(d === N.in) cls.push('in'); else if(d === N.out) cls.push('out'); else if(d > N.in && d < N.out) cls.push('mid');
+        }
+      }
+      h += '<button type="button" class="' + cls.join(' ') + '" data-d="' + d + '" aria-label="' + ntHuman(d) + (price ? ', ' + price + ' ' + esc(CUR) + ' за ночь' : '') + '"><span class="n">' + dd + '</span><span class="p">' + (price || '·') + '</span></button>';
+    }
+    h += '</div><div class="nt-hint" id="ntHint">' + esc(nightlyHint(hall).t) + '</div>';
+    h += '<div class="nt-times"><div><small>Заезд</small><b>' + (N.in ? ntHuman(N.in) + ', ' : '') + 'с ' + ntHm(N.early && ntEarlyOk(hall) ? s.early.from : s.checkIn) + '</b></div>' +
+      '<div><small>Выезд</small><b>' + (N.out ? ntHuman(N.out) + ', ' : '') + 'до ' + ntHm(N.late && ntLateOk(hall) ? s.late.to : s.checkOut) + '</b></div></div>';
+    // допы
+    const ex = ntExtras();
+    if(s.early || s.late || ex.length){
+      h += '<div class="nt-sub">Допы</div><div class="nt-ex">';
+      if(s.early){ const ok = ntEarlyOk(hall); h += '<label class="' + (ok ? '' : 'dis') + '"><input type="checkbox" id="ntEarly"' + (N.early && ok ? ' checked' : '') + (ok ? '' : ' disabled') + '><span>Ранний заезд с ' + ntHm(s.early.from) + ' · +' + esc(ntMoney(s.early.price)) + '<span class="why">' + (!N.in ? 'Сначала выберите даты' : ok ? 'Накануне домик свободен' : 'Накануне в домике живут гости — раньше ' + ntHm(s.checkIn) + ' не получится') + '</span></span></label>'; }
+      if(s.late){ const ok = ntLateOk(hall); h += '<label class="' + (ok ? '' : 'dis') + '"><input type="checkbox" id="ntLate"' + (N.late && ok ? ' checked' : '') + (ok ? '' : ' disabled') + '><span>Поздний выезд до ' + ntHm(s.late.to) + ' · +' + esc(ntMoney(s.late.price)) + '<span class="why">' + (!N.out ? 'Сначала выберите даты' : ok ? 'В день выезда никто не заезжает' : 'В день выезда заезжают следующие гости') + '</span></span></label>'; }
+      ex.forEach(e => {
+        const k = Math.min(N.ex[e.id] || 0, e.maxQty || 1), unit = e.unit === 'night' ? 'за ночь' : 'за раз', mx = e.maxQty || 1;
+        if(mx <= 1) h += '<label><input type="checkbox" data-ex="' + esc(e.id) + '"' + (k ? ' checked' : '') + '><span>' + esc(e.name) + ' · +' + esc(ntMoney(e.price)) + ' ' + unit + '</span></label>';
+        else h += '<div class="nt-exr"><span class="t">' + esc(e.name) + '<small>+' + esc(ntMoney(e.price)) + ' ' + unit + ' · до ' + mx + ' шт.</small></span><span class="nt-qty"><button type="button" data-exm="' + esc(e.id) + '" aria-label="Меньше"' + (k <= 0 ? ' disabled' : '') + '>−</button><b>' + k + '</b><button type="button" data-exp="' + esc(e.id) + '" aria-label="Больше"' + (k >= mx ? ' disabled' : '') + '>+</button></span></div>';
+      });
+      h += '</div>';
+    }
+    // итог
+    const q = nightlyQuote(hall);
+    if(q){
+      h += '<div class="nt-sub">Итого</div><div class="nt-sum">' + q.rows.map(r => '<div class="r"><span>' + esc(r[0]) + '</span><b>' + esc(ntMoney(r[1])) + '</b></div>').join('') +
+        '<div class="r tot"><span>' + q.n + ' ' + ntWord(q.n) + '</span><b>' + esc(ntMoney(q.total)) + '</b></div></div>';
+    }
+    box.innerHTML = '<div class="section-label">Даты</div>' + h;
+    // события
+    document.getElementById('ntPrev').onclick = () => { const d = ntParse(N.month); d.setMonth(d.getMonth() - 1); N.month = ntYmd(d); renderNightly(); };
+    document.getElementById('ntNext').onclick = () => { const d = ntParse(N.month); d.setMonth(d.getMonth() + 1); N.month = ntYmd(d); renderNightly(); };
+    box.querySelectorAll('.nt-d').forEach(b => { b.onclick = () => nightlyPick(hall, b.dataset.d); });
+    const e1 = document.getElementById('ntEarly'); if(e1) e1.onchange = () => { N.early = e1.checked; renderSummary(); };
+    const l1 = document.getElementById('ntLate'); if(l1) l1.onchange = () => { N.late = l1.checked; renderSummary(); };
+    box.querySelectorAll('[data-ex]').forEach(c => { c.onchange = () => { N.ex[c.dataset.ex] = c.checked ? 1 : 0; renderSummary(); }; });
+    box.querySelectorAll('[data-exm]').forEach(b => { b.onclick = () => { N.ex[b.dataset.exm] = Math.max(0, (N.ex[b.dataset.exm] || 0) - 1); renderSummary(); }; });
+    box.querySelectorAll('[data-exp]').forEach(b => { b.onclick = () => { const e = ntExtras().find(x => x.id === b.dataset.exp); N.ex[b.dataset.exp] = Math.min((e && e.maxQty) || 1, (N.ex[b.dataset.exp] || 0) + 1); renderSummary(); }; });
+  }
+  function nightlyPick(hall, d){
+    if(d < ntToday()) return;
+    haptic('light');
+    const warn = (t) => { const h = document.getElementById('ntHint'); if(h){ h.textContent = t; h.classList.add('warn'); } };
+    if(!N.in || N.out){
+      if(ntBusyNight(hall, d)) return warn('Эта ночь занята — выберите другую дату заезда.');
+      N.in = d; N.out = null; N.early = false; N.late = false; renderSummary(); return;
+    }
+    if(d === N.in){ N.in = null; renderSummary(); return; }
+    const pr = ntOutProblem(hall, N.in, d);
+    if(!pr){ N.out = d; renderSummary(); return; }
+    if(pr === 'before' || pr === 'busy'){
+      if(!ntBusyNight(hall, d)){ N.in = d; renderSummary(); return; }
+      return warn(pr === 'busy' ? 'Между заездом и выездом есть занятые ночи.' : 'Эта ночь занята.');
+    }
+    if(pr === 'min') return warn('На эти даты — от ' + ntFromWord(ntMin(hall.nightly, N.in, d)) + ' (выходные или сезон).');
+    if(pr === 'long') return warn('Не больше 31 ночи за одну бронь.');
+  }
+  // Нижняя плашка: итог и кнопка. hall == null — обзор студии, где все залы посуточные.
+  function renderNightSummary(hall){
+    const cap = document.getElementById('summaryRow'), total = document.getElementById('summaryTotal'), btn = document.getElementById('recBtn');
+    if(!hall){
+      let lo = Infinity; HALLS.forEach(h => { if(isNightly(h)){ lo = Math.min(lo, h.nightly.priceWd, h.nightly.priceWe != null ? h.nightly.priceWe : lo); } });
+      total.innerHTML = isFinite(lo) ? '<small>от</small> ' + esc(moneyBig(lo)) + ' <small>' + esc(CUR) + '</small>' : '—';
+      cap.textContent = 'за ночь';
+      btn.dataset.ready = 'false'; btn.textContent = 'Выбрать'; btn.disabled = !HALLS.length;
+      return;
+    }
+    renderNightly();
+    const q = nightlyQuote(hall), ready = !!q && state.people <= hall.capacity;
+    btn.dataset.ready = ready ? 'true' : 'false';
+    btn.textContent = ready ? 'Забронировать' : 'Выбрать даты';
+    btn.disabled = false;
+    if(ready){
+      total.innerHTML = esc(moneyBig(q.total)) + ' <small>' + esc(CUR) + '</small>';
+      cap.textContent = ntHuman(N.in) + ' — ' + ntHuman(N.out) + ' · ' + q.n + ' ' + ntWord(q.n);
+    } else {
+      const s = hall.nightly, lo = Math.min(s.priceWd, s.priceWe != null ? s.priceWe : s.priceWd);
+      total.innerHTML = '<small>от</small> ' + esc(moneyBig(lo)) + ' <small>' + esc(CUR) + '</small>';
+      cap.textContent = N.in ? 'Выберите дату выезда' : 'за ночь';
+    }
+  }
+  function nightlyOpenPanel(hall){
+    const q = nightlyQuote(hall); if(!q) return;
+    document.getElementById('psHall').textContent = hall.name;
+    document.getElementById('psDate').textContent = ntHuman(N.in) + ' — ' + ntHuman(N.out);
+    document.getElementById('psTime').textContent = 'Заезд с ' + ntHm(q.start) + ', выезд до ' + ntHm(q.end) + ' · ' + q.n + ' ' + ntWord(q.n);
+    document.getElementById('psShoot').hidden = true;
+    document.getElementById('psPeople').textContent = state.people;
+    document.getElementById('psPrice').textContent = ntMoney(q.total);
+    const br = document.getElementById('psBreak');
+    br.hidden = false; br.textContent = q.rows.map(r => r[0] + ' — ' + ntMoney(r[1])).join('\n'); br.style.whiteSpace = 'pre-line';
+    const pol = document.getElementById('psPolicy');
+    if(pol){ pol.hidden = !STUDIO_CFG; pol.textContent = STUDIO_CFG ? policyLines(STUDIO_CFG) : ''; }
+    overlay.dataset.open = 'true';
+    panel.dataset.open = 'true';
+  }
 
   function renderAll(){
     applyHallMode();
@@ -5093,6 +5412,18 @@ var PF = (function(){
   }
 
   document.getElementById('recBtn').addEventListener('click', ()=>{
+    const nHall = nightlyOpen();
+    if(nHall){
+      if(nightlyQuote(nHall)){ haptic('medium'); nightlyOpenPanel(nHall); return; }
+      haptic('light');
+      const ns = document.getElementById('nightlySection'); if(ns) window.scrollTo({ top:Math.max(0, window.scrollY + ns.getBoundingClientRect().top - 8), behavior:'smooth' });
+      return;
+    }
+    if(!openHallId && !hourlyHalls().length){   // площадка только с посуточными залами: к списку
+      haptic('light');
+      const hc = document.getElementById('hallCardsSection'); if(hc) window.scrollTo({ top:Math.max(0, window.scrollY + hc.getBoundingClientRect().top - 8), behavior:'smooth' });
+      return;
+    }
     if(selectionValid()){ haptic('medium'); openPanel(); return; }
     haptic('light');
     scrollToTimePicker();
@@ -5279,7 +5610,17 @@ var PF = (function(){
     confirmBtn.textContent='Отправка…';
 
     try{
-      const booking = await api('POST', '/bookings', {
+      const nHall = nightlyOpen(), nQ = nHall && nightlyQuote(nHall);
+      if(nHall && !nQ) throw new Error('Выберите даты заезда и выезда');
+      const booking = await api('POST', '/bookings', nHall ? {
+        hallId: nHall.id, checkIn: N.in, checkOut: N.out, guests: state.people,
+        early: nQ.early || undefined, late: nQ.late || undefined,
+        extras: nQ.picked.length ? nQ.picked : undefined,
+        name: nameInput.value.trim(),
+        phone: PF.e164(phoneInput),
+        comment: noteInput.value.trim() || undefined,
+        source: cameFromCatalog ? 'catalog' : 'direct',
+      } : {
         hallId: state.hallId,
         date: dateKey(currentDate()),
         start, end,
@@ -5307,7 +5648,9 @@ var PF = (function(){
       document.getElementById('successDetail').innerHTML =
         (isPending ? '<span style="color:var(--text-2)">Заявка ждёт ответа площадки — не дольше суток и не позже начала брони.</span><br>' : '') +
         `<b>${esc(currentHall().name)}</b>${booking.purpose && HALL_PURPOSE_RU[booking.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[booking.purpose]) : ''}<br>`+
-        `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`+
+        (nHall
+          ? `${esc(ntHuman(N.in))} — ${esc(ntHuman(N.out))} · ${nQ.n} ${ntWord(nQ.n)} · ${state.people} чел.<br>Заезд с ${ntHm(booking.start)}, выезд до ${ntHm(booking.end)}<br>`
+          : `${esc(currentDate().toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}, ${minutesToLabel(start)}–${minutesToLabel(end)} · ${state.people} чел.<br>`)+
         (equipLine ? `${esc(equipLine)}<br>` : '')+
         `${esc(nameInput.value.trim())} · ${esc(phoneInput.value.trim())}<br>`+
         `Итого: ${esc(booking.price)} ${CUR}<br>`+
@@ -5894,12 +6237,12 @@ var PF = (function(){
     const hall = b.hallName || hallName(b.hallId);
     card.innerHTML=`
       <div class="booking-card-top">
-        <div class="booking-date">${esc(dateLabelFromISO(b.date))}</div>
+        <div class="booking-date">${esc(dateLabelFromISO(b.date))}${b.endDate ? ' — ' + esc(dateLabelFromISO(b.endDate)) : ''}</div>
         <div class="booking-status" data-status="${esc(b.status)}">${esc(BK_ST[b.status] || b.status)}</div>
       </div>
       ${b.studioName ? '<div class="booking-studio">'+esc(b.studioName)+(b.studioCity ? ' · '+esc(b.studioCity) : '')+'</div>' : ''}
       ${b.address ? '<div class="booking-address">'+esc(b.address)+'</div>' : ''}
-      <div class="booking-meta">${esc(hall)}${b.purpose && HALL_PURPOSE_RU[b.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[b.purpose]) : ''} · ${minutesToLabel(b.start)}–${minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} ${CUR}</div>
+      <div class="booking-meta">${esc(hall)}${b.purpose && HALL_PURPOSE_RU[b.purpose] ? ' · ' + esc(HALL_PURPOSE_RU[b.purpose]) : ''} · ${b.endDate ? 'заезд с ' + minutesToLabel(b.start) + ', выезд до ' + minutesToLabel(b.end) : minutesToLabel(b.start) + '–' + minutesToLabel(b.end)} · ${esc(b.people)} чел. · ${esc(b.price)} ${CUR}</div>
     `;
     // Wi-Fi пространства: сервер отдаёт его только владельцу подтверждённой брони.
     if(b.wifiSsid){
@@ -5918,11 +6261,13 @@ var PF = (function(){
     }
     const row=document.createElement('div');
     row.className='booking-card-actions';
-    const rep=document.createElement('button');
-    rep.className='booking-move-btn';
-    rep.textContent='Повторить';
-    rep.addEventListener('click', ()=>repeatBooking(b));
-    row.appendChild(rep);
+    if(!b.endDate){   // «Повторить» и «Перенести» для посуточных броней пока не поддержаны
+      const rep=document.createElement('button');
+      rep.className='booking-move-btn';
+      rep.textContent='Повторить';
+      rep.addEventListener('click', ()=>repeatBooking(b));
+      row.appendChild(rep);
+    }
     if(BK_CANCELABLE.has(b.status)){
       const rs=document.createElement('button');
       rs.className='booking-move-btn';
@@ -5932,7 +6277,8 @@ var PF = (function(){
       btn.className='booking-cancel-btn';
       btn.textContent='Отменить';
       btn.addEventListener('click', onCancelClick);
-      row.appendChild(rs); row.appendChild(btn);
+      if(!b.endDate) row.appendChild(rs);
+      row.appendChild(btn);
     }
     card.appendChild(row);
     return card;
