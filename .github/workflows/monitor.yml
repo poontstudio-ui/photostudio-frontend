@@ -17,6 +17,11 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      test:
+        description: "Прислать проверочное сообщение"
+        type: boolean
+        default: false
 
 concurrency:
   group: monitor
@@ -62,7 +67,7 @@ jobs:
           { echo 'fail<<EOF'; printf "%b\n" "$fail"; echo EOF; } >> "$GITHUB_OUTPUT"
 
       - name: Сообщить в Telegram
-        if: steps.check.outputs.prev != steps.check.outputs.now
+        if: steps.check.outputs.prev != steps.check.outputs.now || inputs.test
         env:
           TOKEN: ${{ secrets.MONITOR_BOT_TOKEN }}
           CHATS: ${{ secrets.MONITOR_CHAT_ID }}
@@ -70,7 +75,9 @@ jobs:
           FAIL: ${{ steps.check.outputs.fail }}
         run: |
           if [ -z "$TOKEN" ] || [ -z "$CHATS" ]; then echo "::warning::нет секретов MONITOR_BOT_TOKEN / MONITOR_CHAT_ID — сообщить некому"; exit 0; fi
-          if [ "$NOW" = fail ]; then
+          if [ "${{ inputs.test }}" = "true" ] && [ "$NOW" = ok ]; then
+            text='✅ Poont: проверка оповещений. Если что-то перестанет открываться, я напишу сюда.'
+          elif [ "$NOW" = fail ]; then
             text=$(printf '🔴 Poont: не отвечает\n%s\n\nПроверяю каждые 10 минут, напишу, когда восстановится.' "$FAIL")
           else
             text='🟢 Poont снова отвечает: сервер, кабинет, мини-приложение и лендинг открываются.'
