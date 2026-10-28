@@ -2659,6 +2659,7 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="panel-summary-row"><span class="ps-label">Дата</span><span class="ps-value" id="psDate"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Время</span><span class="ps-value" id="psTime"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Человек</span><span class="ps-value" id="psPeople"></span></div>
+    <div class="panel-summary-hint" id="psPack" hidden></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
     <div class="panel-summary-hint" id="psBreak" hidden></div>
     <div class="panel-summary-hint" id="psPolicy" hidden></div>
@@ -3653,6 +3654,20 @@ var PF = (function(){
     }
     return list.find(function(p){ return p.code === code; }) || null;
   }
+  // Сборы и подготовка (0070) — зеркало lib/rules.js bookingTiming: своё у цели, иначе
+  // как у площадки. pack — минуты в конце брони на сборы (на сетку не влияют), prep —
+  // перерыв после брони: перед чужой бронью свою надо закончить на prep раньше.
+  function timingFor(hall, code){
+    var p = purposeOf(hall, code) || {}, own = function(v){ return Number.isInteger(v) ? v : null; };
+    var pick = function(a, b){ return a != null ? a : b != null ? b : 0; };
+    return { pack: pick(own(p.bufferMin), own(STUDIO_CFG && STUDIO_CFG.bufferMin)),
+             prep: pick(own(p.prepMin), own(STUDIO_CFG && STUDIO_CFG.prepMin)) };
+  }
+  // Занят ли отрезок [s0, e0): чужая бронь занимает и свою подготовку (b.prep), а после
+  // своей брони нужна своя (myPrep) — до чужой брони или блокировки (как проверяет сервер).
+  function busyHit(list, s0, e0, myPrep){
+    return list.some(function(b){ return s0 < b.end + (b.prep || 0) && e0 + (myPrep || 0) > b.start; });
+  }
   function purposeHall(hall, code){
     var p = purposeOf(hall, code);
     if(!p) return hall;
@@ -4133,7 +4148,8 @@ var PF = (function(){
     const key = dateKey(col.date);
     if(key < now.date || (key === now.date && s0 < now.minutes)) return 'past';
     const busy = BUSY[col.key] || [];
-    return busy.some(b => s0 < b.end && e0 > b.start) ? 'busy' : 'free';
+    const myPrep = col.hall ? timingFor(col.hall, col.hall.id === state.hallId ? state.purpose : null).prep : 0;
+    return busyHit(busy, s0, e0, myPrep) ? 'busy' : 'free';
   }
 
   // ---- Выделение: непрерывный отрезок времени в ОДНОМ столбце ----
@@ -5300,6 +5316,7 @@ var PF = (function(){
     const q = nightlyQuote(hall); if(!q) return;
     document.getElementById('psHall').textContent = hall.name;
     document.getElementById('psDate').textContent = ntHuman(N.in) + ' — ' + ntHuman(N.out);
+    document.getElementById('psPack').hidden = true;
     document.getElementById('psTime').textContent = 'Заезд с ' + ntHm(q.start) + ', выезд до ' + ntHm(q.end) + ' · ' + q.n + ' ' + ntWord(q.n);
     document.getElementById('psPeople').textContent = state.people;
     document.getElementById('psPrice').textContent = ntMoney(q.total);
@@ -5383,6 +5400,10 @@ var PF = (function(){
       currentDate().toLocaleDateString('ru-RU',{weekday:'short', day:'numeric', month:'long'});
     document.getElementById('psTime').textContent =
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${durationLabel()}`;
+    // Сборы входят в бронь: клиент платит за всё время, но заканчивает раньше.
+    const pack = timingFor(currentHall(), state.purpose).pack, psPack = document.getElementById('psPack');
+    psPack.hidden = !(pack > 0);
+    psPack.textContent = pack > 0 ? `Освободите пространство до ${minutesToLabel(endMinutes - pack)}: последние ${pack} мин брони — на сборы.` : '';
     const pol = document.getElementById('psPolicy');
     if(pol){ pol.hidden = !STUDIO_CFG; pol.textContent = STUDIO_CFG ? policyLines(STUDIO_CFG) : ''; }
     renderPeople();   // вместимость зависит от пространства — обновляем при открытии
@@ -6501,7 +6522,9 @@ var PF = (function(){
     const now = rsWallClock();
     if(RS.date < now.date || (RS.date === now.date && s0 < now.minutes)) return 'past';
     const busy = RS.busy[RS.date] || [];
-    return busy.some(b => s0 < b.end && e0 > b.start) ? 'busy' : 'free';
+    // переносимая бронь — со своей подготовкой (снимок на брони), как проверяет сервер
+    const myPrep = RS.booking && Number.isInteger(RS.booking.prepMin) ? RS.booking.prepMin : 0;
+    return busyHit(busy, s0, e0, myPrep) ? 'busy' : 'free';
   }
   // Минимум брони в этом слоте: правило цены зала может поднять студийный
   // минимум — тот же расчёт, что у сервера (lib/rules.js minDurationFor).
