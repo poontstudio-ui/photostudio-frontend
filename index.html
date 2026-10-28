@@ -2659,7 +2659,6 @@ a.btn-primary{display:block;box-sizing:border-box;text-align:center;text-decorat
     <div class="panel-summary-row"><span class="ps-label">Дата</span><span class="ps-value" id="psDate"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Время</span><span class="ps-value" id="psTime"></span></div>
     <div class="panel-summary-row"><span class="ps-label">Человек</span><span class="ps-value" id="psPeople"></span></div>
-    <div class="panel-summary-hint" id="psShoot" hidden></div>
     <div class="panel-summary-row panel-summary-total"><span class="ps-label">Сумма</span><span class="ps-value" id="psPrice"></span></div>
     <div class="panel-summary-hint" id="psBreak" hidden></div>
     <div class="panel-summary-hint" id="psPolicy" hidden></div>
@@ -3291,7 +3290,6 @@ var PF = (function(){
 
   let HALLS = [], EQUIPMENT = [], WEEK_HOURS;   // EQUIPMENT — только для кабинета владельца
   let STUDIO_TZ = 'Europe/Minsk';   // IANA-таймзона студии, приходит в /config
-  let STUDIO_BUFFER_MIN = 0;        // буфер после брони, режется из времени клиента (/config)
   let SLOT_MIN = 60;               // строка сетки: шаг открытого пространства, в обзоре — самый мелкий из шагов
   let STUDIO_STEP = 60;            // шаг студии (/config.slotStep): 15, 30 или 60
   let STUDIO_DSTEP = null;          // шаг длительности студии (0062), null — как шаг начала
@@ -3405,7 +3403,6 @@ var PF = (function(){
         return ['Этаж: ' + (hall.floor <= 0 ? 'цокольный' : hall.floor)];
       } },
     { key:'aboutElectrical', title:'Электрика', icon:'plug' },
-    { key:'aboutCleaning', title:'Уборка и чистота', icon:'clean' },
     { key:'aboutRules', title:'Правила', icon:'rules', studio:POLICY_LIST },
   ];
   // Строчка-блёрб в карточке быстрого просмотра студии (карта каталога) —
@@ -3435,7 +3432,6 @@ var PF = (function(){
     if(!HALLS.some(h => h.id === state.hallId)) state.hallId = HALLS[0] ? HALLS[0].id : null;
     WEEK_HOURS = normalizeWeekHours(cfg);
     STUDIO_TZ = cfg.timezone || 'Europe/Minsk';
-    STUDIO_BUFFER_MIN = Number.isInteger(cfg.bufferMin) ? cfg.bufferMin : 0;
     STUDIO_STEP = [15, 30, 60].indexOf(cfg.slotStep) >= 0 ? cfg.slotStep : 60;
     // Валюта студии: подставляем и в динамические подписи (через CUR), и в
     // статические ярлыки в разметке.
@@ -5305,7 +5301,6 @@ var PF = (function(){
     document.getElementById('psHall').textContent = hall.name;
     document.getElementById('psDate').textContent = ntHuman(N.in) + ' — ' + ntHuman(N.out);
     document.getElementById('psTime').textContent = 'Заезд с ' + ntHm(q.start) + ', выезд до ' + ntHm(q.end) + ' · ' + q.n + ' ' + ntWord(q.n);
-    document.getElementById('psShoot').hidden = true;
     document.getElementById('psPeople').textContent = state.people;
     document.getElementById('psPrice').textContent = ntMoney(q.total);
     const br = document.getElementById('psBreak');
@@ -5381,19 +5376,6 @@ var PF = (function(){
     if(overlay.dataset.open === 'true') lockScroll(); else if(!catalogMapShown) unlockScroll();
   }).observe(overlay, { attributes:true, attributeFilter:['data-open'] });
 
-  // Буфер режется из конца брони: клиент снимает до endMinutes − буфер,
-  // студия успевает принять следующую группу впритык.
-  function setShootingHint(endMinutes){
-    const el = document.getElementById('psShoot');
-    if(!el) return;
-    if(STUDIO_BUFFER_MIN > 0){
-      el.textContent = `Аренда до ${minutesToLabel(endMinutes - STUDIO_BUFFER_MIN)} · ${STUDIO_BUFFER_MIN} мин в конце — на сборы`;
-      el.hidden = false;
-    } else {
-      el.hidden = true;
-    }
-  }
-
   function openPanel(){
     const endMinutes=state.startMinutes + Math.round(state.durationHours*60);
     document.getElementById('psHall').textContent = currentHall().name;
@@ -5401,7 +5383,6 @@ var PF = (function(){
       currentDate().toLocaleDateString('ru-RU',{weekday:'short', day:'numeric', month:'long'});
     document.getElementById('psTime').textContent =
       `${minutesToLabel(state.startMinutes)}–${minutesToLabel(endMinutes)} · ${durationLabel()}`;
-    setShootingHint(endMinutes);
     const pol = document.getElementById('psPolicy');
     if(pol){ pol.hidden = !STUDIO_CFG; pol.textContent = STUDIO_CFG ? policyLines(STUDIO_CFG) : ''; }
     renderPeople();   // вместимость зависит от пространства — обновляем при открытии
