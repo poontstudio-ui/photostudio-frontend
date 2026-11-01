@@ -3794,7 +3794,9 @@ var PF = (function(){
         if(sm >= r.from && sm < r.to){ if(r.minMin != null) minMin = r.minMin; break; }
       }
     }
-    return Math.max(1, Math.ceil(minMin / SLOT_MIN));
+    // Минимум — любое число минут; до шага начала брони округляется вверх (как lib/rules.js minDurationFor).
+    const k = colStepK(col);
+    return Math.max(1, Math.ceil(minMin / (k * SLOT_MIN)) * k);
   }
   // Целевая длина нового выделения в слотах: пакет (если выбран) или минимум окна.
   function targetSlotsAt(col, slot){
@@ -4477,7 +4479,8 @@ var PF = (function(){
     // назначением минимум есть всегда — это одна из вещей, которые оно и
     // определяет.
     if(cur || minMin > STUDIO_MIN_BOOKING_MIN){
-      facts.push(factTile('Минимум', esc(minLabel(minMin))));
+      const hs = hallStepMin(hall) || 60;   // показываем фактический минимум — до шага начала брони
+      facts.push(factTile('Минимум', esc(minLabel(Math.ceil(minMin / hs) * hs))));
     }
     if(cur && cur.code === 'event' && (Number.isInteger(cur.standingCapacity) || Number.isInteger(cur.seatedCapacity))){
       if(Number.isInteger(cur.standingCapacity)) facts.push(factTile('Стоя', 'до '+esc(cur.standingCapacity)));
@@ -6540,7 +6543,8 @@ var PF = (function(){
         if(sm >= r.from && sm < r.to){ if(r.minMin != null) minMin = r.minMin; break; }
       }
     }
-    return Math.max(1, Math.ceil(minMin / RS.step));
+    const k = RS.startK || 1;
+    return Math.max(1, Math.ceil(minMin / (k * RS.step)) * k);
   }
   // Выбор переноса — та же модель, что в основной сетке (RG, создаётся у rsGridEl ниже).
   function rsHasSel(){ return RG.has(); }
@@ -6980,80 +6984,92 @@ var PF = (function(){
     renderStudios(city);
   }
 
-  // Бесконечно листаемая карусель фото в карточке списка — фото едет вместе
-  // с пальцем (не просто «долистали — сменился кадр»). Base-кадр — одна
-  // <img>, чтобы в состоянии покоя на весь список студий не висело по 3
-  // картинки на карточку; соседние кадры (prevImg/nextImg) создаются только
-  // на время самого перетаскивания и убираются сразу после. touch-action:
-  // pan-y на .cat-track (CSS) отдаёт вертикальный скролл ленты браузеру, а
-  // горизонтальный свайп — нам, без ручного preventDefault.
-  // Свайп внутри .cat-media не должен провалиться в клик по карточке
-  // (переход в студию) — гасим синтетический click, который браузер всё
-  // равно шлёт после touchend, если палец реально сдвинул кадр.
+  // Бесконечно листаемая карусель фото в карточке списка — фото едет вместе с пальцем.
+  // В покое у карточки одна <img>; при первом касании появляются соседние кадры
+  // [пред, текущий, след] и дальше живут. Перелистнули — кадры переставляются в DOM
+  // (уехавший край становится новым соседом), а не меняется адрес у видимой картинки:
+  // иначе на миг снова мелькал старый кадр, пока грузится новый. Каждый жест доводится
+  // до конца: и по transitionend, и по страховочному таймеру; новое касание во время
+  // анимации сначала её завершает. Вертикальный жест отдаётся ленте (touch-action:pan-y
+  // на .cat-track), прерванный браузером (touchcancel) — возвращает кадр на место.
+  // Свайп внутри .cat-media не проваливается в клик по карточке (переход в студию).
   function wireCardCarousel(media, photos){
     const track = media.querySelector('.cat-track');
-    const img = track.querySelector('img');
     const dots = media.querySelector('.cat-dots');
-    let i = 0;
-    function photoAt(n){ return photoUrl(photos[((n % photos.length) + photos.length) % photos.length], 800); }
-    function preload(n){ const x = new Image(); x.src = photoAt(n); }
-    function show(){
-      img.src = photoAt(i);
+    const n = photos.length;
+    let i = 0, slides = null, w = 1, x0 = null, y0 = 0, dx = 0, dragging = false, swiped = false, settling = null;
+    const wrap = k => ((k % n) + n) % n;
+    const photoAt = k => photoUrl(photos[wrap(k)], 800);
+    function paintDots(){
       if(dots) dots.querySelectorAll('.cat-dot').forEach((d, idx) => { d.dataset.active = (idx === i) ? 'true' : 'false'; });
-      preload(i + 1); preload(i - 1);
     }
-
-    let x0 = null, dx = 0, dragging = false, swiped = false, w = 0;
-    let prevImg = null, nextImg = null;
-
-    function beginDrag(){
-      dragging = true;
-      w = media.clientWidth || 1;
-      prevImg = document.createElement('img'); prevImg.alt = ''; prevImg.src = photoAt(i - 1);
-      nextImg = document.createElement('img'); nextImg.alt = ''; nextImg.src = photoAt(i + 1);
-      track.insertBefore(prevImg, img);
-      track.appendChild(nextImg);
-      track.style.transition = 'none';
-      track.style.transform = 'translate3d(-' + w + 'px,0,0)';
+    // Положение ленты: -100% — текущий кадр по центру, offset — сдвиг пальцем (px).
+    function place(offset, animate){
+      track.style.transition = animate ? 'transform .24s cubic-bezier(.22,.61,.36,1)' : 'none';
+      track.style.transform = 'translate3d(calc(-100% + ' + offset + 'px),0,0)';
     }
-    function endDrag(){
-      const threshold = Math.min(70, w * 0.2);
-      let delta = 0;
-      if(dx <= -threshold) delta = 1;
-      else if(dx >= threshold) delta = -1;
-      const finalX = delta === 1 ? -2 * w : delta === -1 ? 0 : -w;
-      track.style.transition = 'transform .22s cubic-bezier(.22,.61,.36,1)';
-      track.style.transform = 'translate3d(' + finalX + 'px,0,0)';
-      track.addEventListener('transitionend', function onEnd(){
-        if(delta !== 0) i = ((i + delta) % photos.length + photos.length) % photos.length;
-        if(prevImg){ prevImg.remove(); prevImg = null; }
-        if(nextImg){ nextImg.remove(); nextImg = null; }
-        track.style.transition = 'none';
-        track.style.transform = '';
-        show();
-      }, { once: true });
+    function ensureSlides(){
+      if(slides) return;
+      const cur = track.querySelector('img');
+      const mk = k => { const x = document.createElement('img'); x.alt = ''; x.decoding = 'async'; x.draggable = false; x.src = photoAt(k); return x; };
+      const prev = mk(i - 1), next = mk(i + 1);
+      track.insertBefore(prev, cur); track.appendChild(next);
+      slides = [prev, cur, next];
+      place(0, false);
+    }
+    // Кадр уехал: крайний становится новым соседом с другой стороны.
+    function rotate(delta){
+      if(delta === 1){ const x = slides.shift(); x.src = photoAt(i + 2); track.appendChild(x); slides.push(x); }
+      else if(delta === -1){ const x = slides.pop(); x.src = photoAt(i - 2); track.insertBefore(x, slides[0]); slides.unshift(x); }
+      i = wrap(i + delta);
+      place(0, false);
+      paintDots();
+    }
+    function finish(st){
+      if(settling !== st) return;
+      settling = null; clearTimeout(st.t); track.removeEventListener('transitionend', st.fn);
+      rotate(st.delta);
+    }
+    function settle(delta){
+      const st = { delta };
+      st.fn = () => finish(st);
+      st.t = setTimeout(st.fn, 360);
+      settling = st;
+      track.addEventListener('transitionend', st.fn);
+      place(-delta * w, true);
     }
 
     media.addEventListener('touchstart', e => {
+      if(settling) finish(settling);
       const t = e.changedTouches[0];
-      x0 = t.clientX; dx = 0; dragging = false; swiped = false;
+      x0 = t.clientX; y0 = t.clientY; dx = 0; dragging = false; swiped = false;
     }, { passive: true });
     media.addEventListener('touchmove', e => {
       if(x0 === null) return;
-      dx = e.changedTouches[0].clientX - x0;
+      const t = e.changedTouches[0];
+      dx = t.clientX - x0;
       if(!dragging){
-        if(Math.abs(dx) < 6) return;
-        beginDrag(); swiped = true;
+        const dy = t.clientY - y0;
+        if(Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if(Math.abs(dy) >= Math.abs(dx)){ x0 = null; return; }   // вертикальный жест — это прокрутка ленты
+        w = media.clientWidth || 1;
+        ensureSlides();
+        dragging = true; swiped = true;
       }
-      track.style.transform = 'translate3d(' + (-w + dx) + 'px,0,0)';
+      place(Math.max(-w, Math.min(w, dx)), false);
     }, { passive: true });
     media.addEventListener('touchend', () => {
-      if(x0 === null) return;
-      if(dragging) endDrag();
-      x0 = null;
+      if(dragging){ const th = Math.min(60, w * 0.18); settle(dx <= -th ? 1 : dx >= th ? -1 : 0); }
+      x0 = null; dragging = false;
+    }, { passive: true });
+    media.addEventListener('touchcancel', () => {
+      if(dragging) settle(0);
+      x0 = null; dragging = false;
     }, { passive: true });
     media.addEventListener('click', e => { if(swiped){ e.stopPropagation(); swiped = false; } });
-    show();
+    track.querySelector('img').src = photoAt(0);
+    paintDots();
+    const nx = new Image(); nx.src = photoAt(1);   // следующий кадр — заранее в кэш
   }
 
   // «Избранное» живёт на сервере (GET/PUT/DELETE /api/favorites, привязано к
